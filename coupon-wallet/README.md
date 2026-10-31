@@ -16,8 +16,8 @@ python3 -m http.server 8000   # http://localhost:8000
 ```
 
 ## 폰(Android)에 설치
-PWA 설치·알림은 HTTPS 필요. 정적 호스팅(GitHub Pages, Netlify, Cloudflare Pages 등)에 `coupon-wallet/` 폴더를 올린 뒤
-Chrome에서 접속 → 메뉴 → "홈 화면에 추가".
+배포 주소: https://remnant1981-bit.github.io/remnant1981/ (GitHub Pages, `main`에 `coupon-wallet/` 변경이 병합되면 자동 배포).
+Android Chrome에서 위 주소 접속 → 메뉴(⋮) → "홈 화면에 추가" 또는 "앱 설치". 설치 후 앱에서 설정(⋯) → "알림 허용".
 
 ## 한계 / 다음 단계
 - 브랜드 앱(스타벅스 등) 자동 연동 불가 → 수동 입력
