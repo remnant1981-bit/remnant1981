@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f7b5f">
+<title>쿠폰 지갑</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1 id="title">홈</h1>
+  <button class="icon-btn" data-action="open-settings" aria-label="설정">⋯</button>
+</header>
+
+<main id="view"></main>
+
+<button class="fab" id="fab" data-action="add" aria-label="추가">＋</button>
+
+<nav class="tabs">
+  <button data-tab="home" class="on">홈</button>
+  <button data-tab="coupons">쿠폰</button>
+  <button data-tab="loyalty">적립</button>
+</nav>
+
+<!-- 쿠폰 입력 -->
+<dialog id="dlg-coupon">
+  <form method="dialog" id="form-coupon">
+    <h2 id="coupon-form-title">쿠폰 추가</h2>
+    <input type="hidden" name="id">
+    <label>브랜드 <input name="brand" list="brands" required placeholder="예: 스타벅스"></label>
+    <label>혜택 <input name="title" required placeholder="예: 아메리카노 T 1잔 / 20% 할인"></label>
+    <label>가치(원) <input name="value" type="number" inputmode="numeric" min="0" placeholder="절약 금액 계산용 (선택)"></label>
+    <label>만료일 <input name="expires" type="date"></label>
+    <label>쿠폰 번호 <input name="code" placeholder="번호/코드 (선택)"></label>
+    <label>바코드 이미지 <input name="image" type="file" accept="image/*"></label>
+    <div id="img-preview" class="preview"></div>
+    <label>메모 <textarea name="memo" rows="2" placeholder="사용 조건, 사용처 등"></textarea></label>
+    <div class="row">
+      <button type="button" class="ghost" data-action="close-dialog">취소</button>
+      <button type="submit" class="primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 적립 입력 -->
+<dialog id="dlg-loyalty">
+  <form method="dialog" id="form-loyalty">
+    <h2 id="loyalty-form-title">적립 추가</h2>
+    <input type="hidden" name="id">
+    <label>브랜드 <input name="brand" list="brands" required placeholder="예: 스타벅스"></label>
+    <label>항목 <input name="name" required placeholder="예: 겨울 프리퀀시 / 등급 유지 별"></label>
+    <div class="grid2">
+      <label>현재 <input name="current" type="number" inputmode="numeric" min="0" value="0" required></label>
+      <label>목표 <input name="target" type="number" inputmode="numeric" min="1" required></label>
+    </div>
+    <label>마감일 <input name="deadline" type="date"></label>
+    <label>보상 <input name="reward" placeholder="예: 증정품 / 무료 음료 쿠폰"></label>
+    <label>메모 <textarea name="memo" rows="2"></textarea></label>
+    <div class="row">
+      <button type="button" class="ghost" data-action="close-dialog">취소</button>
+      <button type="submit" class="primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 쿠폰 상세 / 바코드 -->
+<dialog id="dlg-detail"><div id="detail"></div></dialog>
+
+<!-- 설정 -->
+<dialog id="dlg-settings">
+  <h2>설정</h2>
+  <div class="settings">
+    <button class="block" data-action="enable-notify">🔔 알림 허용</button>
+    <p class="hint" id="notify-state"></p>
+    <p class="hint">알림은 앱을 열 때 만료 임박 항목을 확인해 띄움. 앱이 꺼진 상태에서 자동으로 울리지는 않음.</p>
+    <button class="block" data-action="export">⬇ 백업 내보내기 (JSON)</button>
+    <label class="block file">⬆ 백업 불러오기<input type="file" id="import-file" accept="application/json"></label>
+    <button class="block" data-action="sample">샘플 데이터 넣기</button>
+    <button class="block danger" data-action="wipe">전체 삭제</button>
+    <p class="hint">데이터는 이 기기 브라우저에만 저장됨. 브라우저 데이터 삭제·기기 변경 시 사라지므로 주기적으로 백업 필요.</p>
+  </div>
+  <div class="row"><button class="primary" data-action="close-dialog">닫기</button></div>
+</dialog>
+
+<datalist id="brands"></datalist>
+<div id="toast" class="toast" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>
