@@ -11,12 +11,20 @@
   python tistory_poster.py --file posts/a.md    # 특정 파일만 업로드
   python tistory_poster.py --dry-run            # 업로드 없이 파싱 결과만 확인
   python tistory_poster.py --daemon 09:00,18:00 # 매일 지정 시각 자동 업로드 (상주)
+  python tistory_poster.py --export-cookies     # 로그인 쿠키 내보내기 (GitHub Actions/모바일 실행용)
+
+환경변수 (GitHub Actions 등 config.json 없는 환경):
+  TISTORY_BLOG_NAME   블로그명 (config.json 의 blog_name 대체)
+  TISTORY_COOKIES     --export-cookies 로 만든 문자열 (로그인 세션)
+  TISTORY_HEADLESS=1  브라우저 숨김 실행
 """
 
 import argparse
+import base64
 import datetime as dt
 import json
 import logging
+import os
 import re
 import shutil
 import sys
@@ -49,9 +57,15 @@ log = logging.getLogger("tistory")
 def load_config() -> dict:
     path = BASE_DIR / "config.json"
     if not path.exists():
-        shutil.copy(BASE_DIR / "config.example.json", path)
-        sys.exit(f"[안내] config.json 생성됨 → blog_name 수정 후 재실행 필요: {path}")
+        if not os.environ.get("TISTORY_BLOG_NAME"):
+            shutil.copy(BASE_DIR / "config.example.json", path)
+            sys.exit(f"[안내] config.json 생성됨 → blog_name 수정 후 재실행 필요: {path}")
+        path = BASE_DIR / "config.example.json"  # CI: 기본값 + 환경변수
     cfg = json.loads(path.read_text(encoding="utf-8"))
+    if os.environ.get("TISTORY_BLOG_NAME"):
+        cfg["blog_name"] = os.environ["TISTORY_BLOG_NAME"].strip()
+    if os.environ.get("TISTORY_HEADLESS"):
+        cfg["headless"] = os.environ["TISTORY_HEADLESS"].lower() in ("1", "true", "yes")
     for k in ("chrome_profile_dir", "posts_dir", "published_dir", "failed_dir"):
         cfg[k] = (BASE_DIR / cfg[k]).resolve()
     if cfg.get("blog_name") in (None, "", "myblog"):
@@ -115,6 +129,13 @@ class TistoryBot:
         opts.add_experimental_option("excludeSwitches", ["enable-automation"])
         if cfg.get("headless") if headless is None else headless:
             opts.add_argument("--headless=new")
+            # 헤드리스 표시(HeadlessChrome) 제거한 일반 UA 사용
+            opts.add_argument(
+                "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
+        if os.environ.get("CI"):
+            opts.add_argument("--no-sandbox")
+            opts.add_argument("--disable-dev-shm-usage")
         # Selenium 4.6+ 내장 Selenium Manager 가 크롬드라이버 자동 설치
         self.d = webdriver.Chrome(options=opts)
         self.d.implicitly_wait(2)
@@ -146,7 +167,32 @@ class TistoryBot:
         except Exception:
             return False
 
+    # --- 쿠키 (모바일/클라우드 실행용 세션 이전)
+    def export_cookies(self) -> str:
+        self.d.get("https://www.tistory.com/")
+        time.sleep(2)
+        cookies = [c for c in self.d.get_cookies() if "tistory.com" in c.get("domain", "")]
+        raw = json.dumps(cookies, ensure_ascii=False).encode("utf-8")
+        return base64.b64encode(raw).decode("ascii")
+
+    def import_cookies(self, encoded: str):
+        cookies = json.loads(base64.b64decode(encoded.strip()))
+        self.d.get("https://www.tistory.com/")
+        for c in cookies:
+            c = {k: v for k, v in c.items() if k in
+                 ("name", "value", "domain", "path", "secure", "httpOnly", "expiry")}
+            if "expiry" in c:
+                c["expiry"] = int(c["expiry"])
+            try:
+                self.d.add_cookie(c)
+            except Exception as e:
+                log.debug("쿠키 추가 실패 %s: %s", c.get("name"), e)
+        log.info("로그인 쿠키 %d개 적용", len(cookies))
+
     def is_logged_in(self) -> bool:
+        if os.environ.get("TISTORY_COOKIES") and not getattr(self, "_cookies_loaded", False):
+            self.import_cookies(os.environ["TISTORY_COOKIES"])
+            self._cookies_loaded = True
         self.d.get(self.manage_url)
         time.sleep(3)
         url = self.d.current_url
@@ -268,7 +314,8 @@ def run_once(cfg: dict, files: list, dry_run=False) -> int:
     ok = 0
     try:
         if not bot.is_logged_in():
-            log.error("로그인 필요 → `python tistory_poster.py --login` 먼저 실행")
+            log.error("로그인 필요 → `python tistory_poster.py --login` 먼저 실행"
+                      " (클라우드 실행 시 TISTORY_COOKIES 갱신 필요)")
             return 0
         for i, p in enumerate(posts):
             try:
@@ -321,6 +368,7 @@ def main():
     ap.add_argument("--file", help="특정 파일만 발행")
     ap.add_argument("--dry-run", action="store_true", help="발행 없이 파싱만 확인")
     ap.add_argument("--daemon", help="매일 발행 시각, 예: 09:00,18:00")
+    ap.add_argument("--export-cookies", action="store_true", help="로그인 쿠키 내보내기 (모바일 실행용)")
     args = ap.parse_args()
 
     setup_logging()
@@ -334,6 +382,18 @@ def main():
         finally:
             bot.close()
         return
+    if args.export_cookies:
+        bot = TistoryBot(cfg)
+        try:
+            if not bot.is_logged_in():
+                sys.exit("[오류] 로그인 상태 아님 → --login 먼저 실행")
+            out = BASE_DIR / "tistory_cookies.txt"
+            out.write_text(bot.export_cookies(), encoding="utf-8")
+            print(f"[완료] {out} 생성")
+            print("→ 파일 내용 전체를 GitHub Secrets 'TISTORY_COOKIES' 에 등록 (외부 유출 금지, 등록 후 파일 삭제 권장)")
+        finally:
+            bot.close()
+        return
     if args.daemon:
         daemon(cfg, [t.strip() for t in args.daemon.split(",")])
         return
@@ -344,7 +404,9 @@ def main():
         files = pending_posts(cfg)
         if not args.all:
             files = files[: cfg.get("posts_per_run", 1)]
-    run_once(cfg, files, dry_run=args.dry_run)
+    ok = run_once(cfg, files, dry_run=args.dry_run)
+    if os.environ.get("CI") and files and not args.dry_run and ok < len(files):
+        sys.exit(1)
 
 
 if __name__ == "__main__":
