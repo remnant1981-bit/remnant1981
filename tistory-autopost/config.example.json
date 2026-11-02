@@ -1,0 +1,12 @@
+{
+  "blog_name": "myblog",
+  "chrome_profile_dir": "./chrome_profile",
+  "posts_dir": "./posts",
+  "published_dir": "./posts/published",
+  "failed_dir": "./posts/failed",
+  "default_category": "",
+  "default_visibility": "public",
+  "posts_per_run": 1,
+  "headless": false,
+  "wait_between_posts_sec": 30
+}
