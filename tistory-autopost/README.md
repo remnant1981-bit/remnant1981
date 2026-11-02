@@ -36,7 +36,7 @@ visibility: public
 
 본문 (마크다운 또는 HTML)
 ```
-- 예시: `sample_post.example.md` 참고
+- 예시: `sample_post.example.md`, `examples/example_ai_post.md`(AI 작성 결과 예시), `examples/preview.html`(발행 모양 미리보기) 참고
 - 파일명 순서대로 발행 → `01_xxx.md`, `02_xxx.md` 식 명명 권장
 - 성공 → `posts/published/`, 실패 → `posts/failed/` 이동 (실패 스크린샷: `logs/`)
 
