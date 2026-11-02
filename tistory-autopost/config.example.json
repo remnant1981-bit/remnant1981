@@ -1,0 +1,18 @@
+{
+  "blog_name": "myblog",
+  "chrome_profile_dir": "./chrome_profile",
+  "posts_dir": "./posts",
+  "published_dir": "./posts/published",
+  "failed_dir": "./posts/failed",
+  "default_category": "",
+  "default_visibility": "public",
+  "posts_per_run": 1,
+  "headless": false,
+  "wait_between_posts_sec": 30,
+  "ai": {
+    "model": "claude-opus-5-5",
+    "effort": "medium",
+    "min_chars": 2000,
+    "style_prompt": "너는 한국어 티스토리 블로그 전문 작가다. 정보성 글을 ## 소제목·표·목록으로 구조화하고, 확실하지 않은 수치는 단정하지 말 것. 마지막에 핵심 요약 포함."
+  }
+}

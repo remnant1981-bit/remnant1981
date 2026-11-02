@@ -1,0 +1,6 @@
+config.json
+chrome_profile/
+posts/published/
+posts/failed/
+logs/
+tistory_cookies.txt
