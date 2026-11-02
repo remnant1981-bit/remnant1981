@@ -17,6 +17,8 @@
   TISTORY_BLOG_NAME   블로그명 (config.json 의 blog_name 대체)
   TISTORY_COOKIES     --export-cookies 로 만든 문자열 (로그인 세션)
   TISTORY_HEADLESS=1  브라우저 숨김 실행
+  KAKAO_ID / KAKAO_PW 카카오 계정 (쿠키 없거나 만료 시 자동 로그인, 휴대폰 카카오톡 승인 대기)
+  KAKAO_APPROVE_WAIT  카카오톡 승인 대기 시간(초, 기본 180)
 """
 
 import argparse
@@ -125,6 +127,8 @@ class TistoryBot:
         opts = Options()
         opts.add_argument(f"--user-data-dir={cfg['chrome_profile_dir']}")
         opts.add_argument("--window-size=1400,1000")
+        opts.add_argument("--lang=ko-KR")
+        opts.add_experimental_option("prefs", {"intl.accept_languages": "ko-KR,ko"})
         opts.add_argument("--disable-blink-features=AutomationControlled")
         opts.add_experimental_option("excludeSwitches", ["enable-automation"])
         if cfg.get("headless") if headless is None else headless:
@@ -189,14 +193,97 @@ class TistoryBot:
                 log.debug("쿠키 추가 실패 %s: %s", c.get("name"), e)
         log.info("로그인 쿠키 %d개 적용", len(cookies))
 
+    def _on_manage(self) -> bool:
+        url = self.d.current_url
+        return "/manage" in url and "login" not in url and "auth" not in url
+
     def is_logged_in(self) -> bool:
         if os.environ.get("TISTORY_COOKIES") and not getattr(self, "_cookies_loaded", False):
             self.import_cookies(os.environ["TISTORY_COOKIES"])
             self._cookies_loaded = True
         self.d.get(self.manage_url)
         time.sleep(3)
-        url = self.d.current_url
-        return "/manage" in url and "login" not in url and "auth" not in url
+        if self._on_manage():
+            return True
+        if os.environ.get("KAKAO_ID") and os.environ.get("KAKAO_PW") \
+                and not getattr(self, "_kakao_tried", False):
+            self._kakao_tried = True
+            return self.kakao_login(os.environ["KAKAO_ID"], os.environ["KAKAO_PW"])
+        return False
+
+    # --- 카카오 ID/PW 로그인 (클라우드 실행용)
+    def kakao_login(self, kid: str, kpw: str) -> bool:
+        from selenium.webdriver.common.by import By
+        d = self.d
+        log.info("카카오 계정 로그인 시도")
+        d.get("https://www.tistory.com/auth/login")
+        time.sleep(2)
+        try:
+            self.wait("a.link_kakao_id, a[class*='kakao']", timeout=10, clickable=True).click()
+        except Exception:
+            log.error("티스토리 로그인 화면에서 카카오 버튼 미발견")
+            self._log_page()
+            return False
+
+        try:
+            id_box = self.wait("input[name='loginId'], input#loginId--1, input[type='email']", timeout=15)
+            pw_box = self.wait("input[name='password'], input[type='password']", timeout=5)
+        except Exception:
+            log.error("카카오 로그인 입력창 미발견")
+            self._log_page()
+            return False
+        id_box.clear(); id_box.send_keys(kid)
+        pw_box.clear(); pw_box.send_keys(kpw)
+        time.sleep(0.5)
+        d.find_element(By.CSS_SELECTOR, "button[type='submit'], button.submit").click()
+
+        wait_sec = int(os.environ.get("KAKAO_APPROVE_WAIT", "180"))
+        notified = False
+        end = time.time() + wait_sec
+        while time.time() < end:
+            time.sleep(3)
+            url = d.current_url
+            if "tistory.com" in url and "auth/login" not in url and "kakao.com" not in url:
+                d.get(self.manage_url)
+                time.sleep(3)
+                if self._on_manage():
+                    log.info("카카오 로그인 성공")
+                    return True
+                break
+            text = self._page_text()
+            if any(k in text for k in ("보안문자", "자동입력 방지", "captcha")):
+                log.error("카카오 보안문자(캡차) 요구 → 클라우드 로그인 불가. 쿠키 방식 사용 필요")
+                return False
+            if any(k in text for k in ("일치하지 않", "잘못", "does not match", "incorrect")) \
+                    and "loginId" in d.page_source:
+                log.error("카카오 로그인 실패: 아이디/비밀번호 확인 필요")
+                self._log_page()
+                return False
+            if not notified and any(k in text for k in ("카카오톡", "인증", "승인", "KakaoTalk", "verif", "approve")):
+                log.warning(">>> 휴대폰 카카오톡에서 로그인 승인 필요 (최대 %d초 대기) <<<", wait_sec)
+                notified = True
+            # 동의/계속 화면 자동 진행
+            for el in d.find_elements(By.CSS_SELECTOR, "button, a"):
+                try:
+                    if el.is_displayed() and el.text.strip() in ("계속하기", "동의하고 계속하기"):
+                        el.click()
+                        break
+                except Exception:
+                    pass
+        log.error("카카오 로그인 미완료 (승인 시간 초과 또는 추가 인증 필요)")
+        self._log_page()
+        return False
+
+    def _page_text(self) -> str:
+        try:
+            return self.d.execute_script("return document.body ? document.body.innerText : ''") or ""
+        except Exception:
+            return ""
+
+    def _log_page(self):
+        # 스크린샷 대신 화면 문구만 기록 (계정 정보 노출 방지)
+        log.info("현재 URL: %s", self.d.current_url.split("?")[0])
+        log.info("화면 문구: %s", " ".join(self._page_text().split())[:300])
 
     # --- 로그인
     def manual_login(self):
@@ -315,7 +402,7 @@ def run_once(cfg: dict, files: list, dry_run=False) -> int:
     try:
         if not bot.is_logged_in():
             log.error("로그인 필요 → `python tistory_poster.py --login` 먼저 실행"
-                      " (클라우드 실행 시 TISTORY_COOKIES 갱신 필요)")
+                      " (클라우드 실행 시 KAKAO_ID/KAKAO_PW 또는 TISTORY_COOKIES 확인)")
             return 0
         for i, p in enumerate(posts):
             try:
