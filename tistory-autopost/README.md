@@ -55,3 +55,31 @@ visibility: public
 - 로그인 세션 만료 시 `--login` 재실행
 - 과도한 연속 발행은 스팸 판정 위험 → 하루 1~3건 수준 권장
 - `config.json`, `chrome_profile/`은 개인정보 포함 → git 제외 처리됨
+
+## 6. AI 본문 자동 작성 (Claude API)
+주제만 입력 → Claude가 제목·태그·본문 작성 → `posts/`에 .md 저장 → 위 발행 흐름 그대로 사용.
+
+1. API 키 발급: https://console.anthropic.com → 환경변수 설정
+```bat
+setx ANTHROPIC_API_KEY "sk-ant-..."
+```
+2. 실행
+| 명령 | 동작 |
+|---|---|
+| `python ai_writer.py "주제1" "주제2"` | 주제별 글 작성 → `posts/` 저장 |
+| `python ai_writer.py --topics-file topics.txt --count 3` | 주제 목록에서 3건 작성 (완료 주제는 파일에서 삭제) |
+| `python ai_writer.py "주제" --extra "초보자 대상, 코드 예시 포함"` | 추가 요청 반영 |
+| `python ai_writer.py "주제" --category IT --visibility private` | 카테고리·공개범위 지정 |
+| `python ai_writer.py "주제" --publish` | 작성 직후 바로 발행 |
+
+3. `config.json`의 `ai` 항목
+| 항목 | 설명 |
+|---|---|
+| `model` | 기본 `claude-opus-5-5` |
+| `effort` | `low` / `medium` / `high` (높을수록 품질↑·비용↑) |
+| `min_chars` | 최소 본문 분량(자) |
+| `style_prompt` | 글 스타일 지시문 (블로그 성격에 맞게 수정) |
+
+- 1건당 비용 대략 수십~백 원대 (분량·effort 따라 변동, 실행 시 토큰 사용량 출력)
+- 자동 매일 운영 예: 작업 스케줄러에 `python ai_writer.py --topics-file topics.txt --count 1 --publish` 등록
+- AI 작성 글은 사실관계 검토 후 공개 권장 → 초기엔 `--visibility private`로 운영 후 확인
