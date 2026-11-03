@@ -62,6 +62,8 @@ SCHEMA = {
         },
         "hook_pattern": {"type": "string", "description": "본문 첫 문장에 사용한 훅 패턴 번호와 이름 (예: '4 결론부터 말하면')"},
         "tags": {"type": "array", "items": {"type": "string"}, "description": "태그 5~10개"},
+        "thumbnail_text": {"type": "string",
+                           "description": "썸네일 이미지 큰 글씨 (14자 안팎, 제목과 다른 표현, 핵심 숫자·대상 위주)"},
         "body_markdown": {"type": "string", "description": "본문 마크다운 (제목 H1 제외)"},
         "sns": {
             "type": "object",
@@ -73,7 +75,7 @@ SCHEMA = {
             "additionalProperties": False,
         },
     },
-    "required": ["title_candidates", "keywords", "hook_pattern", "tags", "body_markdown", "sns"],
+    "required": ["title_candidates", "keywords", "hook_pattern", "tags", "thumbnail_text", "body_markdown", "sns"],
     "additionalProperties": False,
 }
 
@@ -187,11 +189,48 @@ def write_article(client: anthropic.Anthropic, cfg: dict, topic: str, extra: str
     return data
 
 
-def save_post(data: dict, posts_dir: Path, category: str, visibility: str) -> Path:
+def next_slots(posts_dir: Path, n: int, sched: dict) -> list:
+    """예약 시간대 자동 배정: 설정 slots(기본 09:00) 중 비어 있는 가장 빠른 칸부터 n개"""
+    import tistory_poster as tp
+    cfg = {"timezone": sched.get("timezone", "Asia/Seoul"), "default_visibility": "public",
+           "posts_dir": posts_dir}
+    taken = set()
+    if posts_dir.exists():
+        for f in tp.pending_posts(cfg, due_only=False):
+            try:
+                w = tp.parse_post(f, cfg).publish_at
+            except Exception:
+                continue
+            if w:
+                taken.add(w.strftime("%Y-%m-%d %H:%M"))
+    slots = sorted(sched.get("slots") or ["09:00"])
+    skip_days = {int(x) for x in sched.get("skip_weekdays", [])}  # 0=월 ... 6=일
+    start = tp.now(cfg) + dt.timedelta(minutes=30)
+    out, day = [], start.date()
+    while len(out) < n and day <= start.date() + dt.timedelta(days=366):
+        if day.weekday() not in skip_days:
+            for hm in slots:
+                h, m = map(int, hm.split(":"))
+                w = dt.datetime(day.year, day.month, day.day, h, m, tzinfo=start.tzinfo)
+                key = w.strftime("%Y-%m-%d %H:%M")
+                if w >= start and key not in taken:
+                    taken.add(key)
+                    out.append(key)
+                    if len(out) == n:
+                        break
+        day += dt.timedelta(days=1)
+    return out
+
+
+def save_post(data: dict, posts_dir: Path, category: str, visibility: str, publish_at: str = "") -> Path:
     posts_dir.mkdir(parents=True, exist_ok=True)
     stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     slug = re.sub(r"[^\w가-힣]+", "_", data["title"]).strip("_")[:40]
     path = posts_dir / f"{stamp}_{slug}.md"
+    n = 2
+    while path.exists():  # 같은 초·같은 제목이면 덮어쓰지 않도록 번호 붙임
+        path = posts_dir / f"{stamp}_{slug}_{n}.md"
+        n += 1
     tags = ", ".join(t.replace(",", " ").strip().lstrip("#") for t in data["tags"] if t.strip())
     title = data["title"].replace("\n", " ").strip()
     kw = data.get("keywords", {})
@@ -200,7 +239,10 @@ def save_post(data: dict, posts_dir: Path, category: str, visibility: str) -> Pa
         f"---\ntitle: {title}\ncategory: {category}\ntags: {tags}\n"
         f"visibility: {visibility}\n"
         f"keyword: {one(kw.get('main', ''))}\nsub_keywords: {one(', '.join(kw.get('sub', [])))}\n"
-        f"hook: {one(data.get('hook_pattern', ''))}\n---\n\n{data['body_markdown'].strip()}\n",
+        f"hook: {one(data.get('hook_pattern', ''))}\n"
+        f"thumbnail_text: {one(data.get('thumbnail_text', ''))}\n"
+        + (f"publish_at: {publish_at}\n" if publish_at else "")
+        + f"---\n\n{data['body_markdown'].strip()}\n",
         encoding="utf-8",
     )
     quality.append_history({"date": stamp, "title": title, "keyword": kw.get("main", ""),
@@ -214,7 +256,9 @@ def write_summary(topic: str, data: dict, path: Path, visibility: str):
     if not out:
         return
     r = data["_report"]
-    L = [f"### ✍️ {data['title']}", f"- 주제: {topic} / 공개범위: {visibility}",
+    L = [f"### ✍️ {data['title']}",
+         f"- 주제: {topic} / 공개범위: {visibility} / 발행: {data.get('_publish_at') or '즉시'}",
+         f"- 썸네일 문구: {data.get('thumbnail_text', '')}",
          f"- 핵심 키워드: {data['keywords']['main']} / 훅: {data.get('hook_pattern', '')}"]
     if r["honesty_gap"]:
         L.append("- ⚠️ **정직성 점검 미달 → 비공개로 발행됨. 검토 후 공개 전환 필요**")
@@ -259,6 +303,8 @@ def main():
     ap.add_argument("--visibility", default="", help="public / protected / private")
     ap.add_argument("--extra", default="", help="추가 요청사항 (예: 초보자 대상, 코드 예시 포함)")
     ap.add_argument("--publish", action="store_true", help="작성 직후 티스토리 발행")
+    ap.add_argument("--publish-at", default="",
+                    help="예약 발행: 'auto' = 빈 시간대 자동 배정, '2026-11-05 09:00' = 지정 시각, 비우면 즉시")
     args = ap.parse_args()
 
     cfg = load_ai_config()
@@ -280,6 +326,21 @@ def main():
     category = args.category or main_cfg.get("default_category", "")
     visibility = args.visibility or main_cfg.get("default_visibility", "public")
 
+    # 예약 시각 결정
+    sched = dict(main_cfg.get("schedule", {}))
+    if os.environ.get("SCHEDULE_SLOTS"):  # GitHub Actions: 저장소 Variables 로 시간대 지정 (예: 09:00,19:00)
+        sched["slots"] = [x.strip() for x in os.environ["SCHEDULE_SLOTS"].split(",") if x.strip()]
+    when = args.publish_at.strip()
+    if when.lower() == "auto":
+        slots = next_slots(posts_dir, len(topics), sched)
+    elif when and when not in ("now", "즉시"):
+        import tistory_poster as tp
+        w = tp.parse_when(when, sched)
+        slots = [(w + dt.timedelta(hours=i * int(sched.get("gap_hours", 24)))).strftime("%Y-%m-%d %H:%M")
+                 for i in range(len(topics))]
+    else:
+        slots = [""] * len(topics)
+
     client = anthropic.Anthropic()  # ANTHROPIC_API_KEY 환경변수 사용
     saved, done = [], []
     for i, topic in enumerate(topics, 1):
@@ -290,12 +351,14 @@ def main():
             if data["_report"]["honesty_gap"]:
                 vis = "private"
                 print("  ⚠️ 정직성 점검 미달 → 비공개로 저장 (검토 후 공개 전환 필요)")
-            path = save_post(data, posts_dir, category, vis)
+            data["_publish_at"] = slots[i - 1] if i - 1 < len(slots) else ""
+            path = save_post(data, posts_dir, category, vis, data["_publish_at"])
             if cfg.get("sns"):
                 save_sns(data, path)
             write_summary(topic, data, path, vis)
             best = data["_report"]["titles"][0]
-            print(f"  저장: {path.name}  (제목: {data['title']}, 제목 점수 {best['score']})")
+            print(f"  저장: {path.name}  (제목: {data['title']}, 제목 점수 {best['score']}, "
+                  f"발행: {data['_publish_at'] or '즉시'})")
             saved.append(path)
             done.append(topic)
         except (anthropic.AuthenticationError, TypeError):

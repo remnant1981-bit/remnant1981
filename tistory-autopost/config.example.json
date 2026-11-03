@@ -18,5 +18,18 @@
     "self_check": true,
     "sns": true,
     "style_prompt": ""
+  },
+  "timezone": "Asia/Seoul",
+  "thumbnail": {
+    "enabled": true,
+    "footer": "",
+    "font": ""
+  },
+  "schedule": {
+    "slots": [
+      "09:00"
+    ],
+    "skip_weekdays": [],
+    "gap_hours": 24
   }
 }
