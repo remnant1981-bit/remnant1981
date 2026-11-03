@@ -97,13 +97,19 @@ jobs:
       - name: 패키지 설치
         run: pip install -r requirements.txt
 
-      - name: 예약 점검 (매시 자동 실행일 때 발행할 글 없으면 종료)
-        if: env.HOURLY == 'true'
+      - name: 자동 실행 사전 점검 (Secret 미등록·발행할 글 없음 → 실패 없이 종료)
+        if: github.event_name == 'schedule'
         run: |
-          if [ -n "$TISTORY_BLOG_NAME" ] && python tistory_poster.py --due; then
-            echo "발행 시각이 된 글 있음 → 진행"
-          else
-            echo "발행할 글 없음 → 종료"; echo "SKIP=true" >> "$GITHUB_ENV"
+          if [ -z "$TISTORY_BLOG_NAME" ]; then
+            echo "::notice::Secret 'TISTORY_BLOG_NAME' 미등록 → 자동 실행 건너뜀 (등록 후 자동으로 동작)"
+            echo "SKIP=true" >> "$GITHUB_ENV"; exit 0
+          fi
+          if [ "$HOURLY" = "true" ]; then
+            if python tistory_poster.py --due; then
+              echo "발행 시각이 된 글 있음 → 진행"
+            else
+              echo "발행할 글 없음 → 종료"; echo "SKIP=true" >> "$GITHUB_ENV"
+            fi
           fi
 
       - name: 설정 확인
@@ -170,7 +176,7 @@ jobs:
           fi
 
       - name: 블로그 점검 (리포트·댓글·오래된 글, 자동 게시·수정 없음)
-        if: env.MODE != '작성+발행' && env.MODE != '로그인 점검'
+        if: env.MODE != '작성+발행' && env.MODE != '로그인 점검' && env.SKIP != 'true'
         run: |
           case "$MODE" in
             "성과 리포트") python insights.py report ;;
