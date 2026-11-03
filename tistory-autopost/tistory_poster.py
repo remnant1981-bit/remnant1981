@@ -19,6 +19,7 @@
   TISTORY_HEADLESS=1  브라우저 숨김 실행
   KAKAO_ID / KAKAO_PW 카카오 계정 (쿠키 없거나 만료 시 자동 로그인, 휴대폰 카카오톡 승인 대기)
   KAKAO_APPROVE_WAIT  카카오톡 승인 대기 시간(초, 기본 180)
+  TISTORY_SESSION_FILE 로그인 세션 저장 파일 (있으면 우선 사용, 로그인 성공 시 갱신 → 다음 실행 승인 생략)
 """
 
 import argparse
@@ -197,19 +198,55 @@ class TistoryBot:
         url = self.d.current_url
         return "/manage" in url and "login" not in url and "auth" not in url
 
+    def _cookie_sources(self):
+        """(이름, 쿠키문자열) 후보: 저장된 세션 → Secrets 쿠키 순"""
+        out = []
+        sf = os.environ.get("TISTORY_SESSION_FILE")
+        if sf and Path(sf).is_file() and Path(sf).stat().st_size > 0:
+            out.append(("저장된 세션", Path(sf).read_text(encoding="utf-8")))
+        if os.environ.get("TISTORY_COOKIES"):
+            out.append(("TISTORY_COOKIES", os.environ["TISTORY_COOKIES"]))
+        return out
+
     def is_logged_in(self) -> bool:
-        if os.environ.get("TISTORY_COOKIES") and not getattr(self, "_cookies_loaded", False):
-            self.import_cookies(os.environ["TISTORY_COOKIES"])
-            self._cookies_loaded = True
         self.d.get(self.manage_url)
         time.sleep(3)
         if self._on_manage():
             return True
+        if not getattr(self, "_cookies_tried", False):
+            self._cookies_tried = True
+            for name, cookies in self._cookie_sources():
+                try:
+                    self.d.delete_all_cookies()
+                    self.import_cookies(cookies)
+                except Exception as e:
+                    log.warning("%s 적용 실패: %s", name, e)
+                    continue
+                self.d.get(self.manage_url)
+                time.sleep(3)
+                if self._on_manage():
+                    log.info("로그인 성공 (%s)", name)
+                    self.save_session()
+                    return True
+                log.info("%s 만료 → 다음 방법 시도", name)
         if os.environ.get("KAKAO_ID") and os.environ.get("KAKAO_PW") \
                 and not getattr(self, "_kakao_tried", False):
             self._kakao_tried = True
-            return self.kakao_login(os.environ["KAKAO_ID"], os.environ["KAKAO_PW"])
+            if self.kakao_login(os.environ["KAKAO_ID"], os.environ["KAKAO_PW"]):
+                self.save_session()
+                return True
         return False
+
+    def save_session(self):
+        sf = os.environ.get("TISTORY_SESSION_FILE")
+        if not sf:
+            return
+        try:
+            Path(sf).write_text(self.export_cookies(), encoding="utf-8")
+            self.d.get(self.manage_url)
+            log.info("로그인 세션 저장 (다음 실행부터 승인 생략 가능)")
+        except Exception as e:
+            log.warning("세션 저장 실패: %s", e)
 
     # --- 카카오 ID/PW 로그인 (클라우드 실행용)
     def kakao_login(self, kid: str, kpw: str) -> bool:
@@ -381,6 +418,14 @@ def move(path: Path, dst_dir: Path):
     shutil.move(str(path), str(dst_dir / f"{stamp}_{path.name}"))
 
 
+def summary(lines: list):
+    """GitHub Actions 실행 화면 요약 (휴대폰 앱에서 확인)"""
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if path:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+
+
 def run_once(cfg: dict, files: list, dry_run=False) -> int:
     if not files:
         log.info("대기 중인 글 없음 (%s)", cfg["posts_dir"])
@@ -399,8 +444,11 @@ def run_once(cfg: dict, files: list, dry_run=False) -> int:
 
     bot = TistoryBot(cfg)
     ok = 0
+    results = []
     try:
         if not bot.is_logged_in():
+            summary(["### ❌ 티스토리 로그인 실패",
+                     "- 카카오톡 승인 시간 초과, 비밀번호 오류, 보안문자 요구 중 하나 → 실행 로그 확인"])
             log.error("로그인 필요 → `python tistory_poster.py --login` 먼저 실행"
                       " (클라우드 실행 시 KAKAO_ID/KAKAO_PW 또는 TISTORY_COOKIES 확인)")
             return 0
@@ -410,6 +458,7 @@ def run_once(cfg: dict, files: list, dry_run=False) -> int:
                 log.info("[성공] %s → %s", p.title, url)
                 move(p.path, cfg["published_dir"])
                 ok += 1
+                results.append(f"| ✅ | {p.title} | {p.visibility} |")
             except Exception as e:
                 log.exception("[실패] %s: %s", p.title, e)
                 LOG_DIR.mkdir(exist_ok=True)
@@ -418,11 +467,16 @@ def run_once(cfg: dict, files: list, dry_run=False) -> int:
                 except Exception:
                     pass
                 move(p.path, cfg["failed_dir"])
+                results.append(f"| ❌ | {p.title} | {str(e).splitlines()[0][:80] if str(e) else type(e).__name__} |")
             if i < len(posts) - 1:
                 time.sleep(cfg.get("wait_between_posts_sec", 30))
     finally:
         bot.close()
     log.info("결과: %d/%d 건 발행", ok, len(posts))
+    if results:
+        summary([f"### 티스토리 발행 결과: {ok}/{len(posts)}건",
+                  "| 결과 | 제목 | 공개범위/오류 |", "|---|---|---|", *results,
+                  f"\n[블로그 글 관리 열기](https://{cfg['blog_name']}.tistory.com/manage/posts/)"])
     return ok
 
 
@@ -456,6 +510,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="발행 없이 파싱만 확인")
     ap.add_argument("--daemon", help="매일 발행 시각, 예: 09:00,18:00")
     ap.add_argument("--export-cookies", action="store_true", help="로그인 쿠키 내보내기 (모바일 실행용)")
+    ap.add_argument("--check", action="store_true", help="로그인만 점검 (발행 안 함)")
     args = ap.parse_args()
 
     setup_logging()
@@ -480,6 +535,19 @@ def main():
             print("→ 파일 내용 전체를 GitHub Secrets 'TISTORY_COOKIES' 에 등록 (외부 유출 금지, 등록 후 파일 삭제 권장)")
         finally:
             bot.close()
+        return
+    if args.check:
+        bot = TistoryBot(cfg)
+        try:
+            ok = bot.is_logged_in()
+        finally:
+            bot.close()
+        if ok:
+            log.info("[점검 완료] 로그인 정상 → 발행 가능")
+            summary(["### ✅ 로그인 점검 정상", f"- 블로그: {cfg['blog_name']}.tistory.com", "- 이제 글 작성·발행 실행 가능"])
+        else:
+            summary(["### ❌ 로그인 점검 실패", "- 실행 로그의 오류 문구 확인"])
+            sys.exit(1)
         return
     if args.daemon:
         daemon(cfg, [t.strip() for t in args.daemon.split(",")])

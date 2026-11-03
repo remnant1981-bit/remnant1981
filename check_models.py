@@ -1,8 +1,11 @@
+import os
 import google.generativeai as genai
 import sys
 
 
-api_key = "AIzaSyAczWjDFBKev2oReaZ7b0toQV6t1J--ILs"
+api_key = os.environ.get("GEMINI_API_KEY")  # 환경변수로 설정 (키 하드코딩 금지)
+if not api_key:
+    sys.exit("환경변수 GEMINI_API_KEY 설정 필요")
 genai.configure(api_key=api_key)
 
 print("Listing available models...")

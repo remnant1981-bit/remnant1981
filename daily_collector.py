@@ -1,3 +1,5 @@
+import sys
+import os
 import time
 import requests
 import json
@@ -9,8 +11,9 @@ from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 
 # --- Configuration ---
-# [보안 경고] 이 키가 외부에 노출되었으므로, 테스트 후 구글 AI Studio에서 새로 발급받으시길 권장합니다.
-GEMINI_API_KEY = "AIzaSyAczWjDFBKev2oReaZ7b0toQV6t1J--ILs" 
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")  # 환경변수로 설정 (키 하드코딩 금지)
+if not GEMINI_API_KEY:
+    sys.exit("환경변수 GEMINI_API_KEY 설정 필요")
 LOCAL_API_URL = "https://hooni-pick.onrender.com/api/product"
 TARGET_URL = "https://search.shopping.naver.com/best/home" # 네이버 쇼핑 베스트
 

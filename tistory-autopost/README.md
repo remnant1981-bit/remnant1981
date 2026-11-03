@@ -109,9 +109,15 @@ python tistory_poster.py --export-cookies
 ```
 → `tistory_cookies.txt` 내용을 Secret `TISTORY_COOKIES`로 등록 후 파일 삭제. 쿠키가 있으면 우선 사용, 만료 시 카카오 ID/PW로 자동 재로그인
 
-### 휴대폰에서 실행
-1. GitHub 앱 → 저장소 → Actions → **티스토리 자동 포스팅** → Run workflow
-2. 입력값
+### 휴대폰에서 실행 (순서대로)
+**① 설정 점검 (최초 1회)** — 글은 올리지 않고 로그인만 확인
+- GitHub 앱 → 저장소 → Actions → **티스토리 자동 포스팅** → Run workflow → mode `로그인 점검` → Run
+- 카카오톡 로그인 승인 알림 → 승인
+- 실행 화면 하단 Summary에 Secret 등록 상태·로그인 결과 표시
+- 성공 시 로그인 세션이 암호화 저장됨 → **다음 실행부터 카카오톡 승인 생략** (세션 만료 시에만 다시 승인)
+
+**② 바로 발행** — Run workflow → mode `작성+발행` → 입력 후 Run
+
 | 항목 | 설명 |
 |---|---|
 | topic | AI가 쓸 주제 (비우면 `topics.txt` 사용) |
@@ -119,12 +125,19 @@ python tistory_poster.py --export-cookies
 | visibility | 공개 범위 (기본 private) |
 | extra | 추가 요청사항 |
 
-- 주제 미리 쌓기: 휴대폰에서 `tistory-autopost/topics.txt` 편집 → 실행 시 순서대로 소진
-- 직접 쓴 글: `tistory-autopost/posts/`에 .md 업로드 → 실행 시 함께 발행
+**③ 주제 커밋만으로 자동 발행** — Run workflow 버튼 없이 사용
+- GitHub 앱에서 `tistory-autopost/topics.txt` 편집 → 주제 줄 추가 → Commit → 자동 실행 (1회 최대 3건)
+- `tistory-autopost/posts/`에 직접 쓴 .md 업로드·커밋 → 자동 발행
+- 이 경우 공개범위 기본값은 `private` → 바꾸려면 Settings → Secrets and variables → Actions → **Variables** 탭 → `DEFAULT_VISIBILITY` = `public`
+
+**결과 확인**: Actions 실행 화면 Summary에 발행 결과표(제목·성공/실패) + 블로그 글 관리 링크 표시
+
 - 매일 자동: `.github/workflows/tistory-autopost.yml`의 `schedule` 주석 해제
+- (선택) 세션 암호화 키를 별도로 쓰려면 Secret `SESSION_KEY` 등록 (미등록 시 카카오 비밀번호를 키로 사용)
 
 ### 주의
 - 저장소가 **공개** 상태면 `topics.txt`, `posts/` 내용도 공개됨 → 비공개 저장소 전환 권장 (Secrets는 공개 저장소여도 암호화 보관)
 - 카카오 비밀번호가 GitHub Secrets에 저장됨 → 저장소 비공개 전환 및 카카오 2단계 인증 사용 권장
-- 쿠키 만료 시 카카오 ID/PW로 자동 재로그인 (매 실행마다 카카오톡 승인 필요할 수 있음)
-- 실패 시 Actions 실행 화면 → Artifacts `tistory-logs`에서 오류 스크린샷 확인 (3일 보관)
+- 로그인 순서: 저장된 세션 → `TISTORY_COOKIES` → 카카오 ID/PW (승인 필요)
+- 카카오 비밀번호 변경 시 저장된 세션 해독 불가 → 다음 실행에서 한 번 더 승인하면 자동 갱신
+- 발행 실패 시 Actions 실행 화면 → Artifacts `tistory-logs`에서 오류 스크린샷 확인 (3일 보관, 로그인 실패는 계정 노출 방지로 화면 문구만 로그에 기록)
