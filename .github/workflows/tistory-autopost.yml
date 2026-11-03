@@ -1,9 +1,17 @@
 name: 티스토리 자동 포스팅
 
-# 휴대폰: GitHub 앱 → Actions → "티스토리 자동 포스팅" → Run workflow
+# 휴대폰 사용법
+#  1) 설정 점검: Actions → 이 워크플로 → Run workflow → mode "로그인 점검"
+#  2) 바로 발행: Run workflow → topic 입력 → Run
+#  3) 주제 커밋: GitHub 앱에서 tistory-autopost/topics.txt 편집·커밋 → 자동 실행 (최대 3건)
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: "실행 모드"
+        type: choice
+        options: [작성+발행, 로그인 점검]
+        default: 작성+발행
       topic:
         description: "AI가 쓸 주제 (비우면 topics.txt 사용)"
         required: false
@@ -21,6 +29,11 @@ on:
         description: "추가 요청사항 (예: 초보자 대상)"
         required: false
         default: ""
+  push:
+    branches: [main]
+    paths:
+      - "tistory-autopost/topics.txt"
+      - "tistory-autopost/posts/**"
   # 매일 자동 실행하려면 아래 주석 해제 (UTC 기준, 0:07 UTC = 09:07 KST)
   # schedule:
   #   - cron: "7 0 * * *"
@@ -45,10 +58,15 @@ jobs:
       TISTORY_COOKIES: ${{ secrets.TISTORY_COOKIES }}
       KAKAO_ID: ${{ secrets.KAKAO_ID }}
       KAKAO_PW: ${{ secrets.KAKAO_PW }}
+      # 로그인 세션 암호화 키 (별도 등록 안 하면 카카오 비밀번호 사용)
+      SESSION_KEY: ${{ secrets.SESSION_KEY || secrets.KAKAO_PW }}
       TISTORY_HEADLESS: "1"
+      MODE: ${{ inputs.mode || '작성+발행' }}
       TOPIC: ${{ inputs.topic }}
-      COUNT: ${{ inputs.count || '1' }}
-      VISIBILITY: ${{ inputs.visibility || 'private' }}
+      # push(주제 커밋) 실행 시 최대 3건
+      COUNT: ${{ inputs.count || (github.event_name == 'push' && '3') || '1' }}
+      # 기본 공개범위: 저장소 Settings → Variables 에 DEFAULT_VISIBILITY 등록 시 변경 (기본 private)
+      VISIBILITY: ${{ inputs.visibility || vars.DEFAULT_VISIBILITY || 'private' }}
       EXTRA: ${{ inputs.extra }}
     steps:
       - uses: actions/checkout@v4
@@ -64,12 +82,42 @@ jobs:
 
       - name: 설정 확인
         run: |
+          echo "## 설정 상태" >> "$GITHUB_STEP_SUMMARY"
+          for k in TISTORY_BLOG_NAME KAKAO_ID KAKAO_PW TISTORY_COOKIES ANTHROPIC_API_KEY; do
+            if [ -n "${!k}" ]; then echo "- ✅ $k" >> "$GITHUB_STEP_SUMMARY"; else echo "- ⬜ $k (미등록)" >> "$GITHUB_STEP_SUMMARY"; fi
+          done
           [ -n "$TISTORY_BLOG_NAME" ] || { echo "::error::Secrets 'TISTORY_BLOG_NAME' 미등록"; exit 1; }
           if [ -z "$TISTORY_COOKIES" ] && { [ -z "$KAKAO_ID" ] || [ -z "$KAKAO_PW" ]; }; then
             echo "::error::로그인 정보 없음 → Secrets 'KAKAO_ID'+'KAKAO_PW' 또는 'TISTORY_COOKIES' 등록 필요"; exit 1
           fi
+          echo "TISTORY_SESSION_FILE=$RUNNER_TEMP/session.txt" >> "$GITHUB_ENV"
+
+      - name: 저장된 로그인 세션 불러오기
+        uses: actions/cache/restore@v4
+        with:
+          path: tistory-autopost/.session.enc
+          key: tistory-session-${{ github.run_id }}
+          restore-keys: tistory-session-
+
+      - name: 로그인 세션 복호화
+        run: |
+          if [ -n "$SESSION_KEY" ] && [ -f .session.enc ]; then
+            if openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in .session.enc -out "$TISTORY_SESSION_FILE" -pass env:SESSION_KEY 2>/dev/null; then
+              echo "저장된 세션 사용"
+            else
+              echo "저장된 세션 해독 실패 → 새로 로그인"; rm -f "$TISTORY_SESSION_FILE"
+            fi
+          else
+            echo "저장된 세션 없음 → 첫 로그인 (카카오톡 승인 필요)"
+          fi
+          echo "SESSION_HASH_BEFORE=$(sha256sum "$TISTORY_SESSION_FILE" 2>/dev/null | cut -d' ' -f1)" >> "$GITHUB_ENV"
+
+      - name: 로그인 점검 (카카오톡 승인 알림 오면 승인)
+        if: env.MODE == '로그인 점검'
+        run: python tistory_poster.py --check
 
       - name: AI 글 작성
+        if: env.MODE != '로그인 점검'
         run: |
           if [ -n "$TOPIC" ]; then
             [ -n "$ANTHROPIC_API_KEY" ] || { echo "::error::Secrets 'ANTHROPIC_API_KEY' 미등록"; exit 1; }
@@ -82,9 +130,11 @@ jobs:
           fi
 
       - name: 티스토리 발행 (카카오톡 로그인 승인 알림 오면 승인)
+        if: env.MODE != '로그인 점검'
         run: python tistory_poster.py --all
 
       - name: 처리 결과 저장 (topics.txt, 발행된 대기 글 정리)
+        if: env.MODE != '로그인 점검'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -93,8 +143,27 @@ jobs:
             echo "변경 없음"
           else
             git commit -m "tistory-autopost: 발행 완료 항목 정리"
-            git push
+            git pull --rebase -q origin "${GITHUB_REF_NAME}" && git push
           fi
+
+      - name: 로그인 세션 암호화
+        id: enc
+        if: always()
+        run: |
+          AFTER=$(sha256sum "$TISTORY_SESSION_FILE" 2>/dev/null | cut -d' ' -f1)
+          if [ -n "$SESSION_KEY" ] && [ -s "$TISTORY_SESSION_FILE" ] && [ "$AFTER" != "$SESSION_HASH_BEFORE" ]; then
+            openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -in "$TISTORY_SESSION_FILE" -out .session.enc -pass env:SESSION_KEY
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "로그인 세션 갱신 → 다음 실행부터 승인 생략 가능"
+          fi
+          rm -f "$TISTORY_SESSION_FILE"
+
+      - name: 로그인 세션 저장
+        if: always() && steps.enc.outputs.changed == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: tistory-autopost/.session.enc
+          key: tistory-session-${{ github.run_id }}
 
       - name: 실패 로그 업로드
         if: failure()
