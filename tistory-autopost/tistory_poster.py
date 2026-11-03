@@ -544,6 +544,15 @@ def move(path: Path, dst_dir: Path):
     shutil.move(str(path), str(dst_dir / f"{stamp}_{path.name}"))
 
 
+def notify(title: str, msg: str, priority: str = "default"):
+    """휴대폰 푸시 알림 (NTFY_TOPIC 또는 TELEGRAM_* 설정 시)"""
+    try:
+        import notify as nt
+        nt.send(title, msg, priority=priority)
+    except Exception as e:
+        log.debug("알림 실패: %s", e)
+
+
 def summary(lines: list):
     """GitHub Actions 실행 화면 요약 (휴대폰 앱에서 확인)"""
     path = os.environ.get("GITHUB_STEP_SUMMARY")
@@ -584,6 +593,7 @@ def run_once(cfg: dict, files: list, dry_run=False) -> int:
     results = []
     try:
         if not bot.is_logged_in():
+            notify("티스토리 로그인 실패", "세션 만료 또는 승인 필요 → 로그인 점검 실행", "high")
             if os.environ.get("GITHUB_EVENT_NAME") == "schedule":
                 summary(["### ❌ 예약 발행 실패: 저장된 로그인 세션 만료",
                          "- Run workflow → mode `로그인 점검` 실행 후 카카오톡 승인 → 다음 정시 점검에서 자동 발행"])
@@ -619,6 +629,10 @@ def run_once(cfg: dict, files: list, dry_run=False) -> int:
                   "| 결과 | 제목 | 공개범위/오류 |", "|---|---|---|", *results,
                   f"\n[블로그 글 관리 열기](https://{cfg['blog_name']}.tistory.com/manage/posts/)"])
     summary_schedule(cfg)
+    if results:
+        notify(f"티스토리 발행 {ok}/{len(posts)}건",
+               "\n".join(r.split("|")[1].strip() + " " + r.split("|")[2].strip() for r in results),
+               "default" if ok == len(posts) else "high")
     return ok
 
 

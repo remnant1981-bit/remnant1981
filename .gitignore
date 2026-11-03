@@ -4,3 +4,7 @@ __pycache__/
 *.pyo
 instance/
 .pytest_cache/
+
+# 디버그·로그 파일
+*.log
+page_source_debug.html

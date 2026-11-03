@@ -2,3 +2,4 @@ selenium>=4.11
 markdown>=3.5
 anthropic>=2.0
 pillow>=10
+beautifulsoup4>=4.12

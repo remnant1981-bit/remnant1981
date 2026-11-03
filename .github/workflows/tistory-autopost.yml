@@ -5,13 +5,14 @@ name: 티스토리 자동 포스팅
 #  2) 바로 발행: Run workflow → topic 입력 → Run
 #  3) 주제 커밋: GitHub 앱에서 tistory-autopost/topics.txt 편집·커밋 → 자동 실행 (최대 3건)
 #  4) 예약 발행: publish_at 에 'auto' 또는 '2026-11-05 09:00' → 매시간 자동 점검 후 시각이 된 글 발행
+#  5) 주간 점검: 매주 월 09:23 KST 자동 (성과 리포트·댓글 정리·오래된 글 점검), 또는 mode "주간 점검"
 on:
   workflow_dispatch:
     inputs:
       mode:
         description: "실행 모드"
         type: choice
-        options: [작성+발행, 로그인 점검]
+        options: [작성+발행, 로그인 점검, 주간 점검, 성과 리포트, 댓글 정리, 오래된 글 점검]
         default: 작성+발행
       topic:
         description: "AI가 쓸 주제 (비우면 topics.txt 사용)"
@@ -41,7 +42,8 @@ on:
       - "tistory-autopost/posts/**"
   # 예약 발행 점검: 매시 7분 (발행할 글이 없으면 1분 안에 종료)
   schedule:
-    - cron: "7 * * * *"
+    - cron: "7 * * * *"     # 예약 발행 점검 (매시 7분)
+    - cron: "23 0 * * 1"    # 주간 점검 (월 00:23 UTC = 09:23 KST)
 
 permissions:
   contents: write
@@ -67,7 +69,12 @@ jobs:
       # 로그인 세션 암호화 키 (별도 등록 안 하면 카카오 비밀번호 사용)
       SESSION_KEY: ${{ secrets.SESSION_KEY || secrets.KAKAO_PW }}
       TISTORY_HEADLESS: "1"
-      MODE: ${{ inputs.mode || '작성+발행' }}
+      MODE: ${{ inputs.mode || (github.event.schedule == '23 0 * * 1' && '주간 점검') || '작성+발행' }}
+      HOURLY: ${{ github.event.schedule == '7 * * * *' }}
+      # 휴대폰 푸시 알림 (선택): ntfy 주제 이름 또는 텔레그램 봇
+      NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       TOPIC: ${{ inputs.topic }}
       # push(주제 커밋) 실행 시 최대 3건
       COUNT: ${{ inputs.count || (github.event_name == 'push' && '3') || '1' }}
@@ -91,7 +98,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: 예약 점검 (매시 자동 실행일 때 발행할 글 없으면 종료)
-        if: github.event_name == 'schedule'
+        if: env.HOURLY == 'true'
         run: |
           if [ -n "$TISTORY_BLOG_NAME" ] && python tistory_poster.py --due; then
             echo "발행 시각이 된 글 있음 → 진행"
@@ -139,7 +146,7 @@ jobs:
         run: python tistory_poster.py --check
 
       - name: AI 글 작성
-        if: env.MODE != '로그인 점검' && github.event_name != 'schedule'
+        if: env.MODE == '작성+발행' && github.event_name != 'schedule'
         run: |
           WHEN=()
           [ -n "$PUBLISH_AT" ] && WHEN=(--publish-at "$PUBLISH_AT")
@@ -154,13 +161,23 @@ jobs:
           fi
 
       - name: 티스토리 발행 (카카오톡 로그인 승인 알림 오면 승인)
-        if: env.MODE != '로그인 점검' && env.SKIP != 'true'
+        if: env.MODE == '작성+발행' && env.SKIP != 'true'
         run: |
           if python tistory_poster.py --due; then
             python tistory_poster.py --all
           else
             echo "지금 발행할 글 없음"; python tistory_poster.py --list | tee -a "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: 블로그 점검 (리포트·댓글·오래된 글, 자동 게시·수정 없음)
+        if: env.MODE != '작성+발행' && env.MODE != '로그인 점검'
+        run: |
+          case "$MODE" in
+            "성과 리포트") python insights.py report ;;
+            "댓글 정리") python insights.py comments ;;
+            "오래된 글 점검") python insights.py refresh ;;
+            *) python insights.py all ;;
+          esac
 
       - name: 처리 결과 저장 (topics.txt, 예약 글, 발행된 대기 글 정리)
         if: always() && env.MODE != '로그인 점검' && env.SKIP != 'true'
@@ -170,10 +187,11 @@ jobs:
           git add topics.txt posts
           if [ -d posts/failed ]; then git add -f posts/failed; fi   # 실패 글 보관 (posts/ 로 옮기면 재시도)
           if [ -f history.jsonl ]; then git add history.jsonl; fi   # 훅 패턴·키워드 중복 방지용 이력
+          if [ -f refresh_state.json ]; then git add refresh_state.json; fi   # 오래된 글 점검 이력
           if git diff --cached --quiet; then
             echo "변경 없음"
           else
-            git commit -m "tistory-autopost: 발행 완료 항목 정리"
+            git commit -m "tistory-autopost: ${MODE} 결과 정리"
             git pull --rebase -q origin "${GITHUB_REF_NAME}" && git push
           fi
 
@@ -195,6 +213,10 @@ jobs:
         with:
           path: tistory-autopost/.session.enc
           key: tistory-session-${{ github.run_id }}
+
+      - name: 실패 알림
+        if: failure()
+        run: python notify.py "티스토리 자동화 실패 (${MODE})" "실행 화면에서 오류 확인" high || true
 
       - name: 실패 로그 업로드
         if: failure()
