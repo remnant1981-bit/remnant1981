@@ -139,6 +139,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add topics.txt posts
+          if [ -f history.jsonl ]; then git add history.jsonl; fi   # 훅 패턴·키워드 중복 방지용 이력
           if git diff --cached --quiet; then
             echo "변경 없음"
           else
