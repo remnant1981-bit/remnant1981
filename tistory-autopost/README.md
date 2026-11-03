@@ -79,11 +79,31 @@ setx ANTHROPIC_API_KEY "sk-ant-..."
 | `model` | 기본 `claude-opus-5-5` |
 | `effort` | `low` / `medium` / `high` (높을수록 품질↑·비용↑) |
 | `min_chars` | 최소 본문 분량(자) |
-| `style_prompt` | 글 스타일 지시문 (블로그 성격에 맞게 수정) |
+| `title_candidates` | 제목 후보 수 (기본 8, 자동 점수로 최선 선택) |
+| `quality_gate` | 문체 검사 후 문제 있으면 1회 자동 수정 (기본 켜짐) |
+| `self_check` | 15개 항목 자체 점검, 정직성 미달 시 비공개 보류 (기본 켜짐) |
+| `sns` | Threads용 글·3줄 요약 생성 (기본 켜짐) |
+| `style_prompt` | 블로그별 추가 지시 (예: `R&D 실무자 대상, 합니다체`) |
 
-- 1건당 비용 대략 수십~백 원대 (분량·effort 따라 변동, 실행 시 토큰 사용량 출력)
-- 자동 매일 운영 예: 작업 스케줄러에 `python ai_writer.py --topics-file topics.txt --count 1 --publish` 등록
-- AI 작성 글은 사실관계 검토 후 공개 권장 → 초기엔 `--visibility private`로 운영 후 확인
+### 글 품질 관리 (Uplika 스킬 기반)
+[Uplika 플러그인](https://github.com/uplika/uplika-plugin)(MIT)의 블로그·SNS 스킬을 티스토리용으로 가져옴. 원본은 `vendor/uplika/`, 출처·라이선스는 `vendor/uplika/README.md`
+
+| 기능 | 내용 | 출처 스킬 |
+|---|---|---|
+| 한국어 문체 규칙 | 어미 통일, 번역투·강조어 금지, 상황으로 독자 호칭, 실제 숫자만 | hooks |
+| 정직성 규칙 | 지어낸 1인칭 경험·출처 없는 수치·가짜 내돈내산 금지, 사진 자리표시 금지 | naver-ai-cite |
+| 글 구조 | 독자·상황 → 결론 → 절차·팁 → 상황별 비교표 → 결과·한계 → 근거 → 요약·FAQ | naver-ai-cite (네이버 공식 가이드) |
+| 도입부 훅 19종 | 최근 5개 글에서 쓴 패턴은 자동으로 피함 | hooks |
+| 제목 자동 선택 | 후보 8개 → 길이(한글 40자)·강조어·숫자 유무 등 점수화 → 최고점 채택 | yt-package `title.py` |
+| 문체 검사 | 강조어·번역투·어미 혼용·사진 자리표시·문장 길이 단조로움 → 문제 시 자동 수정 | ig-human, threads |
+| 15개 자체 점검 | 네이버 AI 브리핑 가이드 원칙 5·셀프체크 5·주의 5를 pass/gap/na로 판정 | naver-ai-cite |
+| 문체 프로필 | `voice.md` 작성 시 최우선 적용 (`voice.example.md` 양식) | voice-profile |
+| 키워드 중복 방지 | 글마다 핵심·보조 키워드 기록, 이미 다룬 핵심 키워드 회피 | naver-keywords |
+| SNS 재가공 | Threads용 글·3줄 요약 생성 → Actions 요약 화면·`sns/` 폴더 | repurpose, threads |
+
+- 자동 수정·자체 점검 때문에 글 1건당 API 호출 2~3회 → 비용도 약 2~3배. 줄이려면 `quality_gate`/`self_check`를 `false`로
+- 발행 이력은 `history.jsonl`에 기록 (제목·핵심 키워드·훅 패턴). 저장소가 공개면 이 내용도 공개됨
+- SNS 자동 게시는 Uplika 서버(비공개) 연동이 필요 → Claude 앱에 Uplika 커넥터(`https://api.uplika.com/mcp`) 추가 후 "이 글 Threads에 올려 줘"로 게시
 
 ## 7. 모바일 실행 (GitHub Actions)
 PC 없이 휴대폰 GitHub 앱에서 실행 → GitHub 클라우드에서 AI 작성 + 발행.

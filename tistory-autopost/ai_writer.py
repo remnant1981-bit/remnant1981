@@ -1,8 +1,15 @@
 """
 Claude API 기반 블로그 본문 자동 작성기
 
-주제 → Claude 가 제목·태그·본문(마크다운) 작성 → posts/ 에 .md 저장
+주제 → Claude 가 제목 후보·키워드·태그·본문(마크다운)·SNS 글 작성 → posts/ 에 .md 저장
 → tistory_poster.py 가 그대로 발행
+
+품질 관리 (Uplika 스킬 기반, prompts.py / quality.py 참고):
+  - 한국어 문체·정직성·구조 규칙 + 도입부 훅 패턴 19종 (최근 쓴 패턴은 피함)
+  - 제목 후보 여러 개 → 자동 점수로 최선 선택
+  - 문체 검사(강조어·번역투·어미 혼용 등) → 문제 시 1회 자동 수정
+  - 네이버 AI 브리핑 가이드 15개 항목 자체 점검 → 정직성 미달 시 비공개 보류
+  - voice.md (문체 프로필) 있으면 최우선 적용
 
 사용법:
   python ai_writer.py "액화수소 저장 기술 동향" "셀레니움 자동화 팁"
@@ -16,11 +23,15 @@ API 키: 환경변수 ANTHROPIC_API_KEY 설정 필요
 import argparse
 import datetime as dt
 import json
+import os
 import re
 import sys
 from pathlib import Path
 
 import anthropic
+
+import prompts
+import quality
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -28,24 +39,62 @@ DEFAULT_AI = {
     "model": "claude-opus-5-5",
     "effort": "medium",
     "min_chars": 2000,
-    "style_prompt": (
-        "너는 한국어 티스토리 블로그 전문 작가다. 독자가 검색으로 유입되는 정보성 글을 쓴다.\n"
-        "- 도입부에서 글을 읽어야 하는 이유를 2~3문장으로 제시\n"
-        "- ## / ### 소제목으로 구조화, 필요 시 표·목록 활용\n"
-        "- 사실 위주로 쓰고, 확실하지 않은 수치·날짜는 단정하지 말 것\n"
-        "- 마지막에 핵심 요약 섹션 포함\n"
-        "- 과장된 광고 문구, 이모지 남발 금지"
-    ),
+    "title_candidates": 8,   # 제목 후보 수 (자동 검사로 최선 선택)
+    "quality_gate": True,    # 문체 검사 후 문제 있으면 1회 자동 수정
+    "self_check": True,      # 15개 항목 자체 점검 (정직성 항목 미달 시 비공개 보류)
+    "sns": True,             # Threads·SNS용 재가공 글 생성
+    "style_prompt": "",      # 블로그별 추가 지시 (예: 'R&D·공학 실무자 대상, 합니다체')
 }
 
 SCHEMA = {
     "type": "object",
     "properties": {
-        "title": {"type": "string", "description": "검색 친화적 글 제목 (60자 이내)"},
+        "title_candidates": {"type": "array", "items": {"type": "string"},
+                             "description": "서로 다른 제목 후보 (요청 개수만큼)"},
+        "keywords": {
+            "type": "object",
+            "properties": {
+                "main": {"type": "string", "description": "이 글이 노리는 핵심 검색 키워드 1개"},
+                "sub": {"type": "array", "items": {"type": "string"}, "description": "보조 키워드 3~6개"},
+            },
+            "required": ["main", "sub"],
+            "additionalProperties": False,
+        },
+        "hook_pattern": {"type": "string", "description": "본문 첫 문장에 사용한 훅 패턴 번호와 이름 (예: '4 결론부터 말하면')"},
         "tags": {"type": "array", "items": {"type": "string"}, "description": "태그 5~10개"},
         "body_markdown": {"type": "string", "description": "본문 마크다운 (제목 H1 제외)"},
+        "sns": {
+            "type": "object",
+            "properties": {
+                "threads": {"type": "string", "description": "Threads/X용 글 (300자 이내)"},
+                "summary": {"type": "string", "description": "3줄 요약"},
+            },
+            "required": ["threads", "summary"],
+            "additionalProperties": False,
+        },
     },
-    "required": ["title", "tags", "body_markdown"],
+    "required": ["title_candidates", "keywords", "hook_pattern", "tags", "body_markdown", "sns"],
+    "additionalProperties": False,
+}
+
+CHECK_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "result": {"type": "string", "enum": ["pass", "gap", "na"]},
+                    "evidence": {"type": "string", "description": "pass: 인용 문장 / gap: 보완 방법 / na: 이유"},
+                },
+                "required": ["id", "result", "evidence"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["items"],
     "additionalProperties": False,
 }
 
@@ -58,19 +107,16 @@ def load_ai_config() -> dict:
     return cfg
 
 
-def write_article(client: anthropic.Anthropic, cfg: dict, topic: str, extra: str = "") -> dict:
-    user = f"주제: {topic}\n분량: 본문 {cfg['min_chars']}자 이상"
-    if extra:
-        user += f"\n추가 요청: {extra}"
-
+def _call(client: anthropic.Anthropic, cfg: dict, system: str, user: str, schema: dict,
+          effort: str | None = None) -> dict:
     with client.beta.messages.stream(
         model=cfg["model"],
         max_tokens=64000,
-        system=cfg["style_prompt"],
+        system=system,
         messages=[{"role": "user", "content": user}],
         output_config={
-            "effort": cfg["effort"],
-            "format": {"type": "json_schema", "schema": SCHEMA},
+            "effort": effort or cfg["effort"],
+            "format": {"type": "json_schema", "schema": schema},
         },
         # 안전 분류기 거절 시 서버에서 대체 모델로 자동 재시도
         betas=["server-side-fallback-2026-07-01"],
@@ -83,9 +129,61 @@ def write_article(client: anthropic.Anthropic, cfg: dict, topic: str, extra: str
     if msg.stop_reason == "max_tokens":
         raise RuntimeError("출력 길이 초과로 중단됨")
     text = next((b.text for b in msg.content if b.type == "text"), "")
-    data = json.loads(text)
     u = msg.usage
     print(f"  토큰: 입력 {u.input_tokens:,} / 출력 {u.output_tokens:,}")
+    return json.loads(text)
+
+
+def _request(cfg: dict, topic: str, extra: str, history: list) -> str:
+    user = (f"주제: {topic}\n분량: 본문 {cfg['min_chars']}자 이상\n"
+            f"제목 후보: {cfg['title_candidates']}개")
+    if extra:
+        user += f"\n추가 요청: {extra}"
+    hooks = [h.get("hook") for h in history[-5:] if h.get("hook")]
+    if hooks:
+        user += f"\n최근 글에서 쓴 훅 패턴 (이번엔 다른 패턴 사용): {', '.join(hooks)}"
+    kws = [h.get("keyword") for h in history if h.get("keyword")]
+    if kws:
+        user += f"\n이미 다룬 핵심 키워드 (같은 키워드로 겹치지 않게): {', '.join(kws[-15:])}"
+    return user
+
+
+def write_article(client: anthropic.Anthropic, cfg: dict, topic: str, extra: str = "") -> dict:
+    system = prompts.build_system(cfg.get("style_prompt", ""))
+    request = _request(cfg, topic, extra, quality.load_history())
+    data = _call(client, cfg, system, request, SCHEMA)
+    data["body_markdown"] = quality.clean_text(data["body_markdown"])
+    report = {"revised": False, "issues": quality.check_body(data["body_markdown"])}
+
+    # 1) 문체 검사 → 문제 있으면 1회 자동 수정
+    fixes = [i["msg"] for i in report["issues"] if i["level"] == "fix"]
+    if cfg.get("quality_gate") and fixes:
+        print(f"  문체 문제 {len(fixes)}건 → 자동 수정")
+        fix_req = (request + "\n\n아래 초안의 문제만 고쳐서 같은 JSON 형식으로 다시 작성. "
+                   "문제 외 내용은 유지.\n문제:\n- " + "\n- ".join(fixes) +
+                   "\n\n초안:\n" + json.dumps(data, ensure_ascii=False))
+        data = _call(client, cfg, system, fix_req, SCHEMA)
+        data["body_markdown"] = quality.clean_text(data["body_markdown"])
+        report = {"revised": True, "issues": quality.check_body(data["body_markdown"])}
+
+    # 2) 제목 후보 자동 순위
+    ranked = quality.rank_titles(data["title_candidates"])
+    if not ranked:
+        raise RuntimeError("제목 후보 없음")
+    data["title"] = ranked[0]["title"]
+    report["titles"] = ranked
+
+    # 3) 15개 항목 자체 점검
+    report["check"] = []
+    if cfg.get("self_check"):
+        items = "\n".join(f"{i}. [{k}] {q}" for i, k, q in prompts.SELF_CHECK_ITEMS)
+        res = _call(client, cfg, prompts.SELF_CHECK_SYSTEM,
+                    f"점검 항목:\n{items}\n\n제목: {data['title']}\n\n초안:\n{data['body_markdown']}",
+                    CHECK_SCHEMA, effort="low")
+        report["check"] = res.get("items", [])
+    report["honesty_gap"] = [c for c in report["check"]
+                             if c["id"] in prompts.HONESTY_ITEMS and c["result"] == "gap"]
+    data["_report"] = report
     return data
 
 
@@ -96,12 +194,60 @@ def save_post(data: dict, posts_dir: Path, category: str, visibility: str) -> Pa
     path = posts_dir / f"{stamp}_{slug}.md"
     tags = ", ".join(t.replace(",", " ").strip().lstrip("#") for t in data["tags"] if t.strip())
     title = data["title"].replace("\n", " ").strip()
+    kw = data.get("keywords", {})
+    one = lambda v: str(v).replace("\n", " ").strip()
     path.write_text(
         f"---\ntitle: {title}\ncategory: {category}\ntags: {tags}\n"
-        f"visibility: {visibility}\n---\n\n{data['body_markdown'].strip()}\n",
+        f"visibility: {visibility}\n"
+        f"keyword: {one(kw.get('main', ''))}\nsub_keywords: {one(', '.join(kw.get('sub', [])))}\n"
+        f"hook: {one(data.get('hook_pattern', ''))}\n---\n\n{data['body_markdown'].strip()}\n",
         encoding="utf-8",
     )
+    quality.append_history({"date": stamp, "title": title, "keyword": kw.get("main", ""),
+                            "hook": data.get("hook_pattern", ""), "file": path.name})
     return path
+
+
+def write_summary(topic: str, data: dict, path: Path, visibility: str):
+    """GitHub Actions 실행 화면 요약 (휴대폰 앱에서 확인)"""
+    out = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not out:
+        return
+    r = data["_report"]
+    L = [f"### ✍️ {data['title']}", f"- 주제: {topic} / 공개범위: {visibility}",
+         f"- 핵심 키워드: {data['keywords']['main']} / 훅: {data.get('hook_pattern', '')}"]
+    if r["honesty_gap"]:
+        L.append("- ⚠️ **정직성 점검 미달 → 비공개로 발행됨. 검토 후 공개 전환 필요**")
+    L += ["", "<details><summary>제목 후보 점수</summary>", "", "| 점수 | 제목 | 지적 |", "|---|---|---|"]
+    L += [f"| {t['score']} | {t['title']} | {'; '.join(t['issues'][:2])} |" for t in r["titles"][:5]]
+    L += ["", "</details>"]
+    if r["check"]:
+        mark = {"pass": "✅", "gap": "⚠️", "na": "➖"}
+        L += ["", "<details><summary>15개 항목 자체 점검 (네이버 AI 브리핑 공식 가이드 기준)</summary>", "",
+              "| 항목 | 결과 | 근거 |", "|---|---|---|"]
+        L += [f"| {c['id']} | {mark.get(c['result'], c['result'])} | {c['evidence'][:80].replace('|', '/')} |"
+              for c in r["check"]]
+        L += ["", "</details>"]
+    if r["issues"]:
+        L += ["", f"- 문체 검사{' (자동 수정 후)' if r['revised'] else ''}: " +
+              "; ".join(i["msg"] for i in r["issues"])]
+    if data.get("sns"):
+        L += ["", "<details><summary>📱 SNS용 글 (복사해서 Threads 등에 게시)</summary>", "",
+              "**Threads**", "", "```", data["sns"]["threads"], "```", "", "**3줄 요약**", "",
+              "```", data["sns"]["summary"], "```", "", "</details>"]
+    with open(out, "a", encoding="utf-8") as f:
+        f.write("\n".join(L) + "\n\n")
+
+
+def save_sns(data: dict, path: Path):
+    """SNS 초안 파일 (posts/ 밖 sns/ 폴더, 발행 대상 아님)"""
+    if not data.get("sns"):
+        return
+    d = BASE_DIR / "sns"
+    d.mkdir(exist_ok=True)
+    (d / (path.stem + ".txt")).write_text(
+        f"[원문] {data['title']}\n\n[Threads]\n{data['sns']['threads']}\n\n[3줄 요약]\n{data['sns']['summary']}\n",
+        encoding="utf-8")
 
 
 def main():
@@ -140,8 +286,16 @@ def main():
         print(f"[{i}/{len(topics)}] 작성 중: {topic}")
         try:
             data = write_article(client, cfg, topic, args.extra)
-            path = save_post(data, posts_dir, category, visibility)
-            print(f"  저장: {path.name}  (제목: {data['title']})")
+            vis = visibility
+            if data["_report"]["honesty_gap"]:
+                vis = "private"
+                print("  ⚠️ 정직성 점검 미달 → 비공개로 저장 (검토 후 공개 전환 필요)")
+            path = save_post(data, posts_dir, category, vis)
+            if cfg.get("sns"):
+                save_sns(data, path)
+            write_summary(topic, data, path, vis)
+            best = data["_report"]["titles"][0]
+            print(f"  저장: {path.name}  (제목: {data['title']}, 제목 점수 {best['score']})")
             saved.append(path)
             done.append(topic)
         except (anthropic.AuthenticationError, TypeError):
