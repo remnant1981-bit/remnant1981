@@ -6,3 +6,5 @@ logs/
 tistory_cookies.txt
 .session.enc
 sns/
+.thumbs/
+fonts/

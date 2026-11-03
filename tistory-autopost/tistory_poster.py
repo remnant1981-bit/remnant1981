@@ -12,6 +12,12 @@
   python tistory_poster.py --dry-run            # 업로드 없이 파싱 결과만 확인
   python tistory_poster.py --daemon 09:00,18:00 # 매일 지정 시각 자동 업로드 (상주)
   python tistory_poster.py --export-cookies     # 로그인 쿠키 내보내기 (GitHub Actions/모바일 실행용)
+  python tistory_poster.py --list               # 발행 대기·예약 글 목록
+
+글 front matter 추가 항목:
+  publish_at: 2026-11-05 09:00   예약 발행 (KST). 이 시각 전에는 --all 실행에서 건너뜀
+  thumbnail_text: 썸네일 문구      대표 이미지 큰 글씨 (없으면 제목)
+  thumbnail: images/a.png        직접 올린 이미지를 대표 이미지로 사용 ('none' = 썸네일 없음)
 
 환경변수 (GitHub Actions 등 config.json 없는 환경):
   TISTORY_BLOG_NAME   블로그명 (config.json 의 blog_name 대체)
@@ -51,6 +57,8 @@ SEL = {
     "category_item": "#category-list .mce-menu-item, #category-list [role='option']",
     "publish_layer_btn": "#publish-layer-btn",
     "publish_btn": "#publish-btn",
+    "file_input": "input[type='file']",
+    "attach_btn": "#mceu_0-open, button[aria-label*='첨부'], .mce-btn-attach, #attach-layer-btn",
 }
 
 log = logging.getLogger("tistory")
@@ -84,6 +92,31 @@ class Post:
     category: str = ""
     tags: list = field(default_factory=list)
     visibility: str = "public"
+    publish_at: "dt.datetime | None" = None   # 예약 발행 시각 (KST), None = 즉시
+    thumbnail_text: str = ""                   # 썸네일 큰 문구 (없으면 제목)
+    thumbnail: str = ""                        # 직접 지정한 이미지 경로, 'none' = 썸네일 없음
+
+
+def tz(cfg: dict | None = None):
+    from zoneinfo import ZoneInfo
+    return ZoneInfo((cfg or {}).get("timezone", "Asia/Seoul"))
+
+
+def parse_when(value: str, cfg: dict | None = None):
+    """'2026-11-05 09:00' / '2026-11-05T09:00' → KST datetime"""
+    v = (value or "").strip().replace("T", " ")
+    if not v or v.lower() in ("now", "즉시"):
+        return None
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return dt.datetime.strptime(v, fmt).replace(tzinfo=tz(cfg))
+        except ValueError:
+            pass
+    raise ValueError(f"publish_at 형식 오류: {value} (예: 2026-11-05 09:00)")
+
+
+def now(cfg: dict | None = None):
+    return dt.datetime.now(tz(cfg))
 
 
 def parse_post(path: Path, cfg: dict) -> Post:
@@ -109,13 +142,39 @@ def parse_post(path: Path, cfg: dict) -> Post:
     vis = VISIBILITY_ALIAS.get(vis, vis).lower()
     if vis not in VISIBILITY:
         raise ValueError(f"visibility 값 오류: {vis} (public/protected/private)")
-    return Post(path, title, html, meta.get("category") or cfg.get("default_category", ""), tags, vis)
+    return Post(path, title, html, meta.get("category") or cfg.get("default_category", ""), tags, vis,
+                publish_at=parse_when(meta.get("publish_at", ""), cfg),
+                thumbnail_text=meta.get("thumbnail_text", ""), thumbnail=meta.get("thumbnail", ""))
 
 
-def pending_posts(cfg: dict) -> list:
+def pending_posts(cfg: dict, due_only: bool = True) -> list:
+    """대기 글 목록. due_only=True 면 예약 시각이 지난 글(또는 예약 없는 글)만, 예약 시각 순"""
     files = [p for p in sorted(cfg["posts_dir"].iterdir())
              if p.is_file() and p.suffix.lower() in (".md", ".html", ".htm")]
-    return files
+    if not due_only:
+        return files
+    due, t = [], now(cfg)
+    for f in files:
+        try:
+            when = parse_post(f, cfg).publish_at
+        except Exception:
+            when = None  # 파싱 오류는 run_once 에서 보고
+        if when is None or when <= t:
+            due.append((when or t, f))
+    return [f for _, f in sorted(due, key=lambda x: x[0])]
+
+
+def scheduled_posts(cfg: dict) -> list:
+    """아직 시각이 안 된 예약 글 [(시각, 제목, 파일)]"""
+    out, t = [], now(cfg)
+    for f in pending_posts(cfg, due_only=False):
+        try:
+            p = parse_post(f, cfg)
+        except Exception:
+            continue
+        if p.publish_at and p.publish_at > t:
+            out.append((p.publish_at, p.title, f.name))
+    return sorted(out)
 
 
 # ---------------------------------------------------------------- 브라우저
@@ -359,11 +418,17 @@ class TistoryBot:
         title.clear()
         title.send_keys(post.title)
 
+        # 썸네일: 에디터에 이미지 업로드 → 생성된 이미지 태그를 본문 맨 앞에 배치 (첫 이미지 = 대표 이미지)
+        img_html = ""
+        thumb = self._thumbnail_file(post)
+        if thumb:
+            img_html = self._upload_image(thumb)
+
         # 본문 (TinyMCE API 로 HTML 주입)
         d.execute_script(
             "tinymce.activeEditor.setContent(arguments[0]);"
             "tinymce.activeEditor.fire('change'); tinymce.activeEditor.save();",
-            post.html,
+            img_html + post.html,
         )
         time.sleep(1)
 
@@ -396,6 +461,67 @@ class TistoryBot:
                 return d.current_url
         raise RuntimeError("발행 후 페이지 이동 미확인 (발행 여부 수동 확인 필요)")
 
+    def _thumbnail_file(self, post: Post) -> "Path | None":
+        tcfg = self.cfg.get("thumbnail", {})
+        if post.thumbnail.lower() in ("none", "없음", "false"):
+            return None
+        if post.thumbnail:
+            p = (post.path.parent / post.thumbnail).resolve()
+            if not p.is_file():
+                p = (BASE_DIR / post.thumbnail).resolve()
+            if p.is_file():
+                return p
+            log.warning("지정한 썸네일 파일 없음: %s → 자동 생성", post.thumbnail)
+        if not tcfg.get("enabled", True):
+            return None
+        try:
+            import thumbnail as th
+            out = LOG_DIR.parent / ".thumbs" / f"{post.path.stem}.png"
+            footer = tcfg.get("footer") or f"{self.cfg['blog_name']}.tistory.com"
+            return th.make_thumbnail(post.thumbnail_text or post.title, out, sub=post.category,
+                                     footer=footer, font_path=tcfg.get("font", ""))
+        except Exception as e:
+            log.warning("썸네일 생성 실패 (썸네일 없이 발행): %s", e)
+            return None
+
+    def _upload_image(self, path: Path) -> str:
+        """에디터 파일 입력란에 이미지 업로드 → 에디터에 삽입된 이미지 HTML 반환. 실패 시 '' (글은 그대로 발행)"""
+        from selenium.webdriver.common.by import By
+        d = self.d
+        try:
+            d.execute_script("tinymce.activeEditor.setContent('');")
+            inputs = d.find_elements(By.CSS_SELECTOR, SEL["file_input"])
+            if not inputs:
+                for css in SEL["attach_btn"].split(","):
+                    for b in d.find_elements(By.CSS_SELECTOR, css.strip()):
+                        try:
+                            if b.is_displayed():
+                                b.click()
+                                time.sleep(0.8)
+                                break
+                        except Exception:
+                            pass
+                inputs = d.find_elements(By.CSS_SELECTOR, SEL["file_input"])
+            if not inputs:
+                log.warning("이미지 업로드 입력란 미발견 → 썸네일 없이 발행 (SEL['file_input'] 확인 필요)")
+                return ""
+            imgs = [i for i in inputs if "image" in (i.get_attribute("accept") or "")] or inputs
+            imgs[0].send_keys(str(path))
+            for _ in range(40):
+                time.sleep(0.5)
+                html = d.execute_script("return tinymce.activeEditor.getContent();") or ""
+                if "<img" in html or "[##_Image" in html:
+                    log.info("썸네일 업로드 완료")
+                    return html
+            log.warning("썸네일 업로드 시간 초과 → 썸네일 없이 발행")
+        except Exception as e:
+            log.warning("썸네일 업로드 실패 (썸네일 없이 발행): %s", e)
+        try:
+            d.find_element(By.TAG_NAME, "body").send_keys("\ue00c")  # ESC: 열린 메뉴 닫기
+        except Exception:
+            pass
+        return ""
+
     def _select_category(self, name: str):
         from selenium.webdriver.common.by import By
         try:
@@ -426,9 +552,19 @@ def summary(lines: list):
             f.write("\n".join(lines) + "\n")
 
 
+def summary_schedule(cfg: dict):
+    rows = scheduled_posts(cfg)
+    if rows:
+        summary(["### ⏰ 예약 대기", "| 발행 예정 (KST) | 제목 |", "|---|---|",
+                 *[f"| {w:%Y-%m-%d %H:%M} | {t} |" for w, t, _ in rows]])
+
+
 def run_once(cfg: dict, files: list, dry_run=False) -> int:
     if not files:
-        log.info("대기 중인 글 없음 (%s)", cfg["posts_dir"])
+        log.info("발행할 글 없음 (%s)", cfg["posts_dir"])
+        for w, t, _ in scheduled_posts(cfg):
+            log.info("  예약 대기: %s  %s", f"{w:%Y-%m-%d %H:%M}", t)
+        summary_schedule(cfg)
         return 0
     posts = []
     for f in files:
@@ -438,8 +574,9 @@ def run_once(cfg: dict, files: list, dry_run=False) -> int:
             log.error("파싱 실패 %s: %s", f.name, e)
     if dry_run:
         for p in posts:
-            log.info("[DRY] %s | 제목=%s | 카테고리=%s | 태그=%s | 공개=%s | 본문 %d자",
-                     p.path.name, p.title, p.category or "-", p.tags, p.visibility, len(p.html))
+            when = f"{p.publish_at:%Y-%m-%d %H:%M}" if p.publish_at else "즉시"
+            log.info("[DRY] %s | 제목=%s | 카테고리=%s | 태그=%s | 공개=%s | 발행=%s | 본문 %d자",
+                     p.path.name, p.title, p.category or "-", p.tags, p.visibility, when, len(p.html))
         return len(posts)
 
     bot = TistoryBot(cfg)
@@ -447,8 +584,12 @@ def run_once(cfg: dict, files: list, dry_run=False) -> int:
     results = []
     try:
         if not bot.is_logged_in():
-            summary(["### ❌ 티스토리 로그인 실패",
-                     "- 카카오톡 승인 시간 초과, 비밀번호 오류, 보안문자 요구 중 하나 → 실행 로그 확인"])
+            if os.environ.get("GITHUB_EVENT_NAME") == "schedule":
+                summary(["### ❌ 예약 발행 실패: 저장된 로그인 세션 만료",
+                         "- Run workflow → mode `로그인 점검` 실행 후 카카오톡 승인 → 다음 정시 점검에서 자동 발행"])
+            else:
+                summary(["### ❌ 티스토리 로그인 실패",
+                         "- 카카오톡 승인 시간 초과, 비밀번호 오류, 보안문자 요구 중 하나 → 실행 로그 확인"])
             log.error("로그인 필요 → `python tistory_poster.py --login` 먼저 실행"
                       " (클라우드 실행 시 KAKAO_ID/KAKAO_PW 또는 TISTORY_COOKIES 확인)")
             return 0
@@ -477,6 +618,7 @@ def run_once(cfg: dict, files: list, dry_run=False) -> int:
         summary([f"### 티스토리 발행 결과: {ok}/{len(posts)}건",
                   "| 결과 | 제목 | 공개범위/오류 |", "|---|---|---|", *results,
                   f"\n[블로그 글 관리 열기](https://{cfg['blog_name']}.tistory.com/manage/posts/)"])
+    summary_schedule(cfg)
     return ok
 
 
@@ -511,6 +653,8 @@ def main():
     ap.add_argument("--daemon", help="매일 발행 시각, 예: 09:00,18:00")
     ap.add_argument("--export-cookies", action="store_true", help="로그인 쿠키 내보내기 (모바일 실행용)")
     ap.add_argument("--check", action="store_true", help="로그인만 점검 (발행 안 함)")
+    ap.add_argument("--list", action="store_true", help="대기·예약 글 목록만 출력")
+    ap.add_argument("--due", action="store_true", help="발행 시각이 된 글이 있으면 0, 없으면 3 으로 종료 (자동 실행 판단용)")
     args = ap.parse_args()
 
     setup_logging()
@@ -535,6 +679,14 @@ def main():
             print("→ 파일 내용 전체를 GitHub Secrets 'TISTORY_COOKIES' 에 등록 (외부 유출 금지, 등록 후 파일 삭제 권장)")
         finally:
             bot.close()
+        return
+    if args.due:
+        sys.exit(0 if pending_posts(cfg) else 3)
+    if args.list:
+        for f in pending_posts(cfg):
+            print(f"[발행 대기] {f.name}")
+        for w, t, f in scheduled_posts(cfg):
+            print(f"[예약 {w:%Y-%m-%d %H:%M}] {t}  ({f})")
         return
     if args.check:
         bot = TistoryBot(cfg)
