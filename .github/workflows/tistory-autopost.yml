@@ -98,7 +98,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: 자동 실행 사전 점검 (Secret 미등록·발행할 글 없음 → 실패 없이 종료)
-        if: github.event_name == 'schedule'
+        if: github.event_name == 'schedule' || github.event_name == 'push'
         run: |
           if [ -z "$TISTORY_BLOG_NAME" ]; then
             echo "::notice::Secret 'TISTORY_BLOG_NAME' 미등록 → 자동 실행 건너뜀 (등록 후 자동으로 동작)"
