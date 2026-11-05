@@ -111,6 +111,8 @@ PC 없이 휴대폰 GitHub 앱에서 실행 → GitHub 클라우드에서 AI 작
 ### 최초 1회 설정
 **로그인은 쿠키 방식 (PC 1회 필요)** — 카카오가 클라우드 서버(GitHub Actions 포함) 접속을 "네트워크 정보가 변경되었거나 올바르지 않은 접근"으로 차단하는 것을 확인함 (2026-11 실측). 그래서 PC에서 한 번 로그인해 쿠키를 넘김.
 
+**가장 쉬운 방법 (Windows)**: Python 설치 후 ZIP을 받아 `tistory-autopost\setup_cookies.bat` 더블클릭 → 패키지 설치·로그인·쿠키 추출·클립보드 복사·Secret 등록 페이지 열기·파일 삭제까지 순서대로 진행. 아래 1~4는 같은 내용을 수동으로 하는 방법.
+
 1. PC(Windows)에 Python 설치 — python.org, 설치 화면에서 **Add python.exe to PATH** 체크 / Chrome 설치되어 있어야 함
 2. 저장소 페이지 → Code → **Download ZIP** → 압축 해제
 3. 명령 프롬프트에서 `tistory-autopost` 폴더로 이동 후:
