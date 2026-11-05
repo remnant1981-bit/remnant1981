@@ -163,7 +163,7 @@ python tistory_poster.py --login
 - 세션 암호화 키: Secret `SESSION_KEY` (미등록 시 `KAKAO_PW`, 둘 다 없으면 세션 저장 안 함)
 
 ### 주의
-- 저장소가 **공개** 상태면 `topics.txt`, `posts/` 내용도 공개됨 → 비공개 저장소 전환 권장 (Secrets는 공개 저장소여도 암호화 보관)
+- 저장소가 **공개** 상태라 `topics.txt`, `posts/` 내용은 누구나 볼 수 있음 (Secrets는 암호화 보관)
 - **공개 저장소 운영 기준**: Secret은 공개 저장소에서도 암호화 보관되고 외부 PR에는 전달되지 않음. 단, `posts/`의 예약 원고·`topics.txt`·`history.jsonl`은 누구나 볼 수 있음
 - 비공개로 바꾸면 무료 계정에서는 GitHub Pages(쿠폰 지갑, 서치콘솔 소유확인 파일)가 꺼지고 Actions 월 2,000분 한도가 생김
 - 로그인 순서: 저장된 세션 → `TISTORY_COOKIES` → 카카오 ID/PW (승인 필요)
