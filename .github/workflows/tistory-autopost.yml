@@ -152,7 +152,7 @@ jobs:
         run: python tistory_poster.py --check
 
       - name: AI 글 작성
-        if: env.MODE == '작성+발행' && github.event_name != 'schedule'
+        if: env.MODE == '작성+발행' && github.event_name != 'schedule' && env.SKIP != 'true'
         run: |
           WHEN=()
           [ -n "$PUBLISH_AT" ] && WHEN=(--publish-at "$PUBLISH_AT")

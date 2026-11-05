@@ -176,7 +176,7 @@ python tistory_poster.py --export-cookies
 - 지정 시각으로 여러 글 작성 시 24시간 간격으로 배정 (`config.json` → `schedule.gap_hours`)
 - 주말 제외 (PC): `config.json` → `schedule.skip_weekdays: [5, 6]`
 - 예약 대기 목록: 실행 화면 Summary ⏰ 표, 또는 `python tistory_poster.py --list`
-- 시각은 한국시간(KST). GitHub 자동 실행은 수 분~수십 분 늦을 수 있음
+- 시각은 한국시간(KST). **GitHub 정기 실행은 이용자가 적은 저장소에서 몇 시간씩 늦거나 건너뛸 수 있음** (실측: 매시 설정인데 6~8시간 간격 실행) → 정확한 시각이 중요하면 아래 '정기 실행 보강' 참고
 - 매시 점검은 **저장된 로그인 세션만 사용** (카카오톡 승인 불가) → 세션 만료 시 Summary에 안내가 뜨면 `로그인 점검` 1회 실행
 - 예약 글은 발행 전까지 저장소 `posts/`에 보관됨 → 공개 저장소면 미리 보임 (비공개 전환 권장)
 - 발행 실패 글은 `posts/failed/`에 보관 → 다시 시도하려면 GitHub 앱에서 `posts/`로 이동
@@ -225,3 +225,20 @@ python tistory_poster.py --export-cookies
 2. 봇에게 아무 메시지 전송 후 `https://api.telegram.org/bot<토큰>/getUpdates`에서 chat id 확인 → Secret `TELEGRAM_CHAT_ID`
 
 테스트: `python notify.py "제목" "내용"`
+
+### 정기 실행 보강 (선택)
+GitHub 정기 실행이 늦을 때, 외부 무료 스케줄러로 매시간 실행 버튼을 대신 누르게 할 수 있음.
+1. GitHub → Settings(개인) → Developer settings → Fine-grained tokens → 이 저장소만, 권한 `Actions: Read and write` 로 토큰 생성
+2. cron-job.org 등에서 매시 실행 작업 생성
+   - URL: `https://api.github.com/repos/<소유자>/<저장소>/actions/workflows/tistory-autopost.yml/dispatches`
+   - Method: POST, Header: `Authorization: Bearer <토큰>`, `Accept: application/vnd.github+json`
+   - Body: `{"ref":"main","inputs":{"mode":"작성+발행","count":"0"}}`
+   - `count: 0` → 새 글은 쓰지 않고 시각이 된 예약 글만 발행
+- 토큰은 외부 서비스에 저장되므로 이 저장소·Actions 권한만 주고, 만료일을 정해 둘 것
+
+## 12. 구글 서치콘솔 (검색 노출)
+- 티스토리 블로그: 루트에 파일을 올릴 수 없어 **HTML 태그 방식**으로 소유 확인
+  - 서치콘솔 → 속성 추가 → URL 접두어 `https://블로그명.tistory.com/` → 확인 방법 **HTML 태그** → `<meta name="google-site-verification" ...>` 복사
+  - 티스토리 관리 → 플러그인 → **메타 태그 등록** 또는 꾸미기 → 스킨 편집 → HTML의 `<head>` 안에 붙여넣기 → 서치콘솔에서 확인
+  - 확인 후 **Sitemaps** 메뉴에 `sitemap.xml` 제출, RSS(`rss`)도 추가 제출 가능
+- 파일 방식(`googleXXXX.html`)은 GitHub Pages 사이트용 → `coupon-wallet/` 폴더에 넣으면 `https://<소유자>.github.io/<저장소>/googleXXXX.html` 로 배포됨

@@ -86,7 +86,7 @@ KO_TRANSLATED = [
 ]
 PLACEHOLDER = re.compile(r"\[(사진|이미지|그림|image|photo)\s*[:：]", re.I)
 END_HAMNIDA = re.compile(r"(니다|니까|십시오)[.!?]")
-END_HAEYO = re.compile(r"(?<!니)[요죠][.!?]")
+END_HAEYO = re.compile(r"(?<![니세])[요죠][.!?]")  # "~하세요." 권유형은 합니다체 글에서도 정상
 
 
 def _prose(md: str) -> str:
