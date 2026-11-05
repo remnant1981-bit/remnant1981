@@ -108,26 +108,33 @@ setx ANTHROPIC_API_KEY "sk-ant-..."
 ## 7. 모바일 실행 (GitHub Actions)
 PC 없이 휴대폰 GitHub 앱에서 실행 → GitHub 클라우드에서 AI 작성 + 발행.
 
-### 최초 1회 설정 (휴대폰만으로 가능)
-휴대폰 브라우저(크롬/사파리)에서 github.com 접속 → 저장소 → Settings → Secrets and variables → Actions → New repository secret
-(GitHub 앱에는 Secrets 메뉴 없음 → 브라우저 사용, 메뉴가 안 보이면 "데스크톱 사이트" 전환)
+### 최초 1회 설정
+**로그인은 쿠키 방식 (PC 1회 필요)** — 카카오가 클라우드 서버(GitHub Actions 포함) 접속을 "네트워크 정보가 변경되었거나 올바르지 않은 접근"으로 차단하는 것을 확인함 (2026-11 실측). 그래서 PC에서 한 번 로그인해 쿠키를 넘김.
 
-| Secret 이름 | 값 |
-|---|---|
-| `TISTORY_BLOG_NAME` | 블로그명 (`abc.tistory.com` → `abc`) |
-| `KAKAO_ID` | 카카오 계정 (이메일 또는 전화번호) |
-| `KAKAO_PW` | 카카오 비밀번호 |
-| `ANTHROPIC_API_KEY` | Claude API 키 (console.anthropic.com → API Keys) |
-
-- 실행 중 카카오톡에 **로그인 확인 알림**이 오면 승인 (최대 3분 대기)
-- 보안문자(캡차)가 뜨면 클라우드 로그인 불가 → 아래 쿠키 방식 사용
-
-#### (대안) 쿠키 방식 — PC 필요
+1. PC(Windows)에 Python 설치 — python.org, 설치 화면에서 **Add python.exe to PATH** 체크 / Chrome 설치되어 있어야 함
+2. 저장소 페이지 → Code → **Download ZIP** → 압축 해제
+3. 명령 프롬프트에서 `tistory-autopost` 폴더로 이동 후:
 ```bat
+pip install -r requirements.txt
 python tistory_poster.py --login
-python tistory_poster.py --export-cookies
 ```
-→ `tistory_cookies.txt` 내용을 Secret `TISTORY_COOKIES`로 등록 후 파일 삭제. 쿠키가 있으면 우선 사용, 만료 시 카카오 ID/PW로 자동 재로그인
+   - 첫 실행은 `config.json`만 만들고 종료 → 메모장으로 열어 `"blog_name": "블로그명"` 수정 후 다시 `--login`
+   - 열린 Chrome 창에서 카카오 로그인 → 콘솔에서 Enter
+4. `python tistory_poster.py --export-cookies` → 생성된 `tistory_cookies.txt` 내용 전체 복사 → 아래 Secret에 붙여넣기 → **파일 삭제**
+
+**Secret 등록**: github.com → 저장소 → Settings → Secrets and variables → Actions → New repository secret
+(GitHub 앱에는 이 메뉴 없음 → 브라우저 사용, 휴대폰이면 "데스크톱 사이트" 전환)
+
+| Secret 이름 | 값 | 필요 |
+|---|---|---|
+| `TISTORY_BLOG_NAME` | 블로그명 (`abc.tistory.com` → `abc`) | 필수 |
+| `TISTORY_COOKIES` | `tistory_cookies.txt` 내용 | 필수 |
+| `SESSION_KEY` | 아무 긴 무작위 문자열 (로그인 세션 자동 갱신·암호화 저장용) | 권장 |
+| `ANTHROPIC_API_KEY` | Claude API 키 | 선택 (Actions에서 AI 글 작성할 때만. Claude 대화에서 글을 쓰면 불필요) |
+| `KAKAO_ID` / `KAKAO_PW` | — | **비추천** (클라우드 접속 차단으로 실패 가능성 높음, 공개 저장소에 비밀번호 보관 불필요) |
+
+- 쿠키가 만료되면 Summary에 로그인 실패 안내 → PC에서 3~4번만 다시 실행해 `TISTORY_COOKIES` 갱신
+- `SESSION_KEY`를 등록하면 실행 중 갱신된 세션이 암호화 저장돼 쿠키 수명이 길어짐
 
 ### 휴대폰에서 실행 (순서대로)
 **① 설정 점검 (최초 1회)** — 글은 올리지 않고 로그인만 확인
@@ -153,11 +160,12 @@ python tistory_poster.py --export-cookies
 **결과 확인**: Actions 실행 화면 Summary에 발행 결과표(제목·성공/실패) + 블로그 글 관리 링크 표시
 
 - 매일 자동: `.github/workflows/tistory-autopost.yml`의 `schedule` 주석 해제
-- (선택) 세션 암호화 키를 별도로 쓰려면 Secret `SESSION_KEY` 등록 (미등록 시 카카오 비밀번호를 키로 사용)
+- 세션 암호화 키: Secret `SESSION_KEY` (미등록 시 `KAKAO_PW`, 둘 다 없으면 세션 저장 안 함)
 
 ### 주의
 - 저장소가 **공개** 상태면 `topics.txt`, `posts/` 내용도 공개됨 → 비공개 저장소 전환 권장 (Secrets는 공개 저장소여도 암호화 보관)
-- 카카오 비밀번호가 GitHub Secrets에 저장됨 → 저장소 비공개 전환 및 카카오 2단계 인증 사용 권장
+- **공개 저장소 운영 기준**: Secret은 공개 저장소에서도 암호화 보관되고 외부 PR에는 전달되지 않음. 단, `posts/`의 예약 원고·`topics.txt`·`history.jsonl`은 누구나 볼 수 있음
+- 비공개로 바꾸면 무료 계정에서는 GitHub Pages(쿠폰 지갑, 서치콘솔 소유확인 파일)가 꺼지고 Actions 월 2,000분 한도가 생김
 - 로그인 순서: 저장된 세션 → `TISTORY_COOKIES` → 카카오 ID/PW (승인 필요)
 - 카카오 비밀번호 변경 시 저장된 세션 해독 불가 → 다음 실행에서 한 번 더 승인하면 자동 갱신
 - 발행 실패 시 Actions 실행 화면 → Artifacts `tistory-logs`에서 오류 스크린샷 확인 (3일 보관, 로그인 실패는 계정 노출 방지로 화면 문구만 로그에 기록)
@@ -178,7 +186,7 @@ python tistory_poster.py --export-cookies
 - 예약 대기 목록: 실행 화면 Summary ⏰ 표, 또는 `python tistory_poster.py --list`
 - 시각은 한국시간(KST). **GitHub 정기 실행은 이용자가 적은 저장소에서 몇 시간씩 늦거나 건너뛸 수 있음** (실측: 매시 설정인데 6~8시간 간격 실행) → 정확한 시각이 중요하면 아래 '정기 실행 보강' 참고
 - 매시 점검은 **저장된 로그인 세션만 사용** (카카오톡 승인 불가) → 세션 만료 시 Summary에 안내가 뜨면 `로그인 점검` 1회 실행
-- 예약 글은 발행 전까지 저장소 `posts/`에 보관됨 → 공개 저장소면 미리 보임 (비공개 전환 권장)
+- 예약 글은 발행 전까지 저장소 `posts/`에 보관됨 → 공개 저장소라 미리 보임 (민감한 글은 예약 대신 바로 발행)
 - 발행 실패 글은 `posts/failed/`에 보관 → 다시 시도하려면 GitHub 앱에서 `posts/`로 이동
 - 비공개 저장소의 Actions 무료 한도(월 2,000분) 중 매시 점검이 월 약 720분 사용
 
