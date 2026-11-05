@@ -640,6 +640,49 @@ def summary_schedule(cfg: dict):
                  *[f"| {w:%Y-%m-%d %H:%M} | {t} |" for w, t, _ in rows]])
 
 
+PUBLISH_LOG = BASE_DIR / "publish_log.jsonl"
+
+
+def _publish_times() -> list:
+    out = []
+    if PUBLISH_LOG.exists():
+        for line in PUBLISH_LOG.read_text(encoding="utf-8").splitlines():
+            try:
+                out.append(dt.datetime.fromisoformat(json.loads(line)["at"]))
+            except Exception:
+                pass
+    return out
+
+
+def record_publish(title: str, visibility: str):
+    with PUBLISH_LOG.open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"at": now().isoformat(timespec="seconds"), "title": title,
+                            "visibility": visibility}, ensure_ascii=False) + "\n")
+
+
+def apply_rate_limit(cfg: dict, files: list) -> list:
+    """계정 보호용 발행 빈도 제한: 1회 최대 N편, 24시간 최대 M편, 직전 발행 후 최소 간격"""
+    if not files:
+        return files
+    r = {"max_per_run": 1, "max_per_24h": 2, "min_gap_hours": 4, **cfg.get("rate_limit", {})}
+    t = now(cfg)
+    times = _publish_times()
+    last24 = [x for x in times if x > t - dt.timedelta(hours=24)]
+    allowed = min(len(files), int(r["max_per_run"]), max(0, int(r["max_per_24h"]) - len(last24)))
+    reason = ""
+    if times and max(times) > t - dt.timedelta(hours=float(r["min_gap_hours"])):
+        allowed, reason = 0, f"직전 발행 {max(times):%m-%d %H:%M} 후 {r['min_gap_hours']}시간 미경과"
+    elif allowed < len(files) and len(last24) >= int(r["max_per_24h"]):
+        reason = f"최근 24시간 {len(last24)}편 발행 (한도 {r['max_per_24h']}편)"
+    elif allowed < len(files):
+        reason = f"1회 최대 {r['max_per_run']}편"
+    if allowed < len(files):
+        log.info("발행 빈도 제한: %s → 이번 실행 %d편, 다음 실행으로 %d편 미룸", reason, allowed, len(files) - allowed)
+        summary([f"### ⏳ 발행 빈도 제한 (계정 보호)", f"- {reason}",
+                 f"- 이번 실행 {allowed}편 발행, {len(files) - allowed}편은 다음 실행에서 발행"])
+    return files[:allowed]
+
+
 def run_once(cfg: dict, files: list, dry_run=False) -> int:
     if not files:
         log.info("발행할 글 없음 (%s)", cfg["posts_dir"])
@@ -680,6 +723,7 @@ def run_once(cfg: dict, files: list, dry_run=False) -> int:
                 url = bot.publish(p)
                 log.info("[성공] %s → %s", p.title, url)
                 move(p.path, cfg["published_dir"])
+                record_publish(p.title, p.visibility)
                 ok += 1
                 results.append(f"| ✅ | {p.title} | {p.visibility} |")
             except Exception as e:
@@ -716,7 +760,7 @@ def daemon(cfg: dict, times: list):
         key = now.strftime("%Y-%m-%d %H:%M")
         if now.strftime("%H:%M") in times and key not in done:
             done.add(key)
-            run_once(cfg, pending_posts(cfg)[: cfg.get("posts_per_run", 1)])
+            run_once(cfg, apply_rate_limit(cfg, pending_posts(cfg)))
         time.sleep(20)
 
 
@@ -808,6 +852,8 @@ def main():
         files = pending_posts(cfg)
         if not args.all:
             files = files[: cfg.get("posts_per_run", 1)]
+        if not args.dry_run:
+            files = apply_rate_limit(cfg, files)
     ok = run_once(cfg, files, dry_run=args.dry_run)
     if os.environ.get("CI") and files and not args.dry_run and ok < len(files):
         sys.exit(1)

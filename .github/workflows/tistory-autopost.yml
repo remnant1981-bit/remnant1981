@@ -203,6 +203,7 @@ jobs:
           if [ -d posts/failed ]; then git add -f posts/failed; fi   # 실패 글 보관 (posts/ 로 옮기면 재시도)
           if [ -f history.jsonl ]; then git add history.jsonl; fi   # 훅 패턴·키워드 중복 방지용 이력
           if [ -f refresh_state.json ]; then git add refresh_state.json; fi   # 오래된 글 점검 이력
+          if [ -f publish_log.jsonl ]; then git add publish_log.jsonl; fi   # 발행 빈도 제한용 기록
           if git diff --cached --quiet; then
             echo "변경 없음"
           else
