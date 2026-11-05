@@ -509,6 +509,7 @@ class TistoryBot:
                 inputs = d.find_elements(By.CSS_SELECTOR, SEL["file_input"])
             if not inputs:
                 log.warning("이미지 업로드 입력란 미발견 → 썸네일 없이 발행 (SEL['file_input'] 확인 필요)")
+                self.editor_report("썸네일 업로드 실패 시점")
                 return ""
             imgs = [i for i in inputs if "image" in (i.get_attribute("accept") or "")] or inputs
             imgs[0].send_keys(str(path))
@@ -526,6 +527,72 @@ class TistoryBot:
         except Exception:
             pass
         return ""
+
+    def editor_report(self, label: str = "") -> dict:
+        """에디터 화면의 첨부 관련 버튼·파일 입력란을 로그와 Summary 에 기록 (선택자 수정용, 글 내용은 기록 안 함)"""
+        js = r"""
+        const pick = el => ({tag: el.tagName.toLowerCase(), id: el.id || '', cls: (el.className && el.className.baseVal === undefined ? el.className : '').toString().slice(0, 60),
+                             text: (el.innerText || '').trim().slice(0, 20), aria: el.getAttribute('aria-label') || '', title: el.getAttribute('title') || '',
+                             visible: !!(el.offsetWidth || el.offsetHeight)});
+        const kw = /첨부|사진|이미지|attach|image|photo|upload|파일/i;
+        const btns = [...document.querySelectorAll('button, a, [role=button], [role=menuitem], .mce-btn, [id^=mceu_]')]
+          .map(pick).filter(o => kw.test(o.id + o.cls + o.text + o.aria + o.title)).slice(0, 25);
+        const files = [...document.querySelectorAll('input[type=file]')].map(el => ({id: el.id, name: el.name, accept: el.accept, cls: el.className}));
+        const frames = [...document.querySelectorAll('iframe')].map(f => f.id || f.name || f.src.slice(0, 60));
+        return {url: location.pathname, buttons: btns, file_inputs: files, iframes: frames};
+        """
+        try:
+            info = self.d.execute_script(js)
+        except Exception as e:
+            info = {"error": str(e)[:200]}
+        log.info("에디터 점검 (%s): %s", label, json.dumps(info, ensure_ascii=False))
+        lines = [f"### 🔍 에디터 점검 {label}", "", f"- 화면: `{info.get('url', '')}`",
+                 f"- 파일 입력란 {len(info.get('file_inputs', []))}개: `{json.dumps(info.get('file_inputs', []), ensure_ascii=False)}`",
+                 f"- iframe: `{info.get('iframes', [])}`", "", "| 태그 | id | class | 글자 | aria/title | 보임 |", "|---|---|---|---|---|---|"]
+        for b in info.get("buttons", []):
+            lines.append(f"| {b['tag']} | {b['id']} | {b['cls']} | {b['text']} | {b['aria'] or b['title']} | {'✅' if b['visible'] else ''} |")
+        summary(lines)
+        return info
+
+    def probe_editor(self):
+        """글을 쓰지 않고 새 글 화면만 열어 첨부 버튼 구조를 기록 → 첨부 버튼을 눌러 본 뒤 다시 기록"""
+        from selenium.webdriver.common.by import By
+        d = self.d
+        d.get(f"{self.manage_url}/newpost/")
+        time.sleep(4)
+        self.dismiss_alert(accept=False)
+        for _ in range(30):
+            if d.execute_script("return !!(window.tinymce && tinymce.activeEditor)"):
+                break
+            time.sleep(0.5)
+        before = self.editor_report("① 새 글 화면")
+        clicked = ""
+        for b in before.get("buttons", []):
+            if b.get("visible") and b.get("id") and any(k in (b["text"] + b["aria"] + b["title"] + b["id"]) for k in ("첨부", "attach")):
+                try:
+                    d.find_element(By.ID, b["id"]).click()
+                    clicked = b["id"]
+                    time.sleep(1.5)
+                except Exception:
+                    pass
+                break
+        self.editor_report(f"② 첨부 버튼 클릭 후 (#{clicked or '못 찾음'})")
+        # 사진 메뉴 항목도 눌러 봄 (파일 선택창은 헤드리스에서 열리지 않음)
+        for el in d.find_elements(By.CSS_SELECTOR, "[role=menuitem], .mce-menu-item, li, button"):
+            try:
+                if el.is_displayed() and el.text.strip() in ("사진", "이미지"):
+                    el.click()
+                    time.sleep(1.5)
+                    self.editor_report("③ '사진' 메뉴 클릭 후")
+                    break
+            except Exception:
+                pass
+        # 작성 중 글이 남지 않도록 빈 화면으로 이동
+        try:
+            d.get("about:blank")
+            self.dismiss_alert(accept=True)
+        except Exception:
+            pass
 
     def _select_category(self, name: str):
         from selenium.webdriver.common.by import By
@@ -672,6 +739,7 @@ def main():
     ap.add_argument("--daemon", help="매일 발행 시각, 예: 09:00,18:00")
     ap.add_argument("--export-cookies", action="store_true", help="로그인 쿠키 내보내기 (모바일 실행용)")
     ap.add_argument("--check", action="store_true", help="로그인만 점검 (발행 안 함)")
+    ap.add_argument("--probe-editor", action="store_true", help="새 글 화면 구조만 기록 (발행 안 함, 썸네일 선택자 수정용)")
     ap.add_argument("--list", action="store_true", help="대기·예약 글 목록만 출력")
     ap.add_argument("--due", action="store_true", help="발행 시각이 된 글이 있으면 0, 없으면 3 으로 종료 (자동 실행 판단용)")
     args = ap.parse_args()
@@ -706,6 +774,16 @@ def main():
             print(f"[발행 대기] {f.name}")
         for w, t, f in scheduled_posts(cfg):
             print(f"[예약 {w:%Y-%m-%d %H:%M}] {t}  ({f})")
+        return
+    if args.probe_editor:
+        bot = TistoryBot(cfg)
+        try:
+            if not bot.is_logged_in():
+                summary(["### ❌ 로그인 실패 → 에디터 점검 불가"])
+                sys.exit(1)
+            bot.probe_editor()
+        finally:
+            bot.close()
         return
     if args.check:
         bot = TistoryBot(cfg)

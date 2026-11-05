@@ -12,7 +12,7 @@ on:
       mode:
         description: "실행 모드"
         type: choice
-        options: [작성+발행, 로그인 점검, 주간 점검, 성과 리포트, 댓글 정리, 오래된 글 점검]
+        options: [작성+발행, 로그인 점검, 에디터 점검, 주간 점검, 성과 리포트, 댓글 정리, 오래된 글 점검]
         default: 작성+발행
       topic:
         description: "AI가 쓸 주제 (비우면 topics.txt 사용)"
@@ -156,6 +156,10 @@ jobs:
         if: env.MODE == '로그인 점검'
         run: python tistory_poster.py --check
 
+      - name: 에디터 점검 (발행 안 함, 썸네일 첨부 버튼 구조 기록)
+        if: env.MODE == '에디터 점검'
+        run: python tistory_poster.py --probe-editor
+
       - name: AI 글 작성
         if: env.MODE == '작성+발행' && github.event_name != 'schedule' && env.SKIP != 'true'
         run: |
@@ -181,7 +185,7 @@ jobs:
           fi
 
       - name: 블로그 점검 (리포트·댓글·오래된 글, 자동 게시·수정 없음)
-        if: env.MODE != '작성+발행' && env.MODE != '로그인 점검' && env.SKIP != 'true'
+        if: env.MODE != '작성+발행' && env.MODE != '로그인 점검' && env.MODE != '에디터 점검' && env.SKIP != 'true'
         run: |
           case "$MODE" in
             "성과 리포트") python insights.py report ;;
@@ -191,7 +195,7 @@ jobs:
           esac
 
       - name: 처리 결과 저장 (topics.txt, 예약 글, 발행된 대기 글 정리)
-        if: always() && env.MODE != '로그인 점검' && env.SKIP != 'true'
+        if: always() && env.MODE != '로그인 점검' && env.MODE != '에디터 점검' && env.SKIP != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
