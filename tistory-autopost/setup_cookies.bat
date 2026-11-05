@@ -48,13 +48,14 @@ echo.
 
 rem --- 4. 로그인 ---
 echo [4/6] Chrome 창이 열리면 [카카오계정으로 로그인] 후 카카오톡 승인까지 완료
-echo       로그인이 끝나면 이 창으로 돌아와 Enter
+echo       로그인이 끝나면 Chrome 창은 그대로 두고, 이 검은 창으로 돌아와 Enter
+echo       (Enter 전에 Chrome 창을 닫지 말 것)
 %PY% tistory_poster.py --login
 echo.
 
-rem --- 5. 쿠키 추출 ---
-echo [5/6] 쿠키 추출 중...
-%PY% tistory_poster.py --export-cookies
+rem --- 5. 쿠키 확인 (로그인 단계에서 바로 저장됨, 없을 때만 다시 추출) ---
+echo [5/6] 쿠키 확인 중...
+if not exist tistory_cookies.txt %PY% tistory_poster.py --export-cookies
 if not exist tistory_cookies.txt (
   echo [오류] 쿠키 파일이 만들어지지 않음 - 로그인이 안 된 상태. 이 파일을 다시 실행
   pause
