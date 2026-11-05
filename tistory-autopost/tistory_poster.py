@@ -389,6 +389,11 @@ class TistoryBot:
         input()
         if self.is_logged_in():
             print("[완료] 로그인 세션 저장됨. 이후 자동 실행 가능.")
+            # 같은 창에서 바로 쿠키 저장 (창을 닫으면 사라지는 세션 쿠키가 있어 별도 실행으로는 못 얻을 수 있음)
+            out = BASE_DIR / "tistory_cookies.txt"
+            out.write_text(self.export_cookies(), encoding="utf-8")
+            print(f"[완료] 쿠키 파일 생성: {out}")
+            print("→ 내용 전체를 GitHub Secret 'TISTORY_COOKIES' 에 등록 후 파일 삭제")
         else:
             print("[실패] 관리 페이지 접근 불가. 블로그명(blog_name) 또는 로그인 상태 확인 필요.")
 

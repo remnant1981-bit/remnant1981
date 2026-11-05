@@ -1,78 +1,79 @@
 @echo off
-chcp 65001 >nul
-title í‹°ìŠ¤í† ë¦¬ ì¿ í‚¤ ì¶”ì¶œ (1íšŒ ì„¤ì •)
+rem ÀÌ ÆÄÀÏÀº CP949(ÇÑ±Û Windows ±âº») ÀÎÄÚµù. ¿À·ù°¡ ³ªµµ Ã¢ÀÌ ´ÝÈ÷Áö ¾Êµµ·Ï cmd /k ·Î ´Ù½Ã ½ÇÇà
+if /i not "%~1"=="__run" (
+  cmd /k ""%~f0" __run"
+  exit /b
+)
+title Æ¼½ºÅä¸® ÄíÅ° ÃßÃâ (1È¸ ¼³Á¤)
 cd /d "%~dp0"
 echo ========================================================
-echo   í‹°ìŠ¤í† ë¦¬ ìžë™ í¬ìŠ¤íŒ… - ë¡œê·¸ì¸ ì¿ í‚¤ ì¶”ì¶œ (ìµœì´ˆ 1íšŒ)
+echo   Æ¼½ºÅä¸® ÀÚµ¿ Æ÷½ºÆÃ - ·Î±×ÀÎ ÄíÅ° ÃßÃâ (ÃÖÃÊ 1È¸)
 echo ========================================================
 echo.
 
-rem --- 1. Python í™•ì¸ ---
-rem  (Microsoft Store ë°”ë¡œê°€ê¸° python ì€ ì‹¤ì œ ì‹¤í–‰ì´ ì•ˆ ë˜ë¯€ë¡œ --version ìœ¼ë¡œ í™•ì¸)
+rem --- 1. Python È®ÀÎ ---
+rem  (Microsoft Store ¹Ù·Î°¡±â python Àº ½ÇÁ¦ ½ÇÇàÀÌ ¾È µÇ¹Ç·Î --version À¸·Î È®ÀÎ)
 set "PY="
-python --version >nul 2>&1
-if not errorlevel 1 set "PY=python"
-if defined PY goto :py_ok
-py --version >nul 2>&1
-if not errorlevel 1 set "PY=py"
-:py_ok
+python --version >nul 2>&1 && set "PY=python"
+if not defined PY py --version >nul 2>&1 && set "PY=py"
 if not defined PY (
-  echo [ì˜¤ë¥˜] Python ì´ ì„¤ì¹˜ë˜ì–´ ìžˆì§€ ì•ŠìŒ
-  echo  - ì—´ë¦¬ëŠ” íŽ˜ì´ì§€ì—ì„œ Python ì„¤ì¹˜, ì²« í™”ë©´ì˜ "Add python.exe to PATH" ë°˜ë“œì‹œ ì²´í¬
-  echo  - ì„¤ì¹˜ í›„ ì´ íŒŒì¼ì„ ë‹¤ì‹œ ë”ë¸”í´ë¦­
+  echo [¿À·ù] Python ÀÌ ¼³Ä¡µÇ¾î ÀÖÁö ¾ÊÀ½
+  echo  - ¿­¸®´Â ÆäÀÌÁö¿¡¼­ Python ¼³Ä¡, Ã¹ È­¸éÀÇ "Add python.exe to PATH" ¹Ýµå½Ã Ã¼Å©
+  echo  - ¼³Ä¡ ÈÄ ÀÌ ÆÄÀÏÀ» ´Ù½Ã ´õºíÅ¬¸¯
   start https://www.python.org/downloads/
   pause
   exit /b 1
 )
-echo [1/6] Python í™•ì¸: 
+echo [1/6] Python È®ÀÎ: 
 %PY% --version
 echo.
 
-rem --- 2. íŒ¨í‚¤ì§€ ì„¤ì¹˜ ---
-echo [2/6] í•„ìš”í•œ íŒ¨í‚¤ì§€ ì„¤ì¹˜ ì¤‘ (1~2ë¶„)...
+rem --- 2. ÆÐÅ°Áö ¼³Ä¡ ---
+echo [2/6] ÇÊ¿äÇÑ ÆÐÅ°Áö ¼³Ä¡ Áß (1~2ºÐ)...
 %PY% -m pip install -q -r requirements.txt
 if errorlevel 1 (
-  echo [ì˜¤ë¥˜] íŒ¨í‚¤ì§€ ì„¤ì¹˜ ì‹¤íŒ¨ - ìœ„ ì˜¤ë¥˜ ë¬¸êµ¬ë¥¼ Claude ì—ê²Œ ì „ë‹¬
+  echo [¿À·ù] ÆÐÅ°Áö ¼³Ä¡ ½ÇÆÐ - À§ ¿À·ù ¹®±¸¸¦ Claude ¿¡°Ô Àü´Þ
   pause
   exit /b 1
 )
 echo.
 
-rem --- 3. ë¸”ë¡œê·¸ëª… ---
+rem --- 3. ºí·Î±×¸í ---
 set "BLOG=hoonnsol"
-set /p "BLOG=[3/6] ë¸”ë¡œê·¸ëª… ìž…ë ¥ (ê·¸ëƒ¥ Enter = hoonnsol): "
+set /p "BLOG=[3/6] ºí·Î±×¸í ÀÔ·Â (±×³É Enter = hoonnsol): "
 set "TISTORY_BLOG_NAME=%BLOG%"
 set "TISTORY_HEADLESS=0"
-echo   ë¸”ë¡œê·¸: https://%BLOG%.tistory.com
+echo   ºí·Î±×: https://%BLOG%.tistory.com
 echo.
 
-rem --- 4. ë¡œê·¸ì¸ ---
-echo [4/6] Chrome ì°½ì´ ì—´ë¦¬ë©´ [ì¹´ì¹´ì˜¤ê³„ì •ìœ¼ë¡œ ë¡œê·¸ì¸] í›„ ì¹´ì¹´ì˜¤í†¡ ìŠ¹ì¸ê¹Œì§€ ì™„ë£Œ
-echo       ë¡œê·¸ì¸ì´ ëë‚˜ë©´ ì´ ì°½ìœ¼ë¡œ ëŒì•„ì™€ Enter
+rem --- 4. ·Î±×ÀÎ ---
+echo [4/6] Chrome Ã¢ÀÌ ¿­¸®¸é [Ä«Ä«¿À°èÁ¤À¸·Î ·Î±×ÀÎ] ÈÄ Ä«Ä«¿ÀÅå ½ÂÀÎ±îÁö ¿Ï·á
+echo       ·Î±×ÀÎÀÌ ³¡³ª¸é Chrome Ã¢Àº ±×´ë·Î µÎ°í, ÀÌ °ËÀº Ã¢À¸·Î µ¹¾Æ¿Í Enter
+echo       (Enter Àü¿¡ Chrome Ã¢À» ´ÝÁö ¸» °Í)
 %PY% tistory_poster.py --login
 echo.
 
-rem --- 5. ì¿ í‚¤ ì¶”ì¶œ ---
-echo [5/6] ì¿ í‚¤ ì¶”ì¶œ ì¤‘...
-%PY% tistory_poster.py --export-cookies
+rem --- 5. ÄíÅ° È®ÀÎ (·Î±×ÀÎ ´Ü°è¿¡¼­ ¹Ù·Î ÀúÀåµÊ, ¾øÀ» ¶§¸¸ ´Ù½Ã ÃßÃâ) ---
+echo [5/6] ÄíÅ° È®ÀÎ Áß...
+if not exist tistory_cookies.txt %PY% tistory_poster.py --export-cookies
 if not exist tistory_cookies.txt (
-  echo [ì˜¤ë¥˜] ì¿ í‚¤ íŒŒì¼ì´ ë§Œë“¤ì–´ì§€ì§€ ì•ŠìŒ - ë¡œê·¸ì¸ì´ ì•ˆ ëœ ìƒíƒœ. ì´ íŒŒì¼ì„ ë‹¤ì‹œ ì‹¤í–‰
+  echo [¿À·ù] ÄíÅ° ÆÄÀÏÀÌ ¸¸µé¾îÁöÁö ¾ÊÀ½ - ·Î±×ÀÎÀÌ ¾È µÈ »óÅÂ. ÀÌ ÆÄÀÏÀ» ´Ù½Ã ½ÇÇà
   pause
   exit /b 1
 )
 echo.
 
-rem --- 6. Secret ë“±ë¡ ---
-echo [6/6] GitHub Secret ë“±ë¡
+rem --- 6. Secret µî·Ï ---
+echo [6/6] GitHub Secret µî·Ï
 type tistory_cookies.txt | clip
-echo  (1) ì¿ í‚¤ ê°’ì„ í´ë¦½ë³´ë“œì— ë³µì‚¬í•¨. ì—´ë¦¬ëŠ” íŽ˜ì´ì§€ì—ì„œ:
-echo      Name = TISTORY_COOKIES  /  Secret ì¹¸ì— Ctrl+V  /  [Add secret] í´ë¦­
+echo  (1) ÄíÅ° °ªÀ» Å¬¸³º¸µå¿¡ º¹»çÇÔ. ¿­¸®´Â ÆäÀÌÁö¿¡¼­:
+echo      Name = TISTORY_COOKIES  /  Secret Ä­¿¡ Ctrl+V  /  [Add secret] Å¬¸¯
 start https://github.com/remnant1981-bit/remnant1981/settings/secrets/actions/new
 pause
 
 %PY% -c "import secrets,sys; sys.stdout.write(secrets.token_urlsafe(32))" | clip
-echo  (2) SESSION_KEY ê°’ì„ í´ë¦½ë³´ë“œì— ë³µì‚¬í•¨. ì—´ë¦¬ëŠ” íŽ˜ì´ì§€ì—ì„œ:
-echo      Name = SESSION_KEY  /  Secret ì¹¸ì— Ctrl+V  /  [Add secret] í´ë¦­
+echo  (2) SESSION_KEY °ªÀ» Å¬¸³º¸µå¿¡ º¹»çÇÔ. ¿­¸®´Â ÆäÀÌÁö¿¡¼­:
+echo      Name = SESSION_KEY  /  Secret Ä­¿¡ Ctrl+V  /  [Add secret] Å¬¸¯
 start https://github.com/remnant1981-bit/remnant1981/settings/secrets/actions/new
 pause
 
@@ -80,7 +81,7 @@ del /q tistory_cookies.txt >nul 2>&1
 echo.| clip
 echo.
 echo ========================================================
-echo   ì™„ë£Œ. ì¿ í‚¤ íŒŒì¼ê³¼ í´ë¦½ë³´ë“œëŠ” ì§€ì› ìŒ
-echo   Claude ì—ê²Œ "ë“±ë¡ ì™„ë£Œ" ë¼ê³  ì•Œë ¤ì£¼ë©´ ë¡œê·¸ì¸ ì ê²€ ì§„í–‰
+echo   ¿Ï·á. ÄíÅ° ÆÄÀÏ°ú Å¬¸³º¸µå´Â Áö¿üÀ½
+echo   Claude ¿¡°Ô "µî·Ï ¿Ï·á" ¶ó°í ¾Ë·ÁÁÖ¸é ·Î±×ÀÎ Á¡°Ë ÁøÇà
 echo ========================================================
 pause
