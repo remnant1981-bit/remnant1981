@@ -68,6 +68,7 @@ jobs:
       KAKAO_PW: ${{ github.event_name != 'schedule' && secrets.KAKAO_PW || '' }}
       # 로그인 세션 암호화 키 (별도 등록 안 하면 카카오 비밀번호 사용)
       SESSION_KEY: ${{ secrets.SESSION_KEY || secrets.KAKAO_PW }}
+      HAS_KAKAO: ${{ secrets.KAKAO_ID != '' && secrets.KAKAO_PW != '' }}
       TISTORY_HEADLESS: "1"
       MODE: ${{ inputs.mode || (github.event.schedule == '23 0 * * 1' && '주간 점검') || '작성+발행' }}
       HOURLY: ${{ github.event.schedule == '7 * * * *' }}
@@ -102,6 +103,10 @@ jobs:
         run: |
           if [ -z "$TISTORY_BLOG_NAME" ]; then
             echo "::notice::Secret 'TISTORY_BLOG_NAME' 미등록 → 자동 실행 건너뜀 (등록 후 자동으로 동작)"
+            echo "SKIP=true" >> "$GITHUB_ENV"; exit 0
+          fi
+          if [ -z "$TISTORY_COOKIES" ] && [ "$HAS_KAKAO" != "true" ]; then
+            echo "::notice::Secret 'TISTORY_COOKIES' 미등록 → 로그인 불가, 자동 실행 건너뜀 (PC에서 쿠키 추출 후 등록)"
             echo "SKIP=true" >> "$GITHUB_ENV"; exit 0
           fi
           if [ "$HOURLY" = "true" ]; then
