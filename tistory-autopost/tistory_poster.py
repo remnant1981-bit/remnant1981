@@ -31,6 +31,7 @@
 import argparse
 import base64
 import datetime as dt
+import hashlib
 import json
 import logging
 import os
@@ -625,6 +626,31 @@ def notify(title: str, msg: str, priority: str = "default"):
         log.debug("알림 실패: %s", e)
 
 
+LOGIN_STATE = BASE_DIR / "login_state.json"
+
+
+def cookies_fingerprint() -> str:
+    """등록된 TISTORY_COOKIES 의 지문 (값 자체는 저장 안 함) → 같은 쿠키로 반복 실패 방지에 사용"""
+    v = os.environ.get("TISTORY_COOKIES", "")
+    return hashlib.sha256(v.encode("utf-8")).hexdigest()[:16] if v else ""
+
+
+def record_login_state(ok: bool):
+    """로그인 실패 시 지문과 함께 기록 → workflow 가 같은 쿠키로는 재시도하지 않음. 성공 시 기록 삭제"""
+    try:
+        if ok:
+            if LOGIN_STATE.exists():
+                LOGIN_STATE.unlink()
+                log.info("로그인 상태 기록 해제 (정상)")
+        else:
+            LOGIN_STATE.write_text(json.dumps({"status": "failed", "cookies_fp": cookies_fingerprint(),
+                                               "failed_at": now().isoformat(timespec="seconds")},
+                                              ensure_ascii=False, indent=1), encoding="utf-8")
+            log.info("로그인 실패 기록 → 쿠키(TISTORY_COOKIES)를 새로 등록할 때까지 자동 실행은 건너뜀")
+    except OSError as e:
+        log.warning("로그인 상태 기록 실패: %s", e)
+
+
 def summary(lines: list):
     """GitHub Actions 실행 화면 요약 (휴대폰 앱에서 확인)"""
     path = os.environ.get("GITHUB_STEP_SUMMARY")
@@ -707,11 +733,14 @@ def run_once(cfg: dict, files: list, dry_run=False) -> int:
     ok = 0
     results = []
     try:
-        if not bot.is_logged_in():
-            notify("티스토리 로그인 실패", "세션 만료 또는 승인 필요 → 로그인 점검 실행", "high")
+        logged_in = bot.is_logged_in()
+        record_login_state(logged_in)
+        if not logged_in:
+            notify("티스토리 로그인 실패", "쿠키 만료 → PC에서 setup_cookies.bat 재실행", "high")
             if os.environ.get("GITHUB_EVENT_NAME") == "schedule":
-                summary(["### ❌ 예약 발행 실패: 저장된 로그인 세션 만료",
-                         "- Run workflow → mode `로그인 점검` 실행 후 카카오톡 승인 → 다음 정시 점검에서 자동 발행"])
+                summary(["### ❌ 예약 발행 실패: 로그인 세션·쿠키 만료",
+                         "- PC에서 `setup_cookies.bat` 재실행 → 카카오 로그인 시 **로그인 상태 유지** 체크 → 새 쿠키를 Secret `TISTORY_COOKIES` 에 등록",
+                         "- 등록 전까지 자동 실행은 실패 없이 건너뜀 (예약 글은 그대로 대기)"])
             else:
                 summary(["### ❌ 티스토리 로그인 실패",
                          "- 카카오톡 승인 시간 초과, 비밀번호 오류, 보안문자 요구 중 하나 → 실행 로그 확인"])
@@ -803,7 +832,9 @@ def main():
         bot = TistoryBot(cfg)
         try:
             if not bot.is_logged_in():
+                record_login_state(False)
                 sys.exit("[오류] 로그인 상태 아님 → --login 먼저 실행")
+            record_login_state(True)
             out = BASE_DIR / "tistory_cookies.txt"
             out.write_text(bot.export_cookies(), encoding="utf-8")
             print(f"[완료] {out} 생성")
@@ -835,6 +866,7 @@ def main():
             ok = bot.is_logged_in()
         finally:
             bot.close()
+        record_login_state(ok)
         if ok:
             log.info("[점검 완료] 로그인 정상 → 발행 가능")
             summary(["### ✅ 로그인 점검 정상", f"- 블로그: {cfg['blog_name']}.tistory.com", "- 이제 글 작성·발행 실행 가능"])
