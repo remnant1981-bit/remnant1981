@@ -43,6 +43,7 @@ on:
   # 예약 발행 점검: 매시 7분 (발행할 글이 없으면 1분 안에 종료)
   schedule:
     - cron: "7 * * * *"     # 예약 발행 점검 (매시 7분)
+    - cron: "37 * * * *"    # 예약 발행 점검 (매시 37분, GitHub 정기 실행 지연 보완)
     - cron: "23 0 * * 1"    # 주간 점검 (월 00:23 UTC = 09:23 KST)
 
 permissions:
@@ -71,7 +72,9 @@ jobs:
       HAS_KAKAO: ${{ secrets.KAKAO_ID != '' && secrets.KAKAO_PW != '' }}
       TISTORY_HEADLESS: "1"
       MODE: ${{ inputs.mode || (github.event.schedule == '23 0 * * 1' && '주간 점검') || '작성+발행' }}
-      HOURLY: ${{ github.event.schedule == '7 * * * *' }}
+      HOURLY: ${{ github.event.schedule == '7 * * * *' || github.event.schedule == '37 * * * *' }}
+      # 세션 유지: 마지막 로그인 성공 후 이 시간이 지나면 발행 글이 없어도 가볍게 로그인해 세션 갱신
+      KEEPALIVE_HOURS: ${{ vars.KEEPALIVE_HOURS || '6' }}
       # 휴대폰 푸시 알림 (선택): ntfy 주제 이름 또는 텔레그램 봇
       NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -109,11 +112,23 @@ jobs:
             echo "::notice::Secret 'TISTORY_COOKIES' 미등록 → 로그인 불가, 자동 실행 건너뜀 (PC에서 쿠키 추출 후 등록)"
             echo "SKIP=true" >> "$GITHUB_ENV"; exit 0
           fi
+          # 같은 쿠키로 이미 로그인 실패한 기록이 있으면 재시도하지 않음 (반복 실패·실패 메일 방지)
+          FP=$(printf '%s' "$TISTORY_COOKIES" | sha256sum | cut -c1-16)
+          if [ -f login_state.json ] && python - "$FP" <<'PY'
+          import json, sys
+          d = json.load(open("login_state.json"))
+          sys.exit(0 if d.get("status") == "failed" and d.get("cookies_fp") == sys.argv[1] else 1)
+          PY
+          then
+            echo "::warning::로그인 쿠키 만료 상태 → PC에서 setup_cookies.bat 재실행 후 TISTORY_COOKIES 재등록 필요 (등록 전까지 자동 실행 건너뜀)"
+            { echo "### ⚠️ 쿠키 만료 → 자동 실행 대기 중"; echo "- PC에서 \`setup_cookies.bat\` 재실행 (카카오 로그인 시 **로그인 상태 유지** 체크) → Secret \`TISTORY_COOKIES\` 재등록"; } >> "$GITHUB_STEP_SUMMARY"
+            echo "SKIP=true" >> "$GITHUB_ENV"; exit 0
+          fi
           if [ "$HOURLY" = "true" ]; then
             if python tistory_poster.py --due; then
               echo "발행 시각이 된 글 있음 → 진행"
             else
-              echo "발행할 글 없음 → 종료"; echo "SKIP=true" >> "$GITHUB_ENV"
+              echo "발행할 글 없음 → 세션 유지 필요 여부만 확인"; echo "NO_DUE=true" >> "$GITHUB_ENV"
             fi
           fi
 
@@ -134,7 +149,9 @@ jobs:
         if: env.SKIP != 'true'
         uses: actions/cache/restore@v4
         with:
-          path: tistory-autopost/.session.enc
+          path: |
+            tistory-autopost/.session.enc
+            tistory-autopost/.session_meta.json
           key: tistory-session-${{ github.run_id }}
           restore-keys: tistory-session-
 
@@ -151,9 +168,23 @@ jobs:
             echo "저장된 세션 없음 → 첫 로그인 (카카오톡 승인 필요)"
           fi
           echo "SESSION_HASH_BEFORE=$(sha256sum "$TISTORY_SESSION_FILE" 2>/dev/null | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          # 발행할 글이 없는 정시 실행: 마지막 로그인 성공이 KEEPALIVE_HOURS 보다 오래됐으면 세션 갱신, 아니면 종료
+          if [ "$NO_DUE" = "true" ]; then
+            if python - "$KEEPALIVE_HOURS" <<'PY'
+          import json, sys, datetime as dt
+          try:
+              last = dt.datetime.fromisoformat(json.load(open(".session_meta.json"))["last_ok"])
+          except Exception:
+              sys.exit(0)  # 기록 없음 → 갱신
+          sys.exit(0 if dt.datetime.now(dt.timezone.utc) - last > dt.timedelta(hours=float(sys.argv[1])) else 1)
+          PY
+            then echo "KEEPALIVE=true" >> "$GITHUB_ENV"; echo "세션 갱신 실행 (마지막 로그인 성공 ${KEEPALIVE_HOURS}시간 이상 경과)"
+            else echo "세션 유지 불필요 → 종료"; echo "SKIP=true" >> "$GITHUB_ENV"
+            fi
+          fi
 
       - name: 로그인 점검 (카카오톡 승인 알림 오면 승인)
-        if: env.MODE == '로그인 점검'
+        if: env.MODE == '로그인 점검' || env.KEEPALIVE == 'true'
         run: python tistory_poster.py --check
 
       - name: 에디터 점검 (발행 안 함, 썸네일 첨부 버튼 구조 기록)
@@ -161,7 +192,7 @@ jobs:
         run: python tistory_poster.py --probe-editor
 
       - name: AI 글 작성
-        if: env.MODE == '작성+발행' && github.event_name != 'schedule' && env.SKIP != 'true'
+        if: env.MODE == '작성+발행' && github.event_name != 'schedule' && env.SKIP != 'true' && env.KEEPALIVE != 'true'
         run: |
           WHEN=()
           [ -n "$PUBLISH_AT" ] && WHEN=(--publish-at "$PUBLISH_AT")
@@ -176,7 +207,7 @@ jobs:
           fi
 
       - name: 티스토리 발행 (카카오톡 로그인 승인 알림 오면 승인)
-        if: env.MODE == '작성+발행' && env.SKIP != 'true'
+        if: env.MODE == '작성+발행' && env.SKIP != 'true' && env.KEEPALIVE != 'true'
         run: |
           if python tistory_poster.py --due; then
             python tistory_poster.py --all
@@ -185,7 +216,7 @@ jobs:
           fi
 
       - name: 블로그 점검 (리포트·댓글·오래된 글, 자동 게시·수정 없음)
-        if: env.MODE != '작성+발행' && env.MODE != '로그인 점검' && env.MODE != '에디터 점검' && env.SKIP != 'true'
+        if: env.MODE != '작성+발행' && env.MODE != '로그인 점검' && env.MODE != '에디터 점검' && env.SKIP != 'true' && env.KEEPALIVE != 'true'
         run: |
           case "$MODE" in
             "성과 리포트") python insights.py report ;;
@@ -194,8 +225,8 @@ jobs:
             *) python insights.py all ;;
           esac
 
-      - name: 처리 결과 저장 (topics.txt, 예약 글, 발행된 대기 글 정리)
-        if: always() && env.MODE != '로그인 점검' && env.MODE != '에디터 점검' && env.SKIP != 'true'
+      - name: 처리 결과 저장 (topics.txt, 예약 글, 발행된 대기 글 정리, 로그인 상태)
+        if: always() && env.MODE != '에디터 점검' && env.SKIP != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -204,6 +235,7 @@ jobs:
           if [ -f history.jsonl ]; then git add history.jsonl; fi   # 훅 패턴·키워드 중복 방지용 이력
           if [ -f refresh_state.json ]; then git add refresh_state.json; fi   # 오래된 글 점검 이력
           if [ -f publish_log.jsonl ]; then git add publish_log.jsonl; fi   # 발행 빈도 제한용 기록
+          git add -A login_state.json 2>/dev/null || true   # 로그인 실패/복구 기록 (생성·삭제 모두 반영)
           if git diff --cached --quiet; then
             echo "변경 없음"
           else
@@ -216,8 +248,9 @@ jobs:
         if: always()
         run: |
           AFTER=$(sha256sum "$TISTORY_SESSION_FILE" 2>/dev/null | cut -d' ' -f1)
-          if [ -n "$SESSION_KEY" ] && [ -s "$TISTORY_SESSION_FILE" ] && [ "$AFTER" != "$SESSION_HASH_BEFORE" ]; then
+          if [ -n "$SESSION_KEY" ] && [ -s "$TISTORY_SESSION_FILE" ] && { [ "$AFTER" != "$SESSION_HASH_BEFORE" ] || [ "$KEEPALIVE" = "true" ]; }; then
             openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -in "$TISTORY_SESSION_FILE" -out .session.enc -pass env:SESSION_KEY
+            printf '{"last_ok": "%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%S+00:00)" > .session_meta.json
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "로그인 세션 갱신 → 다음 실행부터 승인 생략 가능"
           fi
@@ -227,7 +260,9 @@ jobs:
         if: always() && steps.enc.outputs.changed == 'true'
         uses: actions/cache/save@v4
         with:
-          path: tistory-autopost/.session.enc
+          path: |
+            tistory-autopost/.session.enc
+            tistory-autopost/.session_meta.json
           key: tistory-session-${{ github.run_id }}
 
       - name: 실패 알림

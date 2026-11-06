@@ -48,6 +48,7 @@ echo.
 
 rem --- 4. 로그인 ---
 echo [4/6] Chrome 창이 열리면 [카카오계정으로 로그인] 후 카카오톡 승인까지 완료
+echo       카카오 로그인 화면의 [로그인 상태 유지] 를 반드시 체크 (안 하면 쿠키가 하루 안에 만료됨)
 echo       로그인이 끝나면 Chrome 창은 그대로 두고, 이 검은 창으로 돌아와 Enter
 echo       (Enter 전에 Chrome 창을 닫지 말 것)
 %PY% tistory_poster.py --login

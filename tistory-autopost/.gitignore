@@ -9,3 +9,4 @@ sns/
 .thumbs/
 fonts/
 reports/
+.session_meta.json
