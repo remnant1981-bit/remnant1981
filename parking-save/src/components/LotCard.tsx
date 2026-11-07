@@ -15,6 +15,12 @@ export function LotCard({ item, query }: { item: LotItem; query: string }) {
       </div>
       <p className="mt-1 text-sm text-gray-700">{item.address ?? "주소 정보 없음"}</p>
       <p className="mt-1 text-xs text-gray-700">{TYPE_LABEL[item.parkingType]} · {OWNERSHIP_LABEL[item.ownershipType]}{item.isMock ? " · 목업" : ""}</p>
+      {(item.explanation.highlights.length > 0 || item.explanation.cautions.length > 0) && (
+        <ul className="mt-2 flex flex-wrap gap-1.5 text-xs" aria-label="이 시설의 특징과 유의점">
+          {item.explanation.highlights.map((t) => <li key={t} className="rounded bg-green-50 px-2 py-1 text-green-900"><span className="sr-only">장점: </span>{t}</li>)}
+          {item.explanation.cautions.map((t) => <li key={t} className="rounded bg-amber-50 px-2 py-1 text-amber-900"><span className="sr-only">유의: </span>{t}</li>)}
+        </ul>
+      )}
       <dl className="mt-3 grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
         <div><dt className="text-gray-600">예상 주차요금</dt>
           <dd className={`text-base font-bold ${tone}`}>{fee.main}{fee.sub && <span className="block text-xs font-normal text-gray-600">{fee.sub}</span>}</dd></div>

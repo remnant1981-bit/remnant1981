@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAppDb } from "@/server/app-db";
 import { getLotDetail } from "@/server/search";
-import { CopyButton } from "@/components/CopyButton";
+import { MapLinks } from "@/components/MapLinks";
+import { buildNaverLinks } from "@/domain/map-link";
+import { isValidCoord } from "@/domain/geo";
 import { DAY_LABEL, OPERATING_LABEL, OWNERSHIP_LABEL, RULE_LABEL, TYPE_LABEL, feeText, occupancyText, sourceLabel, won } from "@/lib/labels";
 import { formatKst, parseOffsetIso } from "@/lib/time";
 
@@ -23,6 +25,13 @@ export default async function LotPage({ params, searchParams }: { params: Promis
   const occ = occupancyText(d.occupancy);
   const addr = lot.roadAddress ?? lot.address ?? "";
   const coord = lot.latitude != null && lot.longitude != null ? `${lot.latitude}, ${lot.longitude}` : null;
+  // 도보 길찾기용 목적지(목적지 검색일 때만 검색 화면에서 전달). 입력 검증 후 사용
+  const dLat = Number(one(sp.destLat)), dLng = Number(one(sp.destLng));
+  const destination = one(sp.destLat) && one(sp.destLng) && isValidCoord({ lat: dLat, lng: dLng })
+    ? { lat: dLat, lng: dLng, name: (one(sp.destName) ?? "").slice(0, 60) } : null;
+  const links = lot.latitude != null && lot.longitude != null
+    ? buildNaverLinks({ lot: { lat: lot.latitude, lng: lot.longitude, name: lot.name }, destination, appname: process.env.SITE_URL || "http://localhost:3000" })
+    : { car: null, walk: null, place: null };
   const hm = (r: { startTime: string | null; endTime: string | null }) => (r.startTime ? `${r.startTime}~${r.endTime}` : "종일");
   const ruleText = (r: (typeof d.feeRules)[number]) =>
     r.ruleType === "FREE" ? "무료" : r.amount == null ? "금액 미확인" : r.ruleType === "DAILY_MAX" ? won(r.amount) : `${r.durationMinutes ?? "?"}분당 ${won(r.amount)}`;
@@ -36,11 +45,7 @@ export default async function LotPage({ params, searchParams }: { params: Promis
         <p className="text-sm">{addr || "주소 정보 없음"}</p>
         {coord && <p className="text-xs text-gray-700">좌표 {coord}</p>}
         {lot.phone && <p className="text-sm">전화 {lot.phone}</p>}
-        <div className="mt-2 flex flex-wrap gap-2">
-          {addr && <CopyButton text={addr} label="주소 복사" />}
-          {coord && <CopyButton text={coord} label="좌표 복사" />}
-        </div>
-        <p className="mt-2 text-xs text-gray-600">네이버 지도 앱 연동은 공식 문서 검증 전이라 준비 중입니다. 주소·좌표를 복사해 지도 앱에서 검색하세요.</p>
+        <MapLinks links={links} addressText={addr} coordText={coord} />
       </section>
 
       <section className="mt-4" aria-labelledby="fee"><h2 id="fee" className="font-semibold">예상 요금</h2>

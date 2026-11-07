@@ -154,3 +154,14 @@ describe("상세", () => {
   });
   it("없는 ID", async () => expect(await getLotDetail(db, 9999, null, NOW)).toBeNull());
 });
+
+describe("추천 사유 통합", () => {
+  it("API 항목에 설명 포함, 정렬은 설명과 무관하게 유지", async () => {
+    const r = await run();
+    expect(r.items.every((i) => Array.isArray(i.explanation.highlights) && Array.isArray(i.explanation.cautions))).toBe(true);
+    const free = byName(r, "무료개방");
+    expect(free.explanation.highlights.join()).toContain("무료");
+    expect(byName(r, "서소문").explanation.cautions.join()).toContain("요금 비교에서 제외");
+    expect(byName(r, "시청앞").explanation.highlights.join()).toContain("가장 가까움");
+  });
+});
