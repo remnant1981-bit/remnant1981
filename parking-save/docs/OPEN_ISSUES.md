@@ -36,7 +36,14 @@
 | D5 | 표기 | `parking_type` DB 값(`ON_STREET`/`OFF_STREET`/`UNKNOWN`) vs API `type` 쿼리(`on_street`/`off_street`/`all`) — 대소문자·`UNKNOWN` 노출 규칙 불일치. API는 `all`에 UNKNOWN 포함, 개별 필터에서는 제외로 가정(확정 필요) | 1, 2 | 미결 |
 | D6 | 표기 | `CLAUDE.md` 혼잡도: "표시하지 않거나 확인 불가", `REALTIME_OCCUPANCY.md`: "`실시간 확인 불가` 표시" — 혼잡도 vs 잔여면수 라벨 구분 필요. 잔여면수 미제공 = `실시간 확인 불가`, 혼잡도는 미표시로 정리 제안 | 5 | 제안 |
 | D7 | 공백 | `API_SPEC.md` `GET /api/parking-lots`에 반경 기본값/상한, 페이지네이션, `destination` 지오코딩 주체(서버/클라이언트) 미정의 (#6) | 2 | 미결 |
-| D8 | 공백 | `ARCHITECTURE.md` 기술 스택은 "제안안"뿐(언어/프레임워크 미지정). 저장소 내 선례 `govbiz-finder`(Next.js 16 + TS + node:sqlite, Vitest, GitHub Actions CI)가 있으나 PostgreSQL/PostGIS 권장과 상이 (#10) | 1 | 결정 필요 |
+| D8 | 공백 | `ARCHITECTURE.md` 기술 스택은 "제안안"뿐(언어/프레임워크 미지정). 저장소 내 선례 `govbiz-finder`(Next.js 16 + TS + node:sqlite, Vitest, GitHub Actions CI)가 있으나 PostgreSQL/PostGIS 권장과 상이 (#10) | 1 | **결정됨** (아래 결정 기록) |
 
 ## 결정 기록
-(원천 조사·검증 후 위 "결정 기록 형식"으로 추가)
+- 항목: D8 기술 스택
+- 조사일: 2026-11-07
+- 확인한 공식 문서/샘플: `govbiz-finder/` (동일 저장소 선례)
+- 확인 결과: Node 22에서 Next.js 16 + TS + Tailwind 4 + `node:sqlite` + Vitest + GitHub Actions 구성이 lint/typecheck/test/build 통과함
+- 영향 범위: DB는 PostgreSQL/PostGIS 대신 SQLite(D1 호환 SQL). 공간 검색은 위경도 bbox + haversine으로 시작. 데이터 규모·성능 확인 후 PostgreSQL 이전 재검토
+- 결정: 사용자 지시로 govbiz-finder와 동일 스택 채택
+
+(원천 조사·검증 후 위 "결정 기록 형식"으로 계속 추가)
