@@ -3,7 +3,7 @@ import type { Db } from "./db";
 
 // 조사 대상 원천(DATA_COLLECTION.md §2). 실제 API/약관/쿼터 확인 전이므로 모두 미연동·비활성.
 export const SOURCES = [
-  { id: "bizinfo", name: "기업마당", type: "api", status: "not_integrated" },
+  { id: "bizinfo", name: "기업마당", type: "api", status: "pending_key" },
   { id: "mss", name: "중소벤처기업부 공고/API", type: "api", status: "not_integrated" },
   { id: "k-startup", name: "K-Startup", type: "api", status: "not_integrated" },
   { id: "msit", name: "과학기술정보통신부 공고", type: "web", status: "not_integrated" },
@@ -21,7 +21,7 @@ export async function seedReference(db: Db) {
   for (const s of SOURCES) {
     await db.run(
       "INSERT OR IGNORE INTO data_sources(id, name, source_type, enabled, integration_status, quota_note) VALUES (?,?,?,0,?,?)",
-      [s.id, s.name, s.type, s.status, "API 이용조건·쿼터·약관·재배포 범위 확인 전(OPEN_ISSUES #1). 미연동."],
+      [s.id, s.name, s.type, s.status, s.status === "pending_key" ? "어댑터 구현됨. 기업마당 API 인증키(BIZINFO_API_KEY) 발급·설정 후 수집 가능. 재배포·출처표시 범위 확인 필요." : "API 이용조건·쿼터·약관·재배포 범위 확인 전(OPEN_ISSUES #1). 미연동."],
     );
   }
   await db.run(

@@ -61,7 +61,11 @@ export async function runSource(db: Db, adapter: SourceAdapter, opts: RunOptions
     [finished, status, counts.fetched, counts.inserted, counts.updated, counts.skipped, summary, runId],
   );
   if (status === "failed") await db.run("UPDATE data_sources SET last_error=? WHERE id=?", [summary, adapter.sourceId]);
-  else await db.run("UPDATE data_sources SET last_success_at=?, last_error=? WHERE id=?", [finished, status === "partial" ? summary : null, adapter.sourceId]);
+  else {
+    await db.run("UPDATE data_sources SET last_success_at=?, last_error=? WHERE id=?", [finished, status === "partial" ? summary : null, adapter.sourceId]);
+    // 실제 호출 성공(공고 1건 이상 저장/확인) 후에만 '연동(live)'으로 전환
+    if (counts.fetched > 0) await db.run("UPDATE data_sources SET integration_status='live' WHERE id=? AND integration_status='pending_key'", [adapter.sourceId]);
+  }
   return { runId, status, ...counts, errors };
 }
 

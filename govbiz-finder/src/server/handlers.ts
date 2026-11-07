@@ -20,7 +20,7 @@ import { buildPdf } from "@/export/pdf";
 import { toExportRecords } from "@/export/records";
 import { conditionLines } from "@/export";
 import { runSource } from "@/collector/runner";
-import { MockAdapter } from "@/collector/mock-adapter";
+import { getAdapter } from "@/collector/registry";
 import { seoulToday } from "@/lib/time";
 import { redactString } from "@/lib/log";
 
@@ -184,9 +184,10 @@ export const handlers: Record<string, (req: Request, ...a: any[]) => Promise<Res
   }),
   "POST /api/admin/collect": route({ auth: "admin" }, async (req, c) => {
     const b = await readJson<{ sourceId?: string }>(req);
-    if (b.sourceId !== "mock") throw new ApiError(400, "not_integrated", "해당 원천은 아직 연동되지 않았습니다(현재 mock 만 실행 가능).");
-    const r = await runSource(c.db, new MockAdapter(seoulToday()));
-    await audit(c.db, c.session!.user.id, "collect.run", "data_source", "mock", { status: r.status });
+    const adapter = getAdapter(String(b.sourceId));
+    if (!adapter) throw new ApiError(400, "not_integrated", "해당 원천은 연동되지 않았거나 인증키가 설정되지 않았습니다.");
+    const r = await runSource(c.db, adapter);
+    await audit(c.db, c.session!.user.id, "collect.run", "data_source", String(b.sourceId), { status: r.status });
     return r;
   }),
   "PUT /api/admin/sources/:id": route({ auth: "admin" }, async (req, c, rc: { params: Promise<{ id?: string }> }) => {

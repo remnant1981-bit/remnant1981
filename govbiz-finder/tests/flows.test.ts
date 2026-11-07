@@ -219,8 +219,8 @@ describe("관리자", () => {
     await admin.call("POST", "/api/admin/collect", { sourceId: "mock" });
     expect((await pub.call("GET", "/api/announcements/" + mockRow.id)).body.announcement.title).toBe("관리자 수정 제목");
     // 미연동 원천은 활성화 불가, 수집 실행은 mock 만
-    expect((await admin.call("PUT", "/api/admin/sources/bizinfo", { enabled: true })).status).toBe(400);
-    expect((await admin.call("POST", "/api/admin/collect", { sourceId: "bizinfo" })).status).toBe(400);
+    expect((await admin.call("PUT", "/api/admin/sources/mss", { enabled: true })).status).toBe(400);
+    expect((await admin.call("POST", "/api/admin/collect", { sourceId: "bizinfo" })).status).toBe(400); // 키 미설정
     expect((await admin.call("POST", "/api/admin/collect", { sourceId: "mock" })).status).toBe(200);
   });
 });

@@ -44,11 +44,11 @@ export function AdminPanel() {
       <section aria-labelledby="src"><h2 id="src" className="mb-2 text-lg font-bold">수집 원천·모니터링</h2>
         <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead><tr className="border-b"><th>원천</th><th>연동</th><th>활성</th><th>마지막 성공</th><th>마지막 오류</th><th>비고</th><th></th></tr></thead>
           <tbody>{ov.sources.map((s: Any) => (<tr key={s.id} className="border-b align-top">
-            <td className="py-1 pr-2">{s.name}</td><td>{({ not_integrated: "미연동", mock: "테스트", manual: "수동", live: "연동" } as Any)[s.integration_status]}</td>
+            <td className="py-1 pr-2">{s.name}</td><td>{({ not_integrated: "미연동", pending_key: "키 대기", mock: "테스트", manual: "수동", live: "연동" } as Any)[s.integration_status]}</td>
             <td>{s.enabled ? "ON" : "OFF"}</td><td>{formatSeoul(s.last_success_at)}</td><td className="max-w-[200px] break-words text-red-700">{s.last_error ?? "-"}</td><td className="max-w-[240px] text-xs text-[var(--muted)]">{s.quota_note}</td>
             <td className="space-x-1 whitespace-nowrap">
               <button className="btn btn-ghost" disabled={s.integration_status === "not_integrated"} onClick={() => act(api("PUT", `/api/admin/sources/${s.id}`, { enabled: !s.enabled }))}>{s.enabled ? "비활성화" : "활성화"}</button>
-              {s.id === "mock" && <button className="btn btn-ghost" onClick={() => act(api("POST", "/api/admin/collect", { sourceId: "mock" }), "수집을 실행했습니다.")}>수집 실행</button>}
+              {(s.id === "mock" || s.id === "bizinfo") && <button className="btn btn-ghost" onClick={() => act(api("POST", "/api/admin/collect", { sourceId: s.id }), "수집을 실행했습니다.")}>수집 실행</button>}
             </td></tr>))}</tbody></table></div>
         <h3 className="mt-4 font-semibold">최근 수집 실행</h3>
         <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-sm"><thead><tr className="border-b"><th>시작</th><th>원천</th><th>상태</th><th>수집/신규/갱신/건너뜀</th><th>오류</th></tr></thead>
