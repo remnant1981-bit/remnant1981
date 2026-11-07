@@ -74,7 +74,7 @@ jobs:
       MODE: ${{ inputs.mode || (github.event.schedule == '23 0 * * 1' && '주간 점검') || '작성+발행' }}
       HOURLY: ${{ github.event.schedule == '7 * * * *' || github.event.schedule == '37 * * * *' }}
       # 세션 유지: 마지막 로그인 성공 후 이 시간이 지나면 발행 글이 없어도 가볍게 로그인해 세션 갱신
-      KEEPALIVE_HOURS: ${{ vars.KEEPALIVE_HOURS || '6' }}
+      KEEPALIVE_HOURS: ${{ vars.KEEPALIVE_HOURS || '2' }}
       # 휴대폰 푸시 알림 (선택): ntfy 주제 이름 또는 텔레그램 봇
       NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
