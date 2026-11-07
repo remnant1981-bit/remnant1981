@@ -1,11 +1,16 @@
+import { SearchForm } from "@/components/SearchForm";
+import { defaultStayInputs } from "@/lib/time";
+import { MOCK_PLACES, mockEnabled } from "@/server/mock";
+
+export const dynamic = "force-dynamic"; // 기본 시작·종료 시각을 요청 시점 기준으로 계산
+
 export default function Home() {
+  const defaults = defaultStayInputs();
   return (
     <>
       <h1 className="text-2xl font-bold">파킹세이브</h1>
-      <p className="mt-2">주차하기 전에, 주차비부터 아끼자!</p>
-      <p role="status" className="mt-6 rounded border border-amber-400 bg-amber-50 p-3 text-sm">
-        개발 중: 아직 실제 주차장 데이터와 연동되지 않았습니다. 검색 기능은 준비 중입니다.
-      </p>
+      <p className="mb-6 mt-1 text-gray-700">주차하기 전에, 주차비부터 아끼자!</p>
+      <SearchForm defaults={defaults} places={mockEnabled() ? Object.keys(MOCK_PLACES) : []} />
     </>
   );
 }
