@@ -1,6 +1,6 @@
 // 검색 서비스: 입력 검증 → 후보 조회 → 거리/요금/운영/실시간 평가 → 정렬. API와 서버 렌더 페이지가 공용.
 import type { Db } from "./db";
-import { MOCK_PLACES, MOCK_SOURCE, mockEnabled, refreshMockOccupancy } from "./mock";
+import { MOCK_PLACES, NON_PRODUCTION_SOURCES, mockEnabled, refreshMockOccupancy } from "./mock";
 import { calculateFee, type FeeResult, type FeeRule, type DayType } from "@/domain/fee";
 import { distanceMeters, isValidCoord, type LatLng } from "@/domain/geo";
 import { operatingForStay, type OperatingStatus, type ScheduleRow } from "@/domain/operating";
@@ -70,6 +70,7 @@ interface SchedRow { day_type: DayType; open_time: string | null; close_time: st
 export function toFeeRules(rows: FeeRow[]): FeeRule[] | "UNSUPPORTED" {
   const out: FeeRule[] = [];
   for (const r of rows) {
+    if (r.rule_type === "SEASON_PASS") continue; // 정기권은 시간제 요금 계산과 무관 — 있어도 계산을 막지 않음
     if (!["BASE", "ADDITIONAL", "DAILY_MAX", "FREE"].includes(r.rule_type)) return "UNSUPPORTED"; // 정기권 등은 계산에 쓰지 않으며 계산 불가로 처리
     out.push({ id: r.id, ruleType: r.rule_type as FeeRule["ruleType"], amount: r.amount, durationMinutes: r.duration_minutes, dayType: r.valid_day_type,
       startTime: r.start_time, endTime: r.end_time, dailyMaxBasis: r.daily_max_basis as FeeRule["dailyMaxBasis"] });
@@ -129,7 +130,7 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
   const dLat = p.radiusMeters / 111320, dLng = p.radiusMeters / (111320 * Math.max(0.01, Math.cos((p.center.lat * Math.PI) / 180)));
   const types = p.type === "all" ? ["ON_STREET", "OFF_STREET", "UNKNOWN"] : [p.type === "on_street" ? "ON_STREET" : "OFF_STREET"];
   const lots = await db.all<LotRow>(
-    `SELECT * FROM parking_lots WHERE latitude BETWEEN ? AND ? AND longitude BETWEEN ? AND ? AND parking_type IN (${types.map(() => "?").join(",")})`,
+    `SELECT * FROM parking_lots WHERE data_status NOT LIKE 'EXCLUDED%' AND latitude BETWEEN ? AND ? AND longitude BETWEEN ? AND ? AND parking_type IN (${types.map(() => "?").join(",")})`,
     [p.center.lat - dLat, p.center.lat + dLat, p.center.lng - dLng, p.center.lng + dLng, ...types]);
   const noCoord = (await db.get<{ c: number }>("SELECT COUNT(*) AS c FROM parking_lots WHERE latitude IS NULL OR longitude IS NULL"))?.c ?? 0;
   const holidays = await loadHolidays(db, p.startAt, p.endAt);
@@ -145,7 +146,7 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
       latitude: here.lat, longitude: here.lng, distanceMeters: Math.round(dist), totalSpaces: lot.total_spaces,
       fee: ev.fee, operating: ev.operating, occupancy: ev.occupancy,
       source: { name: lot.source_name, url: lot.source_url, updatedAt: lot.source_updated_at, collectedAt: lot.collected_at, freshness: ev.freshness },
-      isMock: lot.source_name === MOCK_SOURCE, qualityFlags: lot.quality_flags ? JSON.parse(lot.quality_flags) : [],
+      isMock: NON_PRODUCTION_SOURCES.includes(lot.source_name), qualityFlags: lot.quality_flags ? JSON.parse(lot.quality_flags) : [],
     });
   }
   const candidates = items.length;
@@ -155,7 +156,7 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
   items = items.slice(0, p.limit);
 
   const warnings: string[] = [];
-  if (items.some((i) => i.isMock)) warnings.push("MOCK_DATA: 표시된 주차장·요금·면수는 모두 가상의 목업 데이터이며 실제 정보가 아닙니다.");
+  if (items.some((i) => i.isMock)) warnings.push("MOCK_DATA: 표시된 일부 정보는 목업 또는 샘플(검증 전) 데이터이며 실제 서비스 데이터가 아닙니다.");
   if (!holidays) warnings.push("HOLIDAY_DATA_MISSING: 입력 기간의 공휴일 데이터가 없어 요일별 규칙이 있는 시설은 요금을 계산하지 못할 수 있습니다.");
   if (items.some((i) => i.ownershipType === "UNKNOWN")) warnings.push("OWNERSHIP_UNVERIFIED: 공영 여부가 확인되지 않은 시설이 포함되어 있습니다.");
   if (items.some((i) => i.source.freshness === "STALE")) warnings.push("STALE_DATA: 오래된 데이터가 포함되어 있습니다.");
@@ -207,7 +208,7 @@ export async function getLotDetail(db: Db, id: number, period: { startAt: Date; 
   return {
     lot: {
       id: lot.id, name: lot.name, operatorName: lot.operator_name, parkingType: lot.parking_type, ownershipType: lot.ownership_type, address: lot.address, roadAddress: lot.road_address,
-      latitude: lot.latitude, longitude: lot.longitude, totalSpaces: lot.total_spaces, phone: lot.phone, isMock: lot.source_name === MOCK_SOURCE,
+      latitude: lot.latitude, longitude: lot.longitude, totalSpaces: lot.total_spaces, phone: lot.phone, isMock: NON_PRODUCTION_SOURCES.includes(lot.source_name),
       qualityFlags: lot.quality_flags ? (JSON.parse(lot.quality_flags) as string[]) : [],
     },
     source: { name: lot.source_name, url: lot.source_url, updatedAt: lot.source_updated_at, collectedAt: lot.collected_at },

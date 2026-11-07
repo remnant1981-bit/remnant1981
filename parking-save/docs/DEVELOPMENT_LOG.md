@@ -24,6 +24,14 @@
 - 정렬: 요금 계산 불가 시설은 가격 순위에서 제외하고 뒤로, 실시간 미제공은 감점 없이 거리순 뒤.
 - 미구현: 지도 보기(목록만), 네이버 지도 딥링크(공식 문서 검증 전 — 복사 대체만), 서비스 단 rate limit, 접근성 자동 점검(axe) 미실시.
 
+## Phase 1 수집 프레임워크 (2026-11-07)
+- `src/collector/`: `SourceAdapter` 인터페이스, 표준데이터 정규화(`standard-parking.ts`), 중복 후보(`dedupe.ts`), 실행기(`runner.ts`), 픽스처 어댑터. `npm run sync -- --fixture <json>`.
+- 흐름: 수집 → `source_raw_records` 원문 보존(해시로 변경 이력) → 정규화 → `parking_lots`/`fee_rules`/`operating_schedules` 저장 → 중복 후보 기록(자동 병합 없음) → `source_sync_logs`(PARTIAL/FAILED, 오류 요약에 내부 상세 미포함).
+- 행 단위 오류 격리, 재실행 멱등(해시 동일 시 unchanged), 범위 제외(민영·부설)로 바뀐 기존 시설은 `EXCLUDED_SCOPE`로 표시해 검색에서 제외. 원천에서 사라진 시설은 삭제하지 않음(후속: 미수신 처리 정책).
+- 픽스처 `tests/fixtures/standard-parking.sample.json`: 포털 공개 샘플 2행 + 합성 경계 케이스 10행(`SYN-*`). 출처명 `STANDARD_SAMPLE`은 UI에서 "샘플(검증 전)"으로 표시(`isMock`).
+- 정기권(`SEASON_PASS`)은 시간제 요금 계산을 막지 않도록 변경. 1일권은 기준 UNKNOWN → 계산 불가.
+- **실제 원천 어댑터 미구현**: OpenAPI 규격·인증·제한·라이선스 미검증(OPEN_ISSUES 결정 기록 참조). API 키 필요.
+
 ## 미구현·후속
 - 운영시간 판정, 시간대별 요금 차등, 단가 혼합 구간, 정기권, 회차 시간: 엔진 미지원(근거 있는 원천 규칙 확인 후 추가).
 - 공휴일 원천(OPEN_ISSUES #4) 미정: 현재 holidays 테이블만 있음.

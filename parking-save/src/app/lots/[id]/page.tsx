@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getAppDb } from "@/server/app-db";
 import { getLotDetail } from "@/server/search";
 import { CopyButton } from "@/components/CopyButton";
-import { DAY_LABEL, OPERATING_LABEL, OWNERSHIP_LABEL, RULE_LABEL, TYPE_LABEL, feeText, occupancyText, won } from "@/lib/labels";
+import { DAY_LABEL, OPERATING_LABEL, OWNERSHIP_LABEL, RULE_LABEL, TYPE_LABEL, feeText, occupancyText, sourceLabel, won } from "@/lib/labels";
 import { formatKst, parseOffsetIso } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
@@ -71,7 +71,7 @@ export default async function LotPage({ params, searchParams }: { params: Promis
       </section>
 
       <section className="mt-4" aria-labelledby="src"><h2 id="src" className="font-semibold">데이터 출처</h2>
-        <p className="text-sm">{d.source.name === "MOCK" ? "목업(가상 데이터 — 실제 주차장 아님)" : d.source.name}</p>
+        <p className="text-sm">{sourceLabel(d.source.name)}</p>
         <p className="text-xs text-gray-600">원천 기준일 {d.source.updatedAt ? formatKst(d.source.updatedAt) : "미확인"} · 수집 {formatKst(d.source.collectedAt)}</p>
         {d.holidayDataAvailable === false && <p className="text-xs text-amber-800">입력 기간의 공휴일 데이터가 없어 요일별 규칙은 적용하지 않았습니다.</p>}
       </section>
