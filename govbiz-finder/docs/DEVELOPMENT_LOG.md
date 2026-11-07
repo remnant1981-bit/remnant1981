@@ -29,3 +29,4 @@
 - 관리자 수정 잠금, GitHub Actions CI(`.github/workflows/govbiz-ci.yml`: lint·typecheck·test·build), axe 접근성 점검.
 - 백업/복구 스크립트(`scripts/backup.ts`)와 복구 자동 테스트, 가상 샘플 기업 4종 판정 검증(`tests/ops.test.ts`), 운영 체크리스트(`docs/OPERATIONS_CHECKLIST.md`).
 - 기업마당 어댑터(`src/collector/bizinfo.ts`, 레지스트리, 관리자 수집 실행, 0003 마이그레이션). 공식 API 문서 기준 매핑, 가상 항목 기반 테스트 12개 추가(총 56). 인증키 미발급으로 실호출 미검증, 에러 메시지에 키 미노출 테스트 포함.
+- 기업마당 실응답 2건으로 어댑터 보정(hashtags 필드명, 전 시도 태그→전국, 연결 첨부·서명 토큰 URL 비저장, 중분류 반영). 테스트 57개.
