@@ -30,3 +30,10 @@ export function occupancyText(o: LotItem["occupancy"]): { main: string; sub?: st
   const c = { RELAXED: "여유", NORMAL: "보통", BUSY: "혼잡" }[o.congestion];
   return { main: `잔여 ${o.availableSpaces}면 / 전체 ${o.totalSpaces}면`, sub: `${c} · ${new Date(o.observedAt).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false })} 기준` };
 }
+
+/** 출처 표시명: 목업/샘플은 실데이터가 아님을 명시 */
+export function sourceLabel(name: string): string {
+  if (name === "MOCK") return "목업(가상 데이터 — 실제 주차장 아님)";
+  if (name === "STANDARD_SAMPLE") return "전국주차장정보표준데이터 샘플(검증 전 일부 행)";
+  return name;
+}

@@ -3,6 +3,8 @@
 import type { Db } from "./db";
 
 export const MOCK_SOURCE = "MOCK";
+/** 실서비스 데이터가 아닌 원천(목업/샘플 픽스처). UI에서 목업·샘플로 표시 */
+export const NON_PRODUCTION_SOURCES: string[] = [MOCK_SOURCE, "STANDARD_SAMPLE"];
 export const mockEnabled = () => process.env.PARKING_MOCK_DATA !== "false";
 
 /** 목업 목적지 지오코더(실제 지오코딩 아님 — OPEN_ISSUES D7). 좌표는 대략값 */

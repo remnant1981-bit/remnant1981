@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { LotItem } from "@/server/search";
-import { OPERATING_LABEL, OWNERSHIP_LABEL, TYPE_LABEL, distLabel, feeText, occupancyText } from "@/lib/labels";
+import { OPERATING_LABEL, OWNERSHIP_LABEL, TYPE_LABEL, distLabel, feeText, occupancyText, sourceLabel } from "@/lib/labels";
 import { formatKst } from "@/lib/time";
 
 export function LotCard({ item, query }: { item: LotItem; query: string }) {
@@ -23,7 +23,7 @@ export function LotCard({ item, query }: { item: LotItem; query: string }) {
         <div><dt className="text-gray-600">실시간 잔여면수</dt><dd>{occ.main}{occ.sub && <span className="block text-xs text-gray-600">{occ.sub}</span>}</dd></div>
       </dl>
       <p className="mt-3 text-xs text-gray-600">
-        출처: {item.source.name === "MOCK" ? "목업(가상 데이터)" : item.source.name} · 기준일 {formatKst(item.source.updatedAt ?? item.source.collectedAt)}
+        출처: {sourceLabel(item.source.name)} · 기준일 {formatKst(item.source.updatedAt ?? item.source.collectedAt)}
         {item.source.freshness === "STALE" && <strong className="ml-1 text-amber-800">· 오래된 데이터</strong>}
       </p>
     </li>
