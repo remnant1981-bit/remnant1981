@@ -27,3 +27,4 @@
 
 ## 추가 작업
 - 관리자 수정 잠금, GitHub Actions CI(`.github/workflows/govbiz-ci.yml`: lint·typecheck·test·build), axe 접근성 점검.
+- 백업/복구 스크립트(`scripts/backup.ts`)와 복구 자동 테스트, 가상 샘플 기업 4종 판정 검증(`tests/ops.test.ts`), 운영 체크리스트(`docs/OPERATIONS_CHECKLIST.md`).
