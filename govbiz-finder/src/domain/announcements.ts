@@ -175,8 +175,8 @@ export async function upsertAnnouncement(db: Db, sourceId: string, n: Normalized
     await writeChildren(db, id, n, now);
     return { id, action: "inserted" };
   }
-  const existing = await db.get<{ id: string; content_hash: string; source_id: string; source_notice_id: string }>(
-    "SELECT id, content_hash, source_id, source_notice_id FROM announcements WHERE id=?", [dup.id]);
+  const existing = await db.get<{ id: string; content_hash: string; source_id: string; source_notice_id: string; admin_locked: number }>(
+    "SELECT id, content_hash, source_id, source_notice_id, admin_locked FROM announcements WHERE id=?", [dup.id]);
   if (!existing) throw new Error("dedupe race");
   // 다른 원천에서 온 동일 공고: 출처만 보존(병합)
   const sameSource = existing.source_id === sourceId && existing.source_notice_id === n.sourceNoticeId;
@@ -186,6 +186,12 @@ export async function upsertAnnouncement(db: Db, sourceId: string, n: Normalized
     await db.run("UPDATE announcements SET last_checked_at=? WHERE id=?", [now, existing.id]);
     return { id: existing.id, action: "merged" };
   }
+  const byAdmin = changedBy.startsWith("admin:");
+  if (existing.admin_locked && !byAdmin) {
+    // 관리자 수정본은 수집으로 덮어쓰지 않음(최종 확인 시각만 갱신)
+    await db.run("UPDATE announcements SET last_checked_at=? WHERE id=?", [now, existing.id]);
+    return { id: existing.id, action: "unchanged" };
+  }
   if (existing.content_hash === n.contentHash) {
     await db.run("UPDATE announcements SET last_checked_at=?, application_status=?, status_basis=? WHERE id=?", [now, n.status, n.statusBasis, existing.id]);
     return { id: existing.id, action: "unchanged" };
@@ -194,8 +200,8 @@ export async function upsertAnnouncement(db: Db, sourceId: string, n: Normalized
     `UPDATE announcements SET canonical_url=?, title=?, organization=?, category=?, region_scope=?, target_summary=?, support_summary=?,
       support_amount_min=?, support_amount_max=?, support_amount_text=?, application_start=?, application_end=?, application_status=?,
       status_basis=?, eligibility_text=?, required_documents=?, application_method=?, contact_info=?, original_text=?, published_at=?,
-      content_hash=?, last_checked_at=?, updated_at=? WHERE id=?`,
-    [...cols(sourceId, n), now, now, existing.id],
+      content_hash=?, last_checked_at=?, updated_at=?, admin_locked=? WHERE id=?`,
+    [...cols(sourceId, n), now, now, byAdmin ? 1 : existing.admin_locked, existing.id],
   );
   await db.run("INSERT INTO announcement_revisions(id, announcement_id, changed_at, changed_by, change_summary, old_content_hash, new_content_hash) VALUES (?,?,?,?,?,?,?)",
     [newId(), existing.id, now, changedBy, "내용 변경 감지", existing.content_hash, n.contentHash]);

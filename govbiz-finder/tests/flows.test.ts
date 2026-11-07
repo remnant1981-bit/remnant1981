@@ -212,6 +212,12 @@ describe("관리자", () => {
     const audit = (await admin.call("GET", "/api/admin/audit")).body.items.map((x: any) => x.action);
     expect(audit).toEqual(expect.arrayContaining(["announcement.create", "announcement.update", "announcement.deactivate"]));
     expect((await db.all("SELECT * FROM announcement_revisions WHERE announcement_id=?", [id])).length).toBeGreaterThanOrEqual(2);
+    // 관리자 수정본은 수집으로 덮어쓰이지 않음
+    const mockRow = (await db.get<any>("SELECT id, title FROM announcements WHERE source_id='mock' LIMIT 1"))!;
+    const before = (await pub.call("GET", "/api/announcements/" + mockRow.id)).body.announcement;
+    await admin.call("PUT", "/api/admin/announcements/" + mockRow.id, { title: "관리자 수정 제목", organization: before.organization, url: before.canonical_url, categories: ["rnd"] });
+    await admin.call("POST", "/api/admin/collect", { sourceId: "mock" });
+    expect((await pub.call("GET", "/api/announcements/" + mockRow.id)).body.announcement.title).toBe("관리자 수정 제목");
     // 미연동 원천은 활성화 불가, 수집 실행은 mock 만
     expect((await admin.call("PUT", "/api/admin/sources/bizinfo", { enabled: true })).status).toBe(400);
     expect((await admin.call("POST", "/api/admin/collect", { sourceId: "bizinfo" })).status).toBe(400);
