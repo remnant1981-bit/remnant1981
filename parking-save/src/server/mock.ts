@@ -87,6 +87,7 @@ export async function ensureMockData(db: Db, now = new Date()): Promise<void> {
 export async function refreshMockOccupancy(db: Db, now = new Date()): Promise<void> {
   if (!mockEnabled()) return;
   await db.run("DELETE FROM occupancy_snapshots WHERE source_name = ?", [MOCK_SOURCE]);
+  await db.run("UPDATE holiday_coverage SET collected_at = ? WHERE source_name = ?", [iso(now), MOCK_SOURCE]); // 목업 공휴일은 항상 최신으로 취급
   for (const l of MOCK_LOTS) {
     if (!l.occ) continue;
     const row = await db.get<{ id: number }>("SELECT id FROM parking_lots WHERE source_name=? AND source_record_id=?", [MOCK_SOURCE, l.key]);

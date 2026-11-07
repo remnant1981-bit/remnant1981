@@ -6,6 +6,7 @@ import { distanceMeters, isValidCoord, type LatLng } from "@/domain/geo";
 import { operatingForStay, type OperatingStatus, type ScheduleRow } from "@/domain/operating";
 import { evaluateOccupancy, type OccupancyResult } from "@/domain/occupancy";
 import { kstYmd, parseOffsetIso } from "@/lib/time";
+import { HOLIDAY_COVERAGE_MAX_AGE_DAYS } from "@/collector/holidays";
 
 export const SORTS = ["free_first", "price_asc", "distance_asc", "availability_desc"] as const;
 export type Sort = (typeof SORTS)[number];
@@ -81,9 +82,11 @@ export const toSchedules = (rows: SchedRow[]): ScheduleRow[] =>
   rows.map((r) => ({ dayType: r.day_type, openTime: r.open_time, closeTime: r.close_time, allDay: r.all_day_flag === 1, closed: r.closed_flag === 1 }));
 
 /** 기간이 공휴일 데이터 보장 범위 안일 때만 공휴일 집합 반환, 아니면 null(판정 불가) */
-export async function loadHolidays(db: Db, start: Date, end: Date): Promise<Set<string> | null> {
+export async function loadHolidays(db: Db, start: Date, end: Date, now = new Date()): Promise<Set<string> | null> {
   const from = kstYmd(start.getTime()), to = kstYmd(end.getTime());
-  const cov = await db.get("SELECT 1 AS ok FROM holiday_coverage WHERE from_date <= ? AND to_date >= ? LIMIT 1", [from, to]);
+  // 커버리지가 기간을 덮고, 마지막 성공 수집이 오래되지 않았을 때만(임시공휴일 누락 위험) 판정 가능
+  const cutoff = new Date(now.getTime() - HOLIDAY_COVERAGE_MAX_AGE_DAYS * 86400_000).toISOString();
+  const cov = await db.get("SELECT 1 AS ok FROM holiday_coverage WHERE from_date <= ? AND to_date >= ? AND collected_at >= ? LIMIT 1", [from, to, cutoff]);
   if (!cov) return null;
   const rows = await db.all<{ date: string }>("SELECT date FROM holidays WHERE date BETWEEN ? AND ?", [from, to]);
   return new Set(rows.map((r) => r.date));
@@ -133,7 +136,7 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
     `SELECT * FROM parking_lots WHERE data_status NOT LIKE 'EXCLUDED%' AND latitude BETWEEN ? AND ? AND longitude BETWEEN ? AND ? AND parking_type IN (${types.map(() => "?").join(",")})`,
     [p.center.lat - dLat, p.center.lat + dLat, p.center.lng - dLng, p.center.lng + dLng, ...types]);
   const noCoord = (await db.get<{ c: number }>("SELECT COUNT(*) AS c FROM parking_lots WHERE latitude IS NULL OR longitude IS NULL"))?.c ?? 0;
-  const holidays = await loadHolidays(db, p.startAt, p.endAt);
+  const holidays = await loadHolidays(db, p.startAt, p.endAt, now);
 
   let items: LotItem[] = [];
   for (const lot of lots) {
@@ -200,7 +203,7 @@ export async function getLotDetail(db: Db, id: number, period: { startAt: Date; 
   const occupancy = evaluateOccupancy({ totalSpaces: snap?.total_spaces, availableSpaces: snap?.available_spaces, observedAt: snap?.observed_at }, now);
   let fee: FeeView | null = null, operating: OperatingStatus | null = null, holidayDataAvailable: boolean | null = null;
   if (period) {
-    const holidays = await loadHolidays(db, period.startAt, period.endAt);
+    const holidays = await loadHolidays(db, period.startAt, period.endAt, now);
     holidayDataAvailable = holidays !== null;
     const ev = await evaluateLot(db, lot, period, holidays, now);
     fee = ev.fee; operating = ev.operating;
