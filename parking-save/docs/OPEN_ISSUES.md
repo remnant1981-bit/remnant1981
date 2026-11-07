@@ -81,4 +81,21 @@
 - **사용자 결정 필요**: 주차장 원천의 "공휴일" 운영·요금 규칙을 일요일에도 적용할지. 법적 정의는 일요일 포함이며 표준데이터에 `평일+토요일+공휴일`로 7일 운영을 표기하는 사례가 있어 포함 가능성이 높으나, 원천 정의가 문서화되어 있지 않아 현재는 **일요일 규칙을 만들지 않고 '운영 확인 불가'로 둠**. 적용 시 원천별 정책 옵션(`sundayAsHoliday`)으로 구현 권장.
 - 한계: 지방공휴일·지자체 임시 무료개방일은 이 원천에 없음(주차장별 특기사항에 의존).
 
+---
+- 항목: #9 네이버 지도 연동 (**문서 검증 완료, 실기기 동작·이용 약관은 미검증**)
+- 조사일: 2026-11-07
+- 확인한 공식 문서/샘플: Ncloud Maps 문서 "URL Scheme for integration of Maps app" https://guide.ncloud-docs.com/docs/en/application-maps-url-scheme-vpc (한국어판 https://guide-gov.ncloud-docs.com/docs/naveropenapiv3-maps-url-scheme-url-scheme)
+- 확인 결과:
+  - 형식 `nmap://<action>?<params>&appname=<식별자>`. **appname 필수**(Android: applicationId, iOS: bundle ID, 모바일 웹: 웹 페이지 URL).
+  - 사용 액션: `route/car`(자동차), `route/walk`(도보), `place`(마커: lat·lng·name 필수), `navigation`, `search`. 경로 공통 파라미터 `slat/slng/sname`(선택, 생략 시 현재 위치), `dlat/dlng`(필수), `dname`(선택, URL 인코딩). 좌표 범위 위도 31.43~44.35, 경도 122.37~132.00.
+  - **앱 설치 필수**. 미설치 처리는 호출 측 구현: Android 모바일 웹은 Intent URL(`intent://…#Intent;scheme=nmap;…;package=com.nhn.android.nmap;end`)로 Play 스토어 자동 이동, iOS는 앱스토어(id311867728)로 분기(문서의 JS 타이머 예제 본문은 스크랩에서 비어 있어 미확인).
+  - 도보 길찾기 지원, 자전거·대중교통도 있음.
+- 영향 범위: `src/domain/map-link.ts`, `src/components/MapLinks.tsx`, 상세 화면.
+- 결정:
+  1. 자체 내비게이션 없이 `route/car`(현재 위치→주차장), `route/walk`(주차장→검색한 목적지), `place` 링크만 제공. 도보는 목적지 검색일 때만(현재 위치 검색은 목적지 없음).
+  2. Android: Intent URL 앵커. iOS: 클릭 시 scheme 호출 후 1.8초 내 화면 전환이 없으면 앱스토어·복사 대체 안내. 그 외(데스크톱): 버튼 비활성 + 주소·좌표 복사.
+  3. 좌표 범위 밖·appname 없음이면 링크 미생성(복사만).
+  4. appname은 환경변수 `SITE_URL`(운영 도메인) 사용.
+- 미검증/후속: Android·iOS 실기기에서 앱 호출·미설치 분기 확인, iOS 대체 동작 실측, 웹 지도 대체 URL(공식 문서 미확인이라 미구현), URL Scheme 이용 약관·브랜드 표기 정책 확인(릴리스 체크리스트).
+
 (원천 조사·검증 후 위 "결정 기록 형식"으로 계속 추가)
