@@ -16,6 +16,7 @@
     "sync:holidays": "tsx scripts/sync-holidays.ts",
     "quality": "tsx scripts/quality.ts",
     "sync:seoul": "tsx scripts/sync-seoul.ts",
+    "sync:standard": "tsx scripts/sync-standard.ts",
     "duplicates": "tsx scripts/duplicates.ts",
     "a11y": "node scripts/a11y.mjs"
   },
