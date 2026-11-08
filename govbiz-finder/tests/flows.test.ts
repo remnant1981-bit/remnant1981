@@ -73,12 +73,15 @@ describe("사용자 시나리오 (TEST_PLAN §4)", () => {
     expect(states.research_institute).toBe("MET");
     expect(states.business_status).toBe("UNKNOWN"); // 상태조회 안 했으므로 확인 필요
     expect(rnd.match.overall).toBe("needs_check");
-    const seoul = r.body.rows.find((x: any) => x.title.includes("서울시"));
-    expect(seoul.match.overall).toBe("likely_not_met");
+    // 입력한 소재지(경기도)와 맞지 않는 서울시 공고는 결과에서 제외되고 제외 건수가 안내됨
+    expect(r.body.rows.some((x: any) => x.title.includes("서울시"))).toBe(false);
+    expect(r.body.excluded).toBeGreaterThan(0);
+    expect(r.body.rows.every((x: any) => x.match.overall !== "likely_not_met")).toBe(true);
     expect(await db.get("SELECT 1 x FROM companies")).toBeUndefined(); // 어떤 것도 저장되지 않음
     // 지역 우선: 경기도 기업이면 경기도 공고가 서울 공고보다 앞
     const idx = (t: string) => r.body.rows.findIndex((x: any) => x.title.includes(t));
-    expect(idx("경기도 중소기업")).toBeLessThan(idx("서울시"));
+    expect(idx("경기도 중소기업")).toBeGreaterThanOrEqual(0);
+    expect(idx("경기도 중소기업")).toBeLessThan(idx("스마트설비"));
     // 잘못된 입력 거부
     expect((await c.call("POST", "/api/match/preview", { profile: { revenue_band: "임의값" } })).status).toBe(400);
   });

@@ -47,7 +47,7 @@ export function regionFromTags(tags: string[]): string {
   // 실제 응답: 전국 대상 공고는 모든 시도 태그를 나열한다(17개 중 15개 이상이면 전국으로 본다)
   if (regions.length === 0 || regions.length >= 15) return "전국";
   if (regions.length === 1) return regions[0];
-  return `${regions[0]} 외 ${regions.length - 1}곳`; // 복수 지역 공고: 첫 지역 기준 표기(지역 필터는 첫 지역에만 매칭 — 알려진 제한)
+  return regions.join("·"); // 복수 지역 공고: 전체 목록 보존(중점 구분). 지역 필터·적합성이 모든 지역을 고려함
 }
 
 function toIsoKst(v: string): string | null {

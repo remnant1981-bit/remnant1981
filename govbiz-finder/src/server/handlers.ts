@@ -95,8 +95,10 @@ export const handlers: Record<string, (req: Request, ...a: any[]) => Promise<Res
     await (await import("./auth")).rateLimit(c.db, `preview:${c.ip}`, 60, 600);
     const profile = validateProfile(b.profile ?? {});
     const p = parseSearchParams({ ...(b.query ?? {}), sort: "fit", size: "50" });
-    const result = await searchWithMatches(c.db, p, { ...profile, business_status: null });
-    return { ...result, stored: false };
+    const company = { ...profile, business_status: null };
+    const all = await searchWithMatches(c.db, p, company);
+    const result = await searchWithMatches(c.db, { ...p, eligible: true }, company); // 미충족 가능성 높음 제외
+    return { ...result, excluded: all.total - result.total, stored: false };
   }),
   "POST /api/company/claim": route({ auth: "user" }, async (req, c) => {
     const b = await readJson<{ bizNo?: unknown }>(req);

@@ -272,6 +272,24 @@ describe("지역 자동 판정과 해당 가능 필터", () => {
     expect(r.map((x) => x.field_key)).toEqual(["region_sido", "region_sigungu"]);
     expect(r[1].confidence).toBeLessThan(0.6); // 시군구 불일치는 미충족으로 단정하지 않음
   });
+  it("복수 지역 공고: 포함 지역이면 충족, 포함되지 않으면 미충족, 해석 불가 항목이 있으면 판정하지 않음", () => {
+    const T = "2026-06-01";
+    const r = regionRulesFor("서울특별시·경기도");
+    expect(r).toHaveLength(1);
+    expect(evaluateMatch(r, { region_sido: "경기도" }, T).overall).toBe("likely_met");
+    expect(evaluateMatch(r, { region_sido: "부산광역시" }, T).overall).toBe("likely_not_met");
+    expect(evaluateMatch(r, {}, T).overall).toBe("needs_check");
+    expect(regionRulesFor("전남광주·서울특별시")).toEqual([]);
+  });
+  it("복수 지역 공고는 포함된 어느 지역으로 검색해도 나온다", async () => {
+    const db = await freshDb({ mock: false });
+    const n = await normalizeAnnouncement({ ...base, sourceNoticeId: "R1", url: "https://example.org/r1", regionScope: "서울특별시·경기도·부산광역시" }, "2026-01-10");
+    await upsertAnnouncement(db, "bizinfo", n, "t");
+    for (const region of ["서울특별시", "경기도", "경기도 시흥시", "부산광역시"]) {
+      expect((await searchAnnouncements(db, parseSearchParams({ region }), "2026-01-10")).total, region).toBe(1);
+    }
+    expect((await searchAnnouncements(db, parseSearchParams({ region: "대구광역시" }), "2026-01-10")).total).toBe(0);
+  });
   it("다른 시도 공고는 미충족, 같은 시도는 충족, 시군구 표기 차이는 허용", () => {
     const T = "2026-06-01";
     const rules = regionRulesFor("경기도 시흥시");
