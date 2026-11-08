@@ -5,7 +5,7 @@ import type { Db } from "./db";
 export const SOURCES = [
   { id: "bizinfo", name: "기업마당", type: "api", status: "pending_key" },
   { id: "mss", name: "중소벤처기업부 공고/API", type: "api", status: "not_integrated" },
-  { id: "k-startup", name: "K-Startup", type: "api", status: "not_integrated" },
+  { id: "k-startup", name: "K-Startup", type: "api", status: "pending_key" },
   { id: "msit", name: "과학기술정보통신부 공고", type: "web", status: "not_integrated" },
   { id: "iris", name: "IRIS 국가연구개발사업", type: "web", status: "not_integrated" },
   { id: "smes24", name: "중소벤처24", type: "web", status: "not_integrated" },

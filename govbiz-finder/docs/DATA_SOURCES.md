@@ -4,7 +4,8 @@
 | 테스트(모의) 데이터 | 활성(mock) | 개발·테스트용. UI에 '테스트 데이터' 표시, sitemap/색인 제외 |
 | 관리자 수동 등록 | 활성 | 공식 원문 URL 필수 |
 | **기업마당** | **연동 완료(live) · PC 실수집 검증(2026-11-08, 1,326건)** | `src/collector/bizinfo.ts`. 실응답 2건으로 파싱 보정 완료. 클라우드 IP는 기업마당이 차단 → **수집은 국내 IP 환경(PC·국내 서버)에서만 가능**. 수집·재실행 멱등·`live` 전환 확인 |
-| 중소벤처기업부·K-Startup·과기정통부·IRIS·중소벤처24·판판대로·경기도/경기TP·시흥시/시흥산업진흥원 | **미연동·비활성** | API 이용조건·쿼터·약관·재배포 범위·robots 확인 전(OPEN_ISSUES #1,#7). 관리자 화면에서 활성화 불가 |
+| **K-Startup**(창업진흥원) | **어댑터 구현(pending_key)** | `src/collector/kstartup.ts`. 공공데이터포털 15125364, 무료·이용허락범위 제한 없음. `DATA_GO_KR_API_KEY` 설정 + 관리자 화면 활성화 후 수집. 실호출 검증 전 |
+| 중소벤처기업부·과기정통부·IRIS·중소벤처24·판판대로·경기도/경기TP·시흥시/시흥산업진흥원 | **미연동·비활성** | API 이용조건·쿼터·약관·재배포 범위·robots 확인 전(OPEN_ISSUES #1,#7). 관리자 화면에서 활성화 불가 |
 
 실 원천 추가 방법: `src/collector/types.ts`의 `SourceAdapter.fetch()`만 구현 → `scripts/collect.ts`/관리자 실행에 등록 → 약관 확인 후 `data_sources.integration_status='live'`로 변경.
 
@@ -28,3 +29,9 @@
 - 첨부 `fileNm`/`flpthNm`은 `@`로 여러 개가 이어지고 URL에 서명 토큰이 포함 → 토큰 URL은 저장하지 않고 파일명만 보존, 링크는 공식 공고 상세로 연결.
 - 지원분야 중분류(`pldirSportRealmMlsfcCodeNm`)의 "사업화" 등을 분야 태그에 반영.
 - 인증키가 사용신청 시 입력한 IP에 묶여 있는지는 미확인. 필요 시 기업마당(02-867-9765)에 문의.
+
+## K-Startup 연동 상세
+- 호출: `GET https://apis.data.go.kr/B552735/kisedKstartupService01/getAnnouncementInformation01?serviceKey=…&page=n&perPage=100&returnType=json&rcrt_prgs_yn=Y` (페이지 간 300ms, 최대 20페이지)
+- 키 발급: data.go.kr 로그인 → '창업진흥원_K-Startup(사업소개,사업공고,콘텐츠 등)_조회서비스' 활용신청(자동승인) → 마이페이지의 **일반 인증키(Decoding)** 를 `DATA_GO_KR_API_KEY`로 설정. 공공데이터포털 키는 계정 단위라 국세청 상태조회 등 다른 활용신청에도 같은 키 사용.
+- 매핑: pbanc_sn→원천 ID, detl_pg_url→원문, biz_pbanc_nm→공고명, pbanc_ntrp_nm→기관, supt_regin(약칭·쉼표)→지역, pbanc_rcpt_bgng/end_dt(YYYYMMDD)→접수기간, supt_biz_clsfc→분야(+창업), aply_trgt/biz_enyy/biz_trgt_age/aply_trgt_ctnt→자격요건 원문, biz_enyy 상한(‘N년미만’ 최대값)→업력 규칙(신뢰도 0.6), 모집 종료(rcrt_prgs_yn=N) 제외.
+- 기업마당과 같은 공고는 중복 판정(정규화 제목·기관)으로 병합.

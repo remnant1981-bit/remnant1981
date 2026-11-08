@@ -15,6 +15,7 @@
 cd /d C:\Users\User\remnant1981\govbiz-finder\remnant1981\govbiz-finder
 set DATABASE_PATH=./data/real.sqlite
 set BIZINFO_API_KEY=발급키
+set DATA_GO_KR_API_KEY=공공데이터포털_일반인증키
 call npm run collect >> collect.log 2>&1
 ```
 2. 작업 스케줄러 → 기본 작업 만들기 → 매일, 시간 지정 → 프로그램: 위 bat 파일. "가장 높은 권한" 불필요.
