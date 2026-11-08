@@ -58,6 +58,7 @@ export default async function LotPage({ params, searchParams }: { params: Promis
           <>
             <p className="text-sm text-gray-700">{formatKst(d.requestedPeriod.startAt)} ~ {formatKst(d.requestedPeriod.endAt)}</p>
             <p className="text-lg font-bold">{fee.main}</p>{fee.sub && <p className="text-sm text-gray-700">{fee.sub}</p>}
+            {d.fee?.status === "OK" && d.fee.assumptions?.map((a) => <p key={a} className="mt-1 rounded border border-amber-400 bg-amber-50 p-2 text-sm">{a}</p>)}
             {d.fee?.status === "OK" && d.fee.notes && <ul className="mt-1 list-disc pl-5 text-xs text-gray-600">{d.fee.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
             {d.operating && <p className="mt-1 text-sm">운영 상태(입·출차 시각 기준): {OPERATING_LABEL[d.operating]}{d.operatingAssumed && <span className="text-amber-800"> (일요일은 공휴일 규칙 적용 · 추정)</span>}</p>}
           </>

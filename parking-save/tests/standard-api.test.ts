@@ -89,13 +89,16 @@ describe("페이지 수집 어댑터", () => {
     await collect(new StandardApiAdapter(async (p, n) => { calls.push(p); return envelope(all.slice((p - 1) * n, p * n), 200); }, 100));
     expect(calls).toEqual([1, 2]);
   });
-  it("중간 페이지 실패 → 예외(runSync가 FAILED 기록), 이전 페이지 행은 저장 유지", async () => {
+  it("중간 페이지 실패 → FAILED 기록, 이번 실행은 저장하지 않고 이전 수집 결과는 그대로 유지", async () => {
     const db = await createSqliteDb(":memory:"); await migrate(db);
     const all = mk(150);
+    const okAdapter = new StandardApiAdapter(async (p, n) => envelope(all.slice((p - 1) * n, p * n), 150), 100);
+    expect((await runSync(db, okAdapter)).inserted).toBe(150);              // 먼저 정상 수집
     const a = new StandardApiAdapter(async (p, n) => { if (p === 2) throw new StandardApiError("NETWORK", "x"); return envelope(all.slice((p - 1) * n, p * n), 150); }, 100);
     const r = await runSync(db, a);
-    expect(r.status).toBe("FAILED"); expect(r.inserted).toBe(100);
-    const log = await db.get<{ status: string; error_summary: string }>("SELECT * FROM source_sync_logs");
+    expect(r.status).toBe("FAILED"); expect(r.inserted).toBe(0);
+    expect((await db.get<{ c: number }>("SELECT COUNT(*) c FROM parking_lots"))!.c).toBe(150);
+    const log = await db.get<{ status: string; error_summary: string }>("SELECT * FROM source_sync_logs ORDER BY id DESC LIMIT 1");
     expect(log).toMatchObject({ status: "FAILED" }); expect(log!.error_summary).not.toMatch(/https?:|serviceKey/i);
   });
   it("페이지 상한 초과(무한 루프 방지)", async () => {

@@ -17,7 +17,7 @@ export type TypeFilter = "on_street" | "off_street" | "all";
 export const DEFAULT_RADIUS = 1000;
 export const MAX_RADIUS = 5000;
 export const MAX_STAY_DAYS = 31;
-export const STALE_DATA_DAYS = 7; // 원천 기준일 신선도 임시값
+import { staleDaysFor } from "./freshness";
 
 export interface SearchParams {
   center: LatLng; centerLabel: string; centerKind: "current_location" | "destination";
@@ -93,9 +93,9 @@ export async function loadHolidays(db: Db, start: Date, end: Date, now = new Dat
   return new Set(rows.map((r) => r.date));
 }
 
-export interface FeeView { status: "OK" | "UNKNOWN"; amount?: number; isFree?: boolean; reason?: string; detail?: string; notes?: string[]; days?: unknown[] }
+export interface FeeView { status: "OK" | "UNKNOWN"; amount?: number; isFree?: boolean; reason?: string; detail?: string; notes?: string[]; assumptions?: string[]; days?: unknown[] }
 export function feeView(r: FeeResult | { status: "UNKNOWN"; reason: string; detail: string }): FeeView {
-  return r.status === "OK" ? { status: "OK", amount: r.amount, isFree: r.isFree, notes: r.notes, days: r.days } : { status: "UNKNOWN", reason: r.reason, detail: r.detail };
+  return r.status === "OK" ? { status: "OK", amount: r.amount, isFree: r.isFree, notes: r.notes, assumptions: "assumptions" in r ? r.assumptions : [], days: r.days } : { status: "UNKNOWN", reason: r.reason, detail: r.detail };
 }
 
 export interface LotItem {
@@ -130,7 +130,7 @@ async function evaluateLot(db: Db, lot: LotRow, p: Pick<SearchParams, "startAt" 
   const operating = operatingForStay(sched, p.startAt.getTime(), p.endAt.getTime(), holidays);
   const operatingAssumed = operating !== "UNKNOWN" && operatingUsesAssumed(sched, p.startAt.getTime(), p.endAt.getTime(), holidays);
   const occupancy = await occupancyFor(db, lot.id, now);
-  const stale = (now.getTime() - Date.parse(lot.source_updated_at ?? lot.collected_at)) / 86400_000 > STALE_DATA_DAYS;
+  const stale = (now.getTime() - Date.parse(lot.source_updated_at ?? lot.collected_at)) / 86400_000 > staleDaysFor(lot.source_name);
   return { fee, operating, operatingAssumed, occupancy, freshness: (stale ? "STALE" : "FRESH") as "FRESH" | "STALE", rules, sched };
 }
 

@@ -29,7 +29,7 @@ export interface FeeInput {
 }
 export interface DayBreakdown { date: string; dayType: DayType; minutes: number; freeMinutes: number; chargeableMinutes: number; fee: number; capped: boolean }
 export type FeeResult =
-  | { status: "OK"; amount: number; isFree: boolean; days: DayBreakdown[]; appliedRules: Array<string | number>; notes: string[] }
+  | { status: "OK"; amount: number; isFree: boolean; days: DayBreakdown[]; appliedRules: Array<string | number>; notes: string[]; assumptions: string[] }
   | { status: "UNKNOWN"; reason: FeeUnknownReason; detail: string }; // UI: 정확한 요금 계산 불가
 
 const unknown = (reason: FeeUnknownReason, detail: string): FeeResult => ({ status: "UNKNOWN", reason, detail });
@@ -72,6 +72,8 @@ export function calculateFee(input: FeeInput): FeeResult {
   if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) return unknown("INVALID_PERIOD", "종료 시각은 시작 시각보다 늦어야 함");
   if (input.rules.length === 0) return unknown("NO_RULES", "요금 규칙 없음 (0원 아님)");
 
+  const singleDay = kstDayStart(s) === kstDayStart(e - 1); // 종료 시각 직전까지 같은 KST 날짜(정확히 다음 자정 종료도 포함)
+
   // 규칙 검증
   for (const r of input.rules) {
     if (r.dayType === "UNKNOWN") return unknown("RULE_DAYTYPE_UNKNOWN", "적용 요일 구분이 불명확한 규칙 존재");
@@ -83,7 +85,12 @@ export function calculateFee(input: FeeInput): FeeResult {
     if (r.amount == null || !Number.isFinite(r.amount) || r.amount < 0) return unknown("INCOMPLETE_RULE", "금액 미확인 규칙");
     if (r.ruleType !== "DAILY_MAX" && (r.durationMinutes == null || !(r.durationMinutes > 0))) return unknown("INCOMPLETE_RULE", "단위 시간 미확인 규칙");
     if (r.ruleType === "DAILY_MAX" && r.dailyMaxBasis !== "CALENDAR_DAY") {
-      return unknown("UNSUPPORTED_DAILY_MAX_BASIS", "일일 최대요금 기준(날짜 경계)이 확인되지 않았거나 달력일 외 기준");
+      // 기준이 '입차 24시간' 또는 '불명'이면, 달력일 해석과 24시간 해석이 같은 결과가 되는 경우(자정을 넘지 않는 단일 일자 이용)에만 상한으로 적용한다.
+      // 사용자 결정(2026-11-08): 표준데이터 '1일주차권요금'을 이 방식으로 취급. 기준 필드 자체가 없으면(null/undefined) 계속 계산 불가.
+      const okBasis = r.dailyMaxBasis === "UNKNOWN" || r.dailyMaxBasis === "ENTRY_24H";
+      if (!okBasis || !singleDay) {
+        return unknown("UNSUPPORTED_DAILY_MAX_BASIS", "일일 최대요금 기준(날짜 경계)이 확인되지 않았고 자정을 넘기는 이용이라 계산 불가");
+      }
     }
   }
   if (input.holidays === null && input.rules.some((r) => r.dayType !== "EVERYDAY")) {
@@ -93,7 +100,7 @@ export function calculateFee(input: FeeInput): FeeResult {
   const days: DayBreakdown[] = [];
   const applied = new Set<string | number>();
   let rate: Rate | null = null;
-  const perDay: Array<{ d: DayBreakdown; chargeable: number; dailyMax: number | null }> = [];
+  const perDay: Array<{ d: DayBreakdown; chargeable: number; dailyMax: number | null; assumedBasis: boolean }> = [];
 
   for (let ds = kstDayStart(s); ds < e; ds += DAY_MS) {
     const a = Math.max(s, ds), b = Math.min(e, ds + DAY_MS);
@@ -113,7 +120,7 @@ export function calculateFee(input: FeeInput): FeeResult {
     const chargeable = minutes - freeMinutes;
     freeRules.forEach((r) => r.id != null && applied.add(r.id));
 
-    let dailyMax: number | null = null;
+    let dailyMax: number | null = null, assumedBasis = false;
     if (chargeable > 0) {
       const base = pick("BASE"), add = pick("ADDITIONAL"), dm = pick("DAILY_MAX");
       if (base.length === 0) return unknown("INCOMPLETE_RULE", `${ymd}: 기본요금 규칙 없음 (유료 구간 존재)`);
@@ -123,26 +130,32 @@ export function calculateFee(input: FeeInput): FeeResult {
       if (rate && JSON.stringify(rate) !== JSON.stringify(r)) return unknown("UNSUPPORTED_RATE_CHANGE", "기간 중 요금 단가가 달라지는 경우(평일↔주말 등 유료 구간 혼합)는 미지원");
       rate = r;
       dailyMax = dm.length ? dm[0].amount! : null;
+      assumedBasis = dm.length > 0 && dm[0].dailyMaxBasis !== "CALENDAR_DAY";
       [...base, ...add, ...dm].forEach((x) => x.id != null && applied.add(x.id));
     }
     const d: DayBreakdown = { date: ymd, dayType, minutes, freeMinutes, chargeableMinutes: chargeable, fee: 0, capped: false };
     days.push(d);
-    perDay.push({ d, chargeable, dailyMax });
+    perDay.push({ d, chargeable, dailyMax, assumedBasis });
   }
 
   // 누적 유료 시간 기준 요금의 일별 증분을 일일 최대로 제한
   let cum = 0, prevFee = 0, total = 0;
-  for (const { d, chargeable, dailyMax } of perDay) {
+  const assumptions: string[] = [];
+  for (const { d, chargeable, dailyMax, assumedBasis } of perDay) {
     if (chargeable <= 0 || !rate) continue;
     cum += chargeable;
     const f = fee(cum, rate);
     if (f === null) return unknown("INCOMPLETE_RULE", "기본 단위 초과분의 추가요금 규칙 없음");
     let inc = f - prevFee;
     prevFee = f;
-    if (dailyMax != null && inc > dailyMax) { inc = dailyMax; d.capped = true; }
+    if (dailyMax != null && inc > dailyMax) {
+      inc = dailyMax; d.capped = true;
+      // 상한이 실제로 요금을 낮춘 경우에만 '추정'으로 표시(상한이 걸리지 않으면 결과에 영향 없음)
+      if (assumedBasis && assumptions.length === 0) assumptions.push("1일권 요금을 일일 최대요금으로 간주한 추정입니다(자정을 넘지 않는 이용에 한함, 실제 판매·적용 여부는 현장 확인 필요)");
+    }
     d.fee = inc;
     total += inc;
   }
   const notes = ["일일 최대요금은 달력일(KST 00:00) 기준으로 적용", "단위 시간 올림은 전체 이용 구간 누적 기준 (날짜 경계에서 분할하지 않음)"];
-  return { status: "OK", amount: total, isFree: total === 0, days, appliedRules: [...applied], notes };
+  return { status: "OK", amount: total, isFree: total === 0, days, appliedRules: [...applied], notes, assumptions };
 }
