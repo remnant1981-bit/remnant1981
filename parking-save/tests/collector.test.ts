@@ -20,8 +20,11 @@ describe("정규화", () => {
     expect(l).toMatchObject({ ownershipType: "PUBLIC", parkingType: "OFF_STREET", totalSpaces: 42, latitude: 35.83224429, operatorName: "대구광역시 달서구청" });
     expect(l.sourceUpdatedAt).toBe("2026-10-05T15:00:00.000Z"); // 2026-10-06 00:00 KST
     expect(l.feeRules).toEqual([{ ruleType: "FREE", amount: null, durationMinutes: null, dayType: "EVERYDAY", dailyMaxBasis: null }]);
-    expect(l.schedules.map((s) => [s.dayType, s.allDay])).toEqual([["WEEKDAY", true], ["SATURDAY", true], ["HOLIDAY", true]]);
-    expect(l.schedules.some((s) => s.dayType === "SUNDAY")).toBe(false); // 일요일 운영은 원천에 없음 → 만들지 않음
+    expect(l.schedules.map((s) => [s.dayType, s.allDay])).toEqual([["WEEKDAY", true], ["SATURDAY", true], ["HOLIDAY", true], ["SUNDAY", true]]);
+    // 일요일은 원천에 항목이 없어 공휴일 규칙을 적용(사용자 결정 2026-11-08) — 추정으로 표시
+    expect(l.schedules.find((s) => s.dayType === "SUNDAY")).toMatchObject({ assumed: true, openTime: "00:00", closeTime: "23:59" });
+    expect(l.schedules.filter((s) => s.assumed)).toHaveLength(1);
+    expect(l.qualityFlags).toContain("SUNDAY_ASSUMED_HOLIDAY_RULE");
   });
   it("유료: 기본+추가 규칙, 06~22시 일정은 종일 아님", () => {
     const l = ok("SYN-1");
@@ -140,5 +143,44 @@ describe("수집 데이터 검색·요금 연동", () => {
     expect(res.items.every((i) => i.isMock)).toBe(true);
     expect(res.dataCoverage.excludedNoCoordinates).toBe(1); // 좌표 불량 시설은 검색 제외로 집계
     expect(res.items.some((i) => i.name.includes("좌표 뒤바뀜"))).toBe(false);
+  });
+});
+
+describe("일요일 = 공휴일 규칙 적용(추정)", () => {
+  it("공휴일 항목이 없으면 일요일 일정도 만들지 않음 (운영요일에 공휴일 미포함)", () => {
+    const r = normalizeStandardRow({ ...byId("SYN-1"), 운영요일: "평일+토요일" });
+    if (r.kind !== "ok") throw new Error();
+    expect(r.lot.schedules.map((s) => s.dayType)).toEqual(["WEEKDAY", "SATURDAY"]);
+    expect(r.lot.qualityFlags).not.toContain("SUNDAY_ASSUMED_HOLIDAY_RULE");
+  });
+  it("운영요일에 '일요일'이 명시되면 임의 복사하지 않음", () => {
+    const r = normalizeStandardRow({ ...byId("SYN-1"), 운영요일: "평일+일요일+공휴일" });
+    if (r.kind !== "ok") throw new Error();
+    expect(r.lot.schedules.some((s) => s.dayType === "SUNDAY")).toBe(false);
+  });
+  it("검색: 일요일 운영 판정 + 추정 표시, 평일에는 추정 아님, 추정 유의점 노출", async () => {
+    const db = await createSqliteDb(":memory:"); await migrate(db);
+    await runSync(db, new FixtureAdapter("STANDARD_SAMPLE", FIX));
+    // 공휴일 판정이 가능해야 요일별 일정을 쓴다(커버리지 없으면 확인 불가가 정상)
+    await db.run("INSERT INTO holiday_coverage(source_name, from_date, to_date, collected_at) VALUES ('T','2026-01-01','2026-12-31','2026-11-06T00:00:00Z')");
+    const search = async (start: string, end: string) => {
+      const r = parseSearchParams(new URLSearchParams({ lat: "35.83", lng: "128.55", radiusMeters: "2000", startAt: start, endAt: end }));
+      if (!r.ok) throw new Error(r.code);
+      return searchLots(db, r.params, new Date("2026-11-06T09:00:00+09:00"));
+    };
+    // 2026-11-08은 일요일. SYN-1은 06~22시 운영
+    const sun = await search("2026-11-08T10:00:00+09:00", "2026-11-08T11:00:00+09:00");
+    const lot = sun.items.find((i) => i.name.includes("달서 유료"))!;
+    expect(lot.operating).toBe("OPERATING");
+    expect(lot.operatingAssumed).toBe(true);
+    expect(lot.explanation.cautions.join()).toContain("추정");
+    const sunLate = await search("2026-11-08T23:00:00+09:00", "2026-11-08T23:30:00+09:00");
+    expect(sunLate.items.find((i) => i.name.includes("달서 유료"))!.operating).toBe("OUTSIDE");
+    const mon = await search("2026-11-09T10:00:00+09:00", "2026-11-09T11:00:00+09:00");
+    const monLot = mon.items.find((i) => i.name.includes("달서 유료"))!;
+    expect(monLot.operating).toBe("OPERATING");
+    expect(monLot.operatingAssumed).toBe(false);
+    // 운영요일 미기재 시설은 여전히 확인 불가(추정 안 함)
+    expect(sun.items.find((i) => i.name.includes("구분·유형 미기재"))!.operating).toBe("UNKNOWN");
   });
 });

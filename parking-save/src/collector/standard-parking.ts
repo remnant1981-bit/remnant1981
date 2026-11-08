@@ -96,6 +96,12 @@ function mapSchedules(row: RawRow, flags: string[]): NormalizedSchedule[] {
     const allDay = o === "00:00" && (c === "23:59" || c === "24:00");
     out.push({ dayType, openTime: o, closeTime: c, allDay });
   }
-  // 일요일은 원천에 별도 항목이 없어 '공휴일'에 포함되는지 알 수 없음 → 일요일 일정은 만들지 않음(운영 확인 불가)
+  // 일요일: 원천에 별도 항목이 없다. 법령상 일요일은 공휴일(관공서의 공휴일에 관한 규정 제2조)이고 '평일+토요일+공휴일'은 7일 운영 표기와
+  // 부합하므로, 사용자 결정(2026-11-08)에 따라 표준데이터에 한해 공휴일 일정을 일요일에도 적용하되 추정으로 표시한다. 실데이터 확인 후 재검토.
+  const hol = out.find((x) => x.dayType === "HOLIDAY");
+  if (hol && !days.includes("일요일")) {
+    out.push({ ...hol, dayType: "SUNDAY", assumed: true });
+    flags.push("SUNDAY_ASSUMED_HOLIDAY_RULE");
+  }
   return out;
 }

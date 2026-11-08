@@ -107,7 +107,7 @@ export async function buildQualityReport(db: Db, now = new Date()): Promise<Qual
   // 데이터 이상률
   const prodTotal = totals.lots - (await one(`SELECT COUNT(*) c FROM parking_lots WHERE ${live} AND source_name IN (${NON_PRODUCTION_SOURCES.map(() => "?").join(",")})`, NON_PRODUCTION_SOURCES));
   if (prodTotal > 0) {
-    const badCoord = await one(`SELECT COUNT(*) c FROM parking_lots WHERE ${live} AND (latitude IS NULL OR longitude IS NULL) AND source_name NOT IN (${NON_PRODUCTION_SOURCES.map(() => "?").join(",")})`, NON_PRODUCTION_SOURCES);
+    const badCoord = await one(`SELECT COUNT(*) c FROM parking_lots WHERE ${live} AND (latitude IS NULL OR longitude IS NULL) AND (quality_flags IS NULL OR quality_flags NOT LIKE '%NO_COORDS_BY_DESIGN%') AND source_name NOT IN (${NON_PRODUCTION_SOURCES.map(() => "?").join(",")})`, NON_PRODUCTION_SOURCES);
     if (badCoord / prodTotal > QUALITY_THRESHOLDS.badCoordRatio) alerts.push({ code: "COORD_QUALITY", level: "WARN", message: `좌표 없음/불량 ${badCoord}/${prodTotal}곳 (${((badCoord / prodTotal) * 100).toFixed(1)}%)` });
     if (calculableRatio != null && 1 - calculableRatio > QUALITY_THRESHOLDS.feeUnknownRatio) alerts.push({ code: "FEE_UNKNOWN_HIGH", level: "INFO", message: `기준 기간 요금 계산 불가 시설 비율 ${((1 - calculableRatio) * 100).toFixed(0)}%` });
   }

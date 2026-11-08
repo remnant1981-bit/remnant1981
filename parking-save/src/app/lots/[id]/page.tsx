@@ -54,7 +54,7 @@ export default async function LotPage({ params, searchParams }: { params: Promis
             <p className="text-sm text-gray-700">{formatKst(d.requestedPeriod.startAt)} ~ {formatKst(d.requestedPeriod.endAt)}</p>
             <p className="text-lg font-bold">{fee.main}</p>{fee.sub && <p className="text-sm text-gray-700">{fee.sub}</p>}
             {d.fee?.status === "OK" && d.fee.notes && <ul className="mt-1 list-disc pl-5 text-xs text-gray-600">{d.fee.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
-            {d.operating && <p className="mt-1 text-sm">운영 상태(입·출차 시각 기준): {OPERATING_LABEL[d.operating]}</p>}
+            {d.operating && <p className="mt-1 text-sm">운영 상태(입·출차 시각 기준): {OPERATING_LABEL[d.operating]}{d.operatingAssumed && <span className="text-amber-800"> (일요일은 공휴일 규칙 적용 · 추정)</span>}</p>}
           </>
         ) : <p className="text-sm">주차 시작·종료 일시를 지정해 검색하면 예상 요금을 계산합니다.</p>}
         <h3 className="mt-3 text-sm font-semibold">요금 규칙</h3>
@@ -67,7 +67,7 @@ export default async function LotPage({ params, searchParams }: { params: Promis
 
       <section className="mt-4" aria-labelledby="op"><h2 id="op" className="font-semibold">운영시간</h2>
         {d.operatingSchedules.length === 0 ? <p className="text-sm">운영시간 정보 없음 (24시간 운영 아님)</p> : (
-          <ul className="text-sm">{d.operatingSchedules.map((o, i) => <li key={i}>{DAY_LABEL[o.dayType]}: {o.closed ? "휴무" : o.allDay ? "24시간" : `${o.openTime ?? "?"} ~ ${o.closeTime ?? "?"}`}</li>)}</ul>)}
+          <ul className="text-sm">{d.operatingSchedules.map((o, i) => <li key={i}>{DAY_LABEL[o.dayType]}: {o.closed ? "휴무" : o.allDay ? "24시간" : `${o.openTime ?? "?"} ~ ${o.closeTime ?? "?"}`}{o.assumed && <span className="text-amber-800"> (공휴일 규칙 적용 · 추정)</span>}</li>)}</ul>)}
       </section>
 
       <section className="mt-4" aria-labelledby="sp"><h2 id="sp" className="font-semibold">주차면수</h2>

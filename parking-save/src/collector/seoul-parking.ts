@@ -6,6 +6,8 @@
 //  - 갱신시각 NOW_PRK_VHCL_UPDT_TM은 시간대 표기가 없는 'YYYY-MM-DD HH:mm:ss'. 서울시 데이터이므로 KST로 가정(미확인).
 //  - 응답에 위·경도가 없다 → 이 데이터만으로는 좌표 검색 불가(다른 원천과의 연결 필요).
 //  - DAY_MAX_CRG=0.0, SAT/LHLDY_CHGD_FREE_SE="N"(이름 "무료")는 의미 불명 → 요금 규칙으로 변환하지 않는다.
+import { SEOUL_OCCUPANCY_SOURCE } from "@/domain/occupancy";
+export const SEOUL_SOURCE = SEOUL_OCCUPANCY_SOURCE;
 export type SeoulRow = Record<string, string | number | null | undefined>;
 export class SeoulApiError extends Error { constructor(readonly code: string, msg: string) { super(msg); } }
 
