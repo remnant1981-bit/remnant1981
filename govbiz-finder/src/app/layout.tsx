@@ -30,7 +30,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <nav aria-label="주 메뉴" className="flex flex-wrap items-center gap-1 text-sm">
               <NavLinks items={[
                 { href: "/search", label: "공고 검색" },
-                ...(v.profile ? [{ href: "/recommend?tab=met", label: "우리 기업 공고", strong: true }] : [{ href: "/recommend", label: "우리 기업 맞춤 공고", strong: true }]),
+                ...(v.profile ? [{ href: "/recommend", label: "우리 기업 공고", strong: true }] : [{ href: "/recommend", label: "우리 기업 맞춤 공고", strong: true }]),
                 ...(v.session ? [{ href: "/my", label: "내 공고·알림" }, { href: "/company", label: "기업정보" }] : []),
                 ...(v.session?.user.role === "admin" ? [{ href: "/admin", label: "관리자" }] : []),
               ]} />

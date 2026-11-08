@@ -36,12 +36,20 @@ export interface RuleResult {
   state: RuleState;
   reason: string;
   excerpt: string | null;
+  /** UNKNOWN 사유가 '기업정보 미입력'인지 여부(입력하면 자동 판정 가능) */
+  missing?: boolean;
+  /** 규칙 신뢰도(0~1). 공고명·대상 문구에서 추정한 규칙은 낮음 */
+  confidence?: number;
 }
 export interface MatchResult {
   overall: Overall;
   score: number | null;   // 참고용 0~100
   results: RuleResult[];
   unknownCount: number;
+  /** 판정 정확도(0~100): 확정 판정된 조건 비율 × 규칙 신뢰도. 규칙이 없으면 null */
+  accuracy: number | null;
+  /** 입력하면 자동 판정되는 미입력 기업정보 항목 라벨 */
+  missingLabels: string[];
 }
 
 const LABELS: Record<string, string> = {
@@ -86,8 +94,10 @@ export function evaluateRule(rule: Rule, c: CompanyProfile, today: string): Rule
   const excerpt = rule.source_excerpt ?? null;
   let expected: unknown;
   try { expected = JSON.parse(rule.expected_value); } catch { expected = rule.expected_value; }
-  const mk = (state: RuleState, reason: string): RuleResult => ({ fieldKey: rule.field_key, label, state, reason, excerpt });
-  const unknown = (why = `${label} 정보가 입력되지 않아 확인이 필요합니다.`) => mk("UNKNOWN", why);
+  const confidence = Math.max(0, Math.min(1, rule.confidence ?? 1));
+  const mk = (state: RuleState, reason: string, missing = false): RuleResult => ({ fieldKey: rule.field_key, label, state, reason, excerpt, confidence, ...(missing ? { missing } : {}) });
+  // 인자 없이 호출 = 기업정보 미입력, 사유를 주면 = 원문/해석 문제
+  const unknown = (why?: string) => (why ? mk("UNKNOWN", why) : mk("UNKNOWN", `${label} 정보가 입력되지 않아 확인이 필요합니다.`, true));
 
   // 낮은 신뢰도 규칙은 불일치로 확정하지 않는다
   const lowConf = (rule.confidence ?? 1) < 0.6;
@@ -150,7 +160,7 @@ export function evaluateRule(rule: Rule, c: CompanyProfile, today: string): Rule
         : notMet(`기업 규모(${c.enterprise_size})가 지원 대상(${allowed.join(", ")})에 해당하지 않습니다.`);
     }
     case "certification": {
-      if (!present(c.certifications)) return unknown("보유 인증 정보가 입력되지 않아 확인이 필요합니다.");
+      if (!present(c.certifications)) return mk("UNKNOWN", "보유 인증 정보가 입력되지 않아 확인이 필요합니다.", true);
       const have = c.certifications.split(",");
       const need = (Array.isArray(expected) ? expected : [expected]).map(String);
       return need.some((x) => have.includes(x)) ? mk("MET", `보유 인증(${need.filter((x) => have.includes(x)).join(", ")})이 요건과 일치합니다.`)
@@ -187,7 +197,10 @@ export function evaluateMatch(rules: Rule[], c: CompanyProfile | null, today: st
     if (notMet) score = Math.round((results.filter((r) => r.state === "MET").length / results.length) * 40);
     else score = Math.round((results.reduce((s, r) => s + (r.state === "MET" ? 1 : 0.5), 0) / results.length) * 100);
   }
-  return { overall, score, results, unknownCount };
+  // 정확도: 확정(MET/NOT_MET)된 조건만 신뢰도만큼 반영. 미입력·원문 확인 조건은 0.
+  const accuracy = results.length ? Math.round((results.reduce((s, r) => s + (r.state === "UNKNOWN" ? 0 : r.confidence ?? 1), 0) / results.length) * 100) : null;
+  const missingLabels = [...new Set(results.filter((r) => r.missing).map((r) => r.label))];
+  return { overall, score, results, unknownCount, accuracy, missingLabels };
 }
 
 export const OVERALL_LABEL: Record<Overall, string> = {

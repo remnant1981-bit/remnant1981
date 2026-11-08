@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { RowWithMatch } from "@/server/recommend";
-import { CategoryTags, FitChip, Provenance, StatusChip, TestBadge } from "./ui";
+import { AccuracyChip, CategoryTags, FitChip, Provenance, StatusChip, TestBadge } from "./ui";
 import { BookmarkButton } from "./BookmarkButton";
 import { deadlineDays } from "@/domain/status";
 import { seoulToday } from "@/lib/time";
@@ -9,8 +9,9 @@ import { shortSummary } from "@/lib/format";
 export function AnnouncementCard({ r, canBookmark, bookmarked }: { r: RowWithMatch; canBookmark: boolean; bookmarked?: boolean }) {
   const d = r.application_status === "open" ? deadlineDays(r.application_end, seoulToday()) : null;
   const soon = d !== null && d >= 0 && d <= 7;
+  const check = r.match?.overall === "needs_check";
   return (
-    <article className="card p-4">
+    <article className="card p-4" style={check ? { borderLeft: "4px solid #f59e0b" } : r.match?.overall === "likely_met" ? { borderLeft: "4px solid #22c55e" } : undefined}>
       <div className="flex flex-wrap items-center gap-2">
         <StatusChip status={r.application_status} basis={r.status_basis} />
         {soon && <span className="chip chip-unknown">마감 {d === 0 ? "오늘" : `D-${d}`}</span>}
@@ -18,6 +19,7 @@ export function AnnouncementCard({ r, canBookmark, bookmarked }: { r: RowWithMat
         <CategoryTags ids={r.category_ids} />
         <TestBadge status={r.source_status} name={r.source_name} />
         {r.match && <FitChip match={r.match} />}
+        {r.match && <AccuracyChip match={r.match} />}
       </div>
       <h2 className="mt-2 text-lg font-semibold leading-snug">
         <Link href={`/announcements/${r.id}`} className="hover:underline">{r.title}</Link>
@@ -28,11 +30,30 @@ export function AnnouncementCard({ r, canBookmark, bookmarked }: { r: RowWithMat
         <div><dt className="inline text-[var(--muted)]">대상 </dt><dd className="inline font-medium">{r.target_summary || "확인 필요"}</dd></div>
         <div><dt className="inline text-[var(--muted)]">접수 </dt><dd className="inline font-medium">{r.application_start || r.application_end ? `${r.application_start ?? "확인 필요"} ~ ${r.application_end ?? (r.application_status === "always" ? "상시" : "확인 필요")}` : r.application_status === "always" ? "상시 접수" : "기간 원문 확인"}</dd></div>
       </dl>
+      {check && r.match && <CheckHighlight r={r} />}
       <p className="mt-2 line-clamp-2 text-sm text-[var(--muted)]">{r.support_amount_text || shortSummary(r.support_summary) || "지원내용은 상세 페이지에서 확인하세요."}</p>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <Provenance url={r.canonical_url} sourceName={r.source_name} sourceStatus={r.source_status} checkedAt={r.last_checked_at} />
         {canBookmark && <BookmarkButton announcementId={r.id} initial={!!bookmarked} />}
       </div>
     </article>
+  );
+}
+
+/** '확인 필요' 공고에서 무엇을 확인해야 하는지 한눈에 보여 준다. */
+function CheckHighlight({ r }: { r: RowWithMatch }) {
+  const m = r.match!;
+  const text = m.results.filter((x) => x.state === "UNKNOWN" && !x.missing).map((x) => x.label);
+  const met = m.results.filter((x) => x.state === "MET").map((x) => x.label);
+  return (
+    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+      <p className="font-semibold">확인 필요 — 신청 가능할 수 있는 공고입니다</p>
+      <ul className="mt-1 space-y-0.5">
+        {met.length > 0 && <li>✔ 충족 확인: {[...new Set(met)].join(", ")}</li>}
+        {m.missingLabels.length > 0 && <li>✎ 기업정보 미입력: {m.missingLabels.join(", ")} <span className="text-amber-800">(입력하면 자동 판정)</span></li>}
+        {text.length > 0 && <li>? 원문 확인: {[...new Set(text)].join(", ")}</li>}
+        {m.results.length === 0 && <li>? 자동으로 확인할 수 있는 조건이 없어 공고 원문에서 자격을 확인해야 합니다.</li>}
+      </ul>
+    </div>
   );
 }

@@ -16,6 +16,14 @@ export function FitChip({ match }: { match: MatchResult }) {
   const cls = match.overall === "likely_met" ? "chip-met" : match.overall === "likely_not_met" ? "chip-notmet" : "chip-check";
   return <span className={`chip ${cls}`}>{OVERALL_LABEL[match.overall]}</span>;
 }
+/** 판정 정확도: 확정 판정된 조건 비율 × 규칙 신뢰도 */
+export function AccuracyChip({ match }: { match: MatchResult }) {
+  if (match.accuracy === null) return <span className="chip chip-unknown" title="자동으로 확인할 수 있는 조건이 없음">정확도 -</span>;
+  const a = match.accuracy;
+  const lv = a >= 80 ? "높음" : a >= 50 ? "보통" : "낮음";
+  const cls = a >= 80 ? "bg-green-50 text-green-900 border border-green-200" : a >= 50 ? "bg-amber-50 text-amber-900 border border-amber-200" : "bg-gray-100 text-gray-700 border border-gray-200";
+  return <span className={`chip ${cls}`} title="자동 판정한 조건의 비율과 규칙 신뢰도로 계산한 참고 지표(최종 자격은 원문 확인)">판정 정확도 {a}% · {lv}</span>;
+}
 export function RuleChip({ state }: { state: RuleState }) {
   const cls = state === "MET" ? "chip-met" : state === "NOT_MET" ? "chip-notmet" : "chip-check";
   return <span className={`chip ${cls}`}>{STATE_LABEL[state]}</span>;

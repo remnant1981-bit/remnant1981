@@ -11,12 +11,14 @@ import { Empty, Notice, PageTitle } from "@/components/ui";
 import { bookmarkedIds } from "@/server/userdata";
 import { profileCompleteness } from "@/domain/taxonomy";
 import { GuestProfileClear } from "@/components/GuestProfileActions";
+import { QuickFill } from "@/components/QuickFill";
+import { GUEST_KEYS } from "@/lib/guest-profile";
 
 export const metadata: Metadata = { title: "맞춤 추천", alternates: { canonical: "/recommend" } };
 
 const TABS = [
-  { id: "met", label: "조건 충족 공고", desc: "입력한 기업정보로 확인한 신청 조건을 모두 충족한 공고만 보여 줍니다." },
-  { id: "all", label: "검토 필요 포함", desc: "조건 충족 공고와 ‘확인 필요’ 공고를 함께 보여 줍니다. 입력하지 않은 정보나 본문 조건 때문에 판정하지 못한 공고입니다." },
+  { id: "all", label: "맞춤 공고", desc: "조건 충족 공고를 먼저, 이어서 ‘확인 필요’ 공고(노란 표시)를 보여 줍니다. 확인 필요 공고는 미입력 정보나 원문 조건 때문에 자동 판정하지 못했을 뿐 신청 가능할 수 있으니 놓치지 마세요. 명백히 해당하지 않는 공고만 제외합니다." },
+  { id: "met", label: "조건 충족만", desc: "입력한 기업정보로 확인한 신청 조건을 모두 충족한 공고만 보여 줍니다." },
 ] as const;
 
 export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -25,7 +27,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
   const profile = v.profile;
   if (profile) {
     const member = !!(v.company && v.session);
-    const tab = sp.tab === "all" ? "all" : "met";
+    const tab = sp.tab === "met" ? "met" : "all";
     const page = typeof sp.page === "string" ? sp.page : "1";
     const db = await getDb();
     const p = parseSearchParams({ sort: "fit", size: "20", page, status: "open,upcoming,always,unknown", ...(tab === "met" ? { met: "1" } : { eligible: "1" }) });
@@ -38,18 +40,22 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
       <>
         <PageTitle sub={`${v.company?.company_name ?? "우리 기업"} 기준 · 접수 중/예정/상시/상태 확인 필요 공고 대상${member ? "" : " · 이 브라우저에 저장한 정보 사용"}`}>맞춤 추천</PageTitle>
         {!member && (
-          <details className="card mb-4 p-4">
+          <details id="edit-profile" className="card mb-4 p-4">
             <summary className="cursor-pointer text-sm font-semibold">입력한 기업정보 수정하기</summary>
             <div className="mt-4"><RecommendPanel loggedIn={!!v.session} initial={v.guestProfile} /></div>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-sm"><GuestProfileClear /><span className="text-[var(--muted)]">관심 공고 저장·알림이 필요하면 <Link className="underline" href="/register">회원가입</Link>(입력한 정보는 가입 후 불러올 수 있음)</span></div>
           </details>
         )}
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
+          <div className="card p-4" title="자동 판정한 조건 비율 × 규칙 신뢰도의 평균(참고 지표)"><p className="text-xs text-[var(--muted)]">맞춤 정확도</p><p className="text-2xl font-bold text-blue-800">{res.accuracy === null ? "-" : `${res.accuracy}%`}</p>
+            <div className="mt-1 h-1.5 rounded bg-gray-200" aria-hidden><div className="h-1.5 rounded bg-blue-600" style={{ width: `${res.accuracy ?? 0}%` }} /></div></div>
           <div className="card p-4"><p className="text-xs text-[var(--muted)]">조건 충족</p><p className="text-2xl font-bold text-green-800">{c.likely_met.toLocaleString()}건</p></div>
           <div className="card p-4"><p className="text-xs text-[var(--muted)]">확인 필요(검토 권장)</p><p className="text-2xl font-bold text-amber-800">{c.needs_check.toLocaleString()}건</p></div>
           <div className="card p-4"><p className="text-xs text-[var(--muted)]">해당 안 됨(제외)</p><p className="text-2xl font-bold text-[var(--muted)]">{c.likely_not_met.toLocaleString()}건</p></div>
         </div>
-        {comp.filled < 8 && (
+        <QuickFill items={res.missing} accuracy={res.accuracy} member={member}
+          current={Object.fromEntries([...GUEST_KEYS, ...(member ? ["company_name", "representative_name"] : [])].map((k) => [k, ((profile as unknown as Record<string, unknown>)[k] as string | null | undefined) ?? null]))} />
+        {comp.filled < 8 && res.missing.length === 0 && (
           <div className="mt-3"><Notice tone="warn">기업정보 {comp.total}개 항목 중 {comp.filled}개만 입력되어 ‘확인 필요’ 공고가 많습니다. <Link className="underline" href={member ? "/company" : "/recommend"}>기업정보를 더 입력</Link>하면 조건 충족 공고를 더 정확하게 골라 드립니다(모두 선택 입력).</Notice></div>
         )}
         <div role="tablist" aria-label="추천 보기" className="no-print mt-5 flex gap-1 border-b border-[var(--line)]">
@@ -61,11 +67,12 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
           ))}
         </div>
         <p className="mt-3 text-sm text-[var(--muted)]">{TABS.find((t) => t.id === tab)!.desc}</p>
+        <p className="mt-1 text-xs text-[var(--muted)]">‘판정 정확도’ = 자동 판정한 조건 비율 × 규칙 신뢰도(참고 지표). 기업정보를 더 입력할수록 높아집니다.</p>
         {tab === "met" && <div className="mt-2"><Notice>지역·기업 규모·업력·인증 등 <strong>자동으로 확인할 수 있는 조건</strong>을 모두 충족한 공고입니다. 공고 본문의 기타 조건(업종 한정, 제출서류 등)과 최종 신청 자격은 반드시 공식 원문과 담당기관에서 확인하세요.</Notice></div>}
         <div className="mt-4 grid gap-3">
           {res.rows.length ? res.rows.map((r) => <AnnouncementCard key={r.id} r={r} canBookmark={member} bookmarked={marks.has(r.id)} />)
             : tab === "met"
-              ? <Empty title="확인된 조건을 모두 충족한 공고가 아직 없습니다.">기업정보를 더 입력하거나 <Link className="underline" href="/recommend?tab=all">검토 필요 포함</Link> 탭에서 확인해 보세요.</Empty>
+              ? <Empty title="확인된 조건을 모두 충족한 공고가 아직 없습니다.">기업정보를 더 입력하거나 <Link className="underline" href="/recommend?tab=all">맞춤 공고</Link> 탭에서 확인해 보세요.</Empty>
               : <Empty title="추천할 공고가 없습니다." />}
         </div>
         <Pager path="/recommend" base={`tab=${tab}`} page={res.page} pages={res.pages} />
