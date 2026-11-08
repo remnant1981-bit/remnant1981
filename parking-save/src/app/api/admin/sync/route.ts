@@ -4,6 +4,8 @@ import { adminToken, audit, verifyBearer } from "@/server/admin";
 import { adminLimiter, clientKey } from "@/server/rate-limit";
 import { apiError, internalError, limited } from "@/server/http";
 import { kasiMonthFetcher, syncHolidays } from "@/collector/holidays";
+import { StandardApiAdapter, standardPageFetcher } from "@/collector/standard-api";
+import { runSync } from "@/collector/runner";
 import { SEOUL_DEFAULT_BASE, seoulPageFetcher, syncSeoulOccupancy } from "@/collector/seoul-sync";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +13,7 @@ export const dynamic = "force-dynamic";
 /**
  * 관리자 수집 실행 (API_SPEC.md). 인증: `Authorization: Bearer <ADMIN_API_TOKEN>`.
  * 지원 job: `holidays` (DATA_GO_KR_SERVICE_KEY 필요, 실응답 미검증 — OPEN_ISSUES #4),
+ *            `standard-parking` (DATA_GO_KR_SERVICE_KEY 필요, 응답 봉투 미검증 — OPEN_ISSUES #1),
  *            `seoul-occupancy` (SEOUL_OPENAPI_KEY 필요, 응답 형식은 공개 샘플키로 검증 — OPEN_ISSUES #3).
  * 주차장 원천 job은 실제 어댑터 구현 후 추가.
  */
@@ -26,6 +29,13 @@ export async function POST(req: NextRequest) {
 
     let body: { job?: unknown } = {};
     try { body = await req.json(); } catch { /* 빈 본문 */ }
+    if (body.job === "standard-parking") {
+      const dk = process.env.DATA_GO_KR_SERVICE_KEY;
+      if (!dk) { await audit(db, "sync:standard-parking", "REJECTED", key, "KEY_MISSING"); return apiError(400, "KEY_MISSING", "공공데이터포털 인증키가 설정되지 않았습니다."); }
+      const summary = await runSync(db, new StandardApiAdapter(standardPageFetcher({ serviceKey: dk }), Number(process.env.STANDARD_PAGE_SIZE) || 100));
+      await audit(db, "sync:standard-parking", summary.status === "FAILED" ? "FAILED" : "OK", key, summary.status);
+      return NextResponse.json({ job: "standard-parking", ...summary }, { status: summary.status === "FAILED" ? 502 : 200, headers: { "Cache-Control": "no-store" } });
+    }
     if (body.job === "seoul-occupancy") {
       const sk = process.env.SEOUL_OPENAPI_KEY;
       if (!sk) { await audit(db, "sync:seoul-occupancy", "REJECTED", key, "KEY_MISSING"); return apiError(400, "KEY_MISSING", "서울 열린데이터광장 인증키가 설정되지 않았습니다."); }
@@ -33,7 +43,7 @@ export async function POST(req: NextRequest) {
       await audit(db, "sync:seoul-occupancy", summary.status === "FAILED" ? "FAILED" : "OK", key, summary.status);
       return NextResponse.json({ job: "seoul-occupancy", ...summary }, { status: summary.status === "FAILED" ? 502 : 200, headers: { "Cache-Control": "no-store" } });
     }
-    if (body.job !== "holidays") { await audit(db, "sync", "REJECTED", key, "UNKNOWN_JOB"); return apiError(400, "UNKNOWN_JOB", "지원하지 않는 job입니다. (지원: holidays, seoul-occupancy)"); }
+    if (body.job !== "holidays") { await audit(db, "sync", "REJECTED", key, "UNKNOWN_JOB"); return apiError(400, "UNKNOWN_JOB", "지원하지 않는 job입니다. (지원: holidays, seoul-occupancy, standard-parking)"); }
     const svcKey = process.env.DATA_GO_KR_SERVICE_KEY;
     if (!svcKey) { await audit(db, "sync:holidays", "REJECTED", key, "KEY_MISSING"); return apiError(400, "KEY_MISSING", "공공데이터포털 인증키가 설정되지 않았습니다."); }
 
