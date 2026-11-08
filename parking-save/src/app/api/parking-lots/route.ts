@@ -1,11 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getAppDb } from "@/server/app-db";
 import { parseSearchParams, searchLots } from "@/server/search";
-import { apiError, internalError } from "@/server/http";
+import { apiError, internalError, limited } from "@/server/http";
+import { searchLimiter } from "@/server/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  const tooMany = limited(req, searchLimiter);
+  if (tooMany) return tooMany;
   const parsed = parseSearchParams(req.nextUrl.searchParams);
   if (!parsed.ok) return apiError(400, parsed.code, parsed.message);
   try {
