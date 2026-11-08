@@ -1,0 +1,7 @@
+[Unit]
+Description=GovBiz Finder DB 백업
+
+[Service]
+Type=oneshot
+User=govbiz
+ExecStart=/bin/bash /opt/govbiz/current/deploy/backup.sh

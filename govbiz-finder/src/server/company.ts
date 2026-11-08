@@ -1,6 +1,6 @@
 import { encryptText, hmacHex, isValidBizNoChecksum, maskBizNo, newId, normalizeBizNo } from "@/lib/crypto";
 import { isValidYmd, nowIso, seoulToday } from "@/lib/time";
-import { REVENUE_BANDS, EMPLOYEE_BANDS, SIDO } from "@/domain/taxonomy";
+import { REVENUE_BANDS, EMPLOYEE_BANDS, SIDO, ENTERPRISE_SIZES, CERTIFICATIONS, CATEGORY_IDS } from "@/domain/taxonomy";
 import type { CompanyProfile } from "@/domain/matching";
 import { ApiError } from "./auth";
 import type { Db } from "./db";
@@ -10,6 +10,7 @@ import { rateLimit } from "./auth";
 export const PROFILE_FIELDS = [
   "company_name", "representative_name", "region_sido", "region_sigungu", "industry_name", "established_at", "revenue_band",
   "employee_count_band", "research_institute_status", "venture_status", "export_status", "tech_keywords",
+  "enterprise_size", "certifications", "youth_ceo", "has_patent", "interest_categories",
 ] as const;
 export type ProfileInput = Partial<Record<(typeof PROFILE_FIELDS)[number], string | null>>;
 
@@ -25,6 +26,16 @@ const oneOf = (v: unknown, list: readonly string[], label: string): string | nul
   const s = str(v, 60);
   if (s !== null && !list.includes(s)) throw new ApiError(400, "invalid_input", `${label} 값이 올바르지 않습니다.`);
   return s;
+};
+
+/** 복수 선택 값(배열 또는 쉼표 문자열)을 허용 목록으로 검증해 쉼표 문자열로 저장. */
+const multi = (v: unknown, allowed: readonly string[], label: string): string | null => {
+  if (v === undefined || v === null || v === "") return null;
+  const arr = Array.isArray(v) ? v : typeof v === "string" ? v.split(",") : null;
+  if (!arr) throw new ApiError(400, "invalid_input", `${label} 값이 올바르지 않습니다.`);
+  const items = [...new Set(arr.map((x) => String(x).trim()).filter(Boolean))];
+  for (const x of items) if (!allowed.includes(x)) throw new ApiError(400, "invalid_input", `${label} 값이 올바르지 않습니다.`);
+  return items.length ? items.join(",") : null;
 };
 
 /** 선택 입력 프로필 검증. 미입력은 null(= 확인 필요). */
@@ -44,6 +55,11 @@ export function validateProfile(input: Record<string, unknown>): Record<(typeof 
     venture_status: oneOf(input.venture_status, ["yes", "no"], "벤처기업 여부"),
     export_status: oneOf(input.export_status, ["yes", "no"], "수출 여부"),
     tech_keywords: str(input.tech_keywords, 200),
+    enterprise_size: oneOf(input.enterprise_size, ENTERPRISE_SIZES, "기업 규모"),
+    certifications: multi(input.certifications, CERTIFICATIONS, "보유 인증"),
+    youth_ceo: oneOf(input.youth_ceo, ["yes", "no"], "청년 대표자 여부"),
+    has_patent: oneOf(input.has_patent, ["yes", "no"], "특허 보유 여부"),
+    interest_categories: multi(input.interest_categories, CATEGORY_IDS, "관심 분야"),
   };
 }
 
@@ -131,6 +147,10 @@ export async function approveClaim(db: Db, userId: string, companyId: string, me
     "UPDATE company_members SET verification_status='verified', verification_method=?, verified_at=?, reviewed_by=? WHERE company_id=? AND user_id=? AND verification_status='pending'",
     [method, nowIso(), reviewer, companyId, userId]);
   if (!r.changes) throw new ApiError(404, "not_found", "승인 대기 중인 신청이 없습니다.");
+  // 놓치지 않도록 신규 맞춤 공고·마감 임박 알림을 기본으로 켠다(언제든 해제 가능)
+  for (const type of ["new_announcement", "deadline_soon"]) {
+    await db.run("INSERT OR IGNORE INTO notification_settings(user_id, company_id, type, enabled, channel, deadline_days) VALUES (?,?,?,1,'in_app',7)", [userId, companyId, type]);
+  }
 }
 export async function rejectClaim(db: Db, userId: string, companyId: string, reviewer: string) {
   const r = await db.run("UPDATE company_members SET verification_status='rejected', reviewed_by=? WHERE company_id=? AND user_id=? AND verification_status='pending'", [reviewer, companyId, userId]);
@@ -140,10 +160,11 @@ export async function rejectClaim(db: Db, userId: string, companyId: string, rev
 export interface CompanyView extends CompanyProfile {
   id: string; business_number_masked: string | null; company_name: string | null; representative_name: string | null;
   tax_type: string | null; profile_source: string | null; profile_verified_at: string | null; tech_keywords: string | null;
+  enterprise_size: string | null; certifications: string | null; youth_ceo: string | null; has_patent: string | null; interest_categories: string | null;
 }
 const VIEW_COLS = `id, business_number_masked, company_name, representative_name, region_sido, region_sigungu, industry_name, established_at,
   revenue_band, employee_count_band, research_institute_status, venture_status, export_status, tech_keywords, business_status, tax_type,
-  profile_source, profile_verified_at`;
+  profile_source, profile_verified_at, enterprise_size, certifications, youth_ceo, has_patent, interest_categories`;
 
 export async function getCompanyProfile(db: Db, userId: string, companyId?: string | null): Promise<CompanyView> {
   const id = await requireCompanyAccess(db, userId, companyId);
@@ -157,9 +178,11 @@ export async function saveCompanyProfile(db: Db, userId: string, input: Record<s
   const p = validateProfile(input);
   await db.run(
     `UPDATE companies SET company_name=?, representative_name=?, region_sido=?, region_sigungu=?, industry_name=?, established_at=?, revenue_band=?,
-      employee_count_band=?, research_institute_status=?, venture_status=?, export_status=?, tech_keywords=?, updated_at=? WHERE id=?`,
+      employee_count_band=?, research_institute_status=?, venture_status=?, export_status=?, tech_keywords=?,
+      enterprise_size=?, certifications=?, youth_ceo=?, has_patent=?, interest_categories=?, updated_at=? WHERE id=?`,
     [p.company_name, p.representative_name, p.region_sido, p.region_sigungu, p.industry_name, p.established_at, p.revenue_band,
-      p.employee_count_band, p.research_institute_status, p.venture_status, p.export_status, p.tech_keywords, nowIso(), id]);
+      p.employee_count_band, p.research_institute_status, p.venture_status, p.export_status, p.tech_keywords,
+      p.enterprise_size, p.certifications, p.youth_ceo, p.has_patent, p.interest_categories, nowIso(), id]);
   return getCompanyProfile(db, userId, id);
 }
 

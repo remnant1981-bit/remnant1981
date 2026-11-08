@@ -120,9 +120,17 @@ export async function generateNotifications(db: Db, today = seoulToday()): Promi
         await insert(s.user_id, s.company_id, "new_announcement", `new:${a.id}`, { announcementId: a.id, title: a.title });
       }
     } else if (s.type === "deadline_soon") {
-      const rows = await db.all<{ id: string; title: string; application_end: string }>(
+      // 관심 공고 + 우리 기업이 조건을 모두 충족한 공고의 마감 임박을 알린다(몰라서 놓치지 않도록)
+      const marked = await db.all<{ id: string; title: string; application_end: string }>(
         `SELECT a.id, a.title, a.application_end FROM bookmarks b JOIN announcements a ON a.id=b.announcement_id
          WHERE b.user_id=? AND b.company_id=? AND a.is_active=1 AND a.application_status='open' AND a.application_end IS NOT NULL`, [s.user_id, s.company_id]);
+      const company = await db.get<CompanyProfile>("SELECT * FROM companies WHERE id=?", [s.company_id]);
+      const open = await db.all<{ id: string; title: string; application_end: string }>(
+        "SELECT id, title, application_end FROM announcements WHERE is_active=1 AND application_status='open' AND application_end IS NOT NULL AND application_end >= ?", [today]);
+      const near = open.filter((a) => { const d = daysBetween(today, a.application_end); return d >= 0 && d <= s.deadline_days; });
+      const nearRules = await loadRules(db, near.map((a) => a.id));
+      const metNear = company ? near.filter((a) => evaluateMatch(nearRules.get(a.id) ?? [], company, today).overall === "likely_met") : [];
+      const rows = [...new Map([...marked, ...metNear].map((a) => [a.id, a])).values()];
       for (const a of rows) {
         const d = daysBetween(today, a.application_end);
         if (d >= 0 && d <= s.deadline_days) await insert(s.user_id, s.company_id, "deadline_soon", `deadline:${a.id}:${a.application_end}`, { announcementId: a.id, title: a.title, dDay: d });

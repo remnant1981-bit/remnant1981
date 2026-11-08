@@ -1,0 +1,2 @@
+# /etc/sudoers.d/govbiz : 배포 후 웹 서비스 재시작만 허용
+govbiz ALL=(root) NOPASSWD: /bin/systemctl restart govbiz-web.service

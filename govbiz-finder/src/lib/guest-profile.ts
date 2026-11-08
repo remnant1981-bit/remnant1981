@@ -1,0 +1,26 @@
+// 비회원 맞춤 정보: 이용자 브라우저 쿠키에만 보관(서버 DB 저장 없음).
+// 식별 정보(사업자번호·기업명·대표자명)는 넣지 않고, 적합성 판정에 쓰는 항목만 담는다.
+export const GUEST_COOKIE = "gbf_guest_profile";
+export const GUEST_KEYS = [
+  "region_sido", "region_sigungu", "industry_name", "established_at", "enterprise_size", "revenue_band", "employee_count_band",
+  "export_status", "research_institute_status", "venture_status", "has_patent", "youth_ceo", "certifications", "tech_keywords", "interest_categories",
+] as const;
+
+export function encodeGuestProfile(p: Record<string, unknown>): string {
+  const o: Record<string, string> = {};
+  for (const k of GUEST_KEYS) { const v = p[k]; if (typeof v === "string" && v.trim()) o[k] = v.trim().slice(0, 200); }
+  return encodeURIComponent(JSON.stringify(o));
+}
+
+export function decodeGuestProfile(raw: string | undefined | null): Record<string, string> | null {
+  if (!raw || raw.length > 3500) return null;
+  try {
+    const o = JSON.parse(decodeURIComponent(raw));
+    if (!o || typeof o !== "object" || Array.isArray(o)) return null;
+    const out: Record<string, string> = {};
+    for (const k of GUEST_KEYS) if (typeof o[k] === "string") out[k] = o[k];
+    return Object.keys(out).length ? out : null;
+  } catch {
+    return null;
+  }
+}

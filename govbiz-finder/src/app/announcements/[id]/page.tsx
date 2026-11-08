@@ -13,6 +13,7 @@ import { BookmarkButton } from "@/components/BookmarkButton";
 import { PrintButton } from "@/components/PrintButton";
 import { seoulToday, formatSeoul } from "@/lib/time";
 import { FormattedText } from "@/components/FormattedText";
+import { AdSlot } from "@/components/AdSlot";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -48,9 +49,8 @@ export default async function Detail({ params }: Props) {
   const [extras, v] = await Promise.all([getAnnouncementExtras(db, a.id), getViewer()]);
   let match = null;
   let bookmarked = false;
+  if (v.profile) match = evaluateMatch((await loadRules(db, [a.id])).get(a.id) ?? [], v.profile, seoulToday());
   if (v.company && v.session) {
-    const rules = await loadRules(db, [a.id]);
-    match = evaluateMatch(rules.get(a.id) ?? [], v.company, seoulToday());
     await recordView(db, v.session.user.id, v.company.id, a.id);
     bookmarked = (await bookmarkedIds(db, v.session.user.id, v.company.id)).has(a.id);
   }
@@ -100,10 +100,8 @@ export default async function Detail({ params }: Props) {
 
       <section className="card p-4" aria-labelledby="fit">
         <h2 id="fit" className="mb-2 font-bold">기업 적합성 분석 (참고용)</h2>
-        {!v.session ? (
-          <p className="text-sm">로그인하고 기업 관계 확인을 완료하면 이 공고의 적합성 분석을 볼 수 있습니다. <Link href="/recommend" className="underline">기업정보 없이 체험해 보기</Link></p>
-        ) : !match ? (
-          <p className="text-sm">기업 관계 확인이 완료되면 분석이 표시됩니다. <Link href="/company" className="underline">기업정보 설정</Link></p>
+        {!match ? (
+          <p className="text-sm">우리 기업 정보를 입력하면 이 공고의 조건별 충족 여부를 보여 드립니다. 로그인은 필요 없습니다. <Link href="/recommend" className="underline">기업정보 입력하기</Link></p>
         ) : (
           <>
             <p className="mb-2 text-sm">종합: <strong>{OVERALL_LABEL[match.overall]}</strong>{match.score !== null && ` · 참고 점수 ${match.score}점`} <span className="text-[var(--muted)]">(자격 확정 판정이 아닙니다)</span></p>
@@ -123,6 +121,7 @@ export default async function Detail({ params }: Props) {
         <section className="card p-4 text-sm"><h2 className="mb-2 font-bold">동일 공고를 확인한 출처</h2>
           <ul className="list-disc pl-5">{extras.sources.map((s) => <li key={s.source_id + s.url}>{s.name} · <a className="underline" href={s.url} target="_blank" rel="noopener noreferrer nofollow">원문</a> · 최초 확인 {formatSeoul(s.first_seen_at)}</li>)}</ul></section>
       )}
+      <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_DETAIL} />
       <p className="text-xs text-[var(--muted)]">분야: {a.category_ids?.split(",").map(categoryName).join(", ")} · 최초 수집 {formatSeoul(a.first_collected_at)}</p>
     </article>
   );

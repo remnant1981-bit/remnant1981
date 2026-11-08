@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/client";
 import { ProfileFields, formToProfile } from "./ProfileFields";
 import { Notice } from "./ui";
@@ -11,6 +12,19 @@ export function CompanyPanel({ membership, company }: { membership: string; comp
   const [nts, setNts] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [state, setState] = useState(membership);
+  const [draft, setDraft] = useState<Record<string, string> | null>(null);
+  const [formKey, setFormKey] = useState(0);
+  // 비회원 체험에서 입력한 정보가 같은 브라우저 세션에 있으면, 기업정보가 비어 있을 때 한 번 불러온다(저장은 사용자가 '저장'을 눌러야 함)
+  useEffect(() => {
+    if (membership !== "verified" || !company) return;
+    const empty = !["region_sido", "industry_name", "enterprise_size", "established_at"].some((k) => company[k]);
+    if (!empty) return;
+    try {
+      const raw = sessionStorage.getItem("gbf_profile_draft");
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (raw) { setDraft(JSON.parse(raw)); setFormKey((k) => k + 1); }
+    } catch { /* 무시 */ }
+  }, [membership, company]);
 
   async function claim(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setBusy(true); setMsg(null);
@@ -24,7 +38,8 @@ export function CompanyPanel({ membership, company }: { membership: string; comp
     e.preventDefault(); setBusy(true); setMsg(null);
     const r = await api<any>("PUT", "/api/company", formToProfile(new FormData(e.currentTarget)));
     setBusy(false);
-    setMsg(r.ok ? { tone: "info", text: "저장했습니다. 비워둔 항목은 ‘확인 필요’로 처리됩니다." } : { tone: "error", text: r.data.message ?? "저장하지 못했습니다." });
+    setMsg(r.ok ? { tone: "info", text: "저장했습니다. 비워둔 항목은 ‘확인 필요’로 처리됩니다. 다음 로그인 때도 그대로 유지됩니다." } : { tone: "error", text: r.data.message ?? "저장하지 못했습니다." });
+    if (r.ok) { setDraft(null); try { sessionStorage.removeItem("gbf_profile_draft"); } catch { /* 무시 */ } }
   }
   async function lookup(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setBusy(true); setMsg(null); setNts(null);
@@ -75,8 +90,9 @@ export function CompanyPanel({ membership, company }: { membership: string; comp
       <form onSubmit={save} className="card grid gap-4 p-5" aria-label="기업 프로필">
         <h2 className="font-bold">기업정보 (모두 선택 입력)</h2>
         <Notice>입력한 정보는 맞춤 적합성 분석에만 사용되며, 본인(확인된 대표 계정)만 조회·수정·삭제할 수 있습니다. 미입력 항목은 ‘미충족’이 아니라 ‘확인 필요’로 처리됩니다.</Notice>
-        <ProfileFields v={company ?? {}} />
-        {msg && <p role={msg.tone === "error" ? "alert" : "status"} className={`text-sm ${msg.tone === "error" ? "text-red-700" : "text-green-800"}`}>{msg.text}</p>}
+        {draft && <Notice>맞춤 추천 체험에서 입력한 정보를 불러왔습니다. 확인 후 <strong>저장</strong>을 눌러야 기업정보에 저장됩니다.</Notice>}
+        <ProfileFields key={formKey} v={draft ? { ...(company ?? {}), ...draft } : company ?? {}} />
+        {msg && <p role={msg.tone === "error" ? "alert" : "status"} className={`text-sm ${msg.tone === "error" ? "text-red-700" : "text-green-800"}`}>{msg.text} {msg.tone === "info" && <Link className="font-semibold underline" href="/recommend">맞춤 추천 보기 →</Link>}</p>}
         <div className="flex gap-2"><button className="btn" disabled={busy}>저장</button><button type="button" className="btn btn-danger" onClick={remove}>기업정보·이력 삭제</button></div>
       </form>
     </div>

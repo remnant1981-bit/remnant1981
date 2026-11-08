@@ -1,0 +1,9 @@
+[Unit]
+Description=DB 백업(매일 03:10 KST)
+
+[Timer]
+OnCalendar=*-*-* 03:10:00 Asia/Seoul
+Persistent=true
+
+[Install]
+WantedBy=timers.target

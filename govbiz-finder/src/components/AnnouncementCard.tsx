@@ -26,7 +26,7 @@ export function AnnouncementCard({ r, canBookmark, bookmarked }: { r: RowWithMat
         <div><dt className="inline text-[var(--muted)]">기관 </dt><dd className="inline font-medium">{r.organization}</dd></div>
         <div><dt className="inline text-[var(--muted)]">지역 </dt><dd className="inline font-medium">{r.region_scope}</dd></div>
         <div><dt className="inline text-[var(--muted)]">대상 </dt><dd className="inline font-medium">{r.target_summary || "확인 필요"}</dd></div>
-        <div><dt className="inline text-[var(--muted)]">접수 </dt><dd className="inline font-medium">{r.application_start ?? "?"} ~ {r.application_end ?? (r.application_status === "always" ? "상시" : "?")}</dd></div>
+        <div><dt className="inline text-[var(--muted)]">접수 </dt><dd className="inline font-medium">{r.application_start || r.application_end ? `${r.application_start ?? "확인 필요"} ~ ${r.application_end ?? (r.application_status === "always" ? "상시" : "확인 필요")}` : r.application_status === "always" ? "상시 접수" : "기간 원문 확인"}</dd></div>
       </dl>
       <p className="mt-2 line-clamp-2 text-sm text-[var(--muted)]">{r.support_amount_text || shortSummary(r.support_summary) || "지원내용은 상세 페이지에서 확인하세요."}</p>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">

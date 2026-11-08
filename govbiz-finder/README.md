@@ -36,3 +36,8 @@ npm run dev             # http://localhost:3000
 
 ## 알려진 제한
 `docs/DEVELOPMENT_LOG.md` 참조.
+
+## 운영·수익
+- 무인 운영 파이프라인(국내 서버 자동 배포·수집·백업·HTTPS·감시): `docs/OPERATIONS_PIPELINE.md`
+- 비용 산정·광고 수익화·확장 계획: `docs/BUSINESS_PLAN.md`
+- 로그인 없이 맞춤 추천: 기업정보는 이용자 브라우저에만 저장(식별 정보 제외), 회원은 서버에 저장·알림

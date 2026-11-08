@@ -1,0 +1,9 @@
+[Unit]
+Description=GovBiz Finder 자동 배포(main 변경 시)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=govbiz
+ExecStart=/bin/bash /opt/govbiz/repo/govbiz-finder/deploy/release.sh
+TimeoutStartSec=30min

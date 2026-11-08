@@ -1,0 +1,11 @@
+[Unit]
+Description=GovBiz Finder 공고 수집·알림 생성
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=govbiz
+WorkingDirectory=/opt/govbiz/current
+EnvironmentFile=/opt/govbiz/shared/.env
+ExecStart=/usr/bin/npm run collect
+TimeoutStartSec=30min
