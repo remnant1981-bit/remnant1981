@@ -29,7 +29,7 @@ export async function profileStandardSource(db: Db, source: string, topN = 15): 
   for (const f of fields) p.blankRate[f] = parsed.length ? parsed.filter((r) => blank(r[f])).length / parsed.length : 0;
   for (const f of NUMERIC) {
     const nums: number[] = []; let bad = 0;
-    for (const r of parsed) { if (blank(r[f])) continue; const n = Number(String(r[f]).replace(/,/g, "")); Number.isFinite(n) ? nums.push(n) : bad++; }
+    for (const r of parsed) { if (blank(r[f])) continue; const n = Number(String(r[f]).replace(/,/g, "")); if (Number.isFinite(n)) nums.push(n); else bad++; }
     p.numeric[f] = { min: nums.length ? Math.min(...nums) : null, max: nums.length ? Math.max(...nums) : null, nonNumeric: bad };
   }
   for (const r of parsed) {
