@@ -10,7 +10,7 @@ export const DAY_LABEL: Record<string, string> = { WEEKDAY: "평일", SATURDAY: 
 export const RULE_LABEL: Record<string, string> = { BASE: "기본요금", ADDITIONAL: "추가요금", DAILY_MAX: "일일 최대요금", FREE: "무료", SEASON_PASS: "정기권", OTHER: "기타" };
 
 export const FEE_REASON_LABEL: Record<string, string> = {
-  NO_RULES: "요금 정보 없음",
+  NO_RULES: "확인된 요금 규칙이 없음 (무료 아님)",
   HOLIDAY_DATA_MISSING: "공휴일 데이터가 없어 계산 불가",
   RULE_DAYTYPE_UNKNOWN: "요금 규칙이 불명확해 계산 불가",
   INCOMPLETE_RULE: "요금 규칙이 불완전해 계산 불가",
@@ -35,5 +35,7 @@ export function occupancyText(o: LotItem["occupancy"]): { main: string; sub?: st
 export function sourceLabel(name: string): string {
   if (name === "MOCK") return "목업(가상 데이터 — 실제 주차장 아님)";
   if (name === "STANDARD_SAMPLE") return "전국주차장정보표준데이터 샘플(검증 전 일부 행)";
+  if (name === "DATA_GO_KR_15012896") return "전국주차장정보표준데이터 (공공데이터포털)";
+  if (name === "SEOUL_OA21709") return "서울 열린데이터광장 (시영주차장 실시간)";
   return name;
 }
