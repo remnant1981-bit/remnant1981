@@ -102,7 +102,7 @@ export interface LotItem {
   id: number; name: string; address: string | null; parkingType: LotRow["parking_type"]; ownershipType: LotRow["ownership_type"];
   latitude: number; longitude: number; distanceMeters: number; totalSpaces: number | null;
   fee: FeeView; operating: OperatingStatus; operatingAssumed: boolean; occupancy: OccupancyResult;
-  source: { name: string; url: string | null; updatedAt: string | null; collectedAt: string; freshness: "FRESH" | "STALE" };
+  source: { name: string; url: string | null; updatedAt: string | null; collectedAt: string; freshness: "FRESH" | "STALE"; notInLatestSync: boolean };
   isMock: boolean; qualityFlags: string[];
   explanation: Explanation;
   /** 같은 시설일 가능성이 높아 이 항목 아래로 묶인 다른 레코드(삭제·병합 아님, 상세에서 개별 확인 가능) */
@@ -121,6 +121,19 @@ async function occupancyFor(db: Db, lotId: number, now: Date): Promise<Occupancy
      ORDER BY collected_at DESC, id DESC LIMIT 1`, [lotId, lotId, lotId, lotId]);
   return evaluateOccupancy({ totalSpaces: snap?.total_spaces, availableSpaces: snap?.available_spaces, observedAt: snap?.observed_at }, now, occupancyConfigFor(snap?.source_name));
 }
+
+/**
+ * 원천별 가장 최근 '성공/부분 성공' 수집 시작 시각. 시설의 collected_at이 이보다 이르면 그 수집에서 보이지 않은 시설(삭제 아님, '최근 수집에서 미확인').
+ * 실패한 수집은 아무것도 저장하지 않으므로 기준에서 제외한다. 수집 이력이 없는 원천(목업 등)은 판정하지 않는다.
+ */
+export async function latestSyncStarts(db: Db): Promise<Map<string, string>> {
+  const rows = await db.all<{ source_name: string; at: string }>("SELECT source_name, MAX(started_at) AS at FROM source_sync_logs WHERE status IN ('SUCCESS','PARTIAL') GROUP BY source_name");
+  return new Map(rows.map((r) => [r.source_name, r.at]));
+}
+export const notInLatestSync = (lot: { source_name: string; collected_at: string }, starts: Map<string, string>) => {
+  const at = starts.get(lot.source_name);
+  return at !== undefined && lot.collected_at < at;
+};
 
 async function evaluateLot(db: Db, lot: LotRow, p: Pick<SearchParams, "startAt" | "endAt">, holidays: Set<string> | null, now: Date) {
   const feeRows = await db.all<FeeRow>("SELECT * FROM fee_rules WHERE parking_lot_id=? ORDER BY id", [lot.id]);
@@ -154,6 +167,7 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
   const noCoord = (await db.get<{ c: number }>("SELECT COUNT(*) AS c FROM parking_lots WHERE latitude IS NULL OR longitude IS NULL"))?.c ?? 0;
   const holidays = await loadHolidays(db, p.startAt, p.endAt, now);
 
+  const syncStarts = await latestSyncStarts(db);
   let items: LotItem[] = [];
   for (const lot of lots) {
     const here = { lat: lot.latitude!, lng: lot.longitude! };
@@ -164,7 +178,7 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
       id: lot.id, name: lot.name, address: lot.road_address ?? lot.address, parkingType: lot.parking_type, ownershipType: lot.ownership_type,
       latitude: here.lat, longitude: here.lng, distanceMeters: Math.round(dist), totalSpaces: lot.total_spaces,
       fee: ev.fee, operating: ev.operating, operatingAssumed: ev.operatingAssumed, occupancy: ev.occupancy,
-      source: { name: lot.source_name, url: lot.source_url, updatedAt: lot.source_updated_at, collectedAt: lot.collected_at, freshness: ev.freshness },
+      source: { name: lot.source_name, url: lot.source_url, updatedAt: lot.source_updated_at, collectedAt: lot.collected_at, freshness: ev.freshness, notInLatestSync: notInLatestSync(lot, syncStarts) },
       isMock: NON_PRODUCTION_SOURCES.includes(lot.source_name), qualityFlags: lot.quality_flags ? JSON.parse(lot.quality_flags) : [],
       explanation: { highlights: [], cautions: [] }, similar: [],
     });
@@ -183,6 +197,7 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
   if (!holidays) warnings.push("HOLIDAY_DATA_MISSING: 입력 기간의 공휴일 데이터가 없어 요일별 규칙이 있는 시설은 요금을 계산하지 못할 수 있습니다.");
   if (items.some((i) => i.ownershipType === "UNKNOWN")) warnings.push("OWNERSHIP_UNVERIFIED: 공영 여부가 확인되지 않은 시설이 포함되어 있습니다.");
   if (items.some((i) => i.source.freshness === "STALE")) warnings.push("STALE_DATA: 오래된 데이터가 포함되어 있습니다.");
+  if (items.some((i) => i.source.notInLatestSync)) warnings.push("NOT_IN_LATEST_SYNC: 최근 수집에서 확인되지 않은 시설이 포함되어 있습니다(폐쇄·정보 변경 가능성, 현장 확인 필요).");
   if (candidates === 0) warnings.push("EMPTY: 조건에 맞는 주차장이 없습니다.");
   return {
     items,
@@ -261,7 +276,7 @@ export async function getLotDetail(db: Db, id: number, period: { startAt: Date; 
       latitude: lot.latitude, longitude: lot.longitude, totalSpaces: lot.total_spaces, phone: lot.phone, isMock: NON_PRODUCTION_SOURCES.includes(lot.source_name),
       qualityFlags: lot.quality_flags ? (JSON.parse(lot.quality_flags) as string[]) : [],
     },
-    source: { name: lot.source_name, url: lot.source_url, updatedAt: lot.source_updated_at, collectedAt: lot.collected_at },
+    source: { name: lot.source_name, url: lot.source_url, updatedAt: lot.source_updated_at, collectedAt: lot.collected_at, notInLatestSync: notInLatestSync(lot, await latestSyncStarts(db)) },
     feeRules: feeRules.map((r) => ({ ruleType: r.rule_type, amount: r.amount, durationMinutes: r.duration_minutes, dayType: r.valid_day_type, startTime: r.start_time, endTime: r.end_time, dailyMaxBasis: r.daily_max_basis })),
     operatingSchedules: schedules.map((s) => ({ dayType: s.day_type, openTime: s.open_time, closeTime: s.close_time, allDay: s.all_day_flag === 1, closed: s.closed_flag === 1, assumed: s.holiday_policy === "SUNDAY_ASSUMED" })),
     occupancy, fee, operating, operatingAssumed, holidayDataAvailable,

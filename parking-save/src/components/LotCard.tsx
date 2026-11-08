@@ -41,6 +41,7 @@ export function LotCard({ item, query }: { item: LotItem; query: string }) {
       <p className="mt-3 text-xs text-gray-600">
         출처: {sourceLabel(item.source.name)} · 기준일 {formatKst(item.source.updatedAt ?? item.source.collectedAt)}
         {item.source.freshness === "STALE" && <strong className="ml-1 text-amber-800">· 오래된 데이터</strong>}
+        {item.source.notInLatestSync && <strong className="ml-1 text-amber-800">· 최근 수집에서 미확인</strong>}
       </p>
     </li>
   );
