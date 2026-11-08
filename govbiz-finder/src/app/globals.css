@@ -51,6 +51,7 @@ details > summary { list-style: none; }
 details > summary::-webkit-details-marker { display: none; }
 details > summary::before { content: "▸"; display: inline-block; margin-right: .35rem; transition: transform .15s ease; }
 details[open] > summary::before { transform: rotate(90deg); }
+details > summary.no-caret::before { content: none; display: none; }
 
 .skip-link { position: absolute; left: -9999px; top: 0; background: #fff; padding: .5rem 1rem; z-index: 50; }
 .skip-link:focus { left: 0; }

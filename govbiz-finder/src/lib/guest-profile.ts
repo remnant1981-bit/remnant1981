@@ -3,7 +3,7 @@
 export const GUEST_COOKIE = "gbf_guest_profile";
 export const GUEST_KEYS = [
   "region_sido", "region_sigungu", "industry_group", "industry_name", "established_at", "enterprise_size", "revenue_band", "employee_count_band",
-  "export_status", "research_institute_status", "venture_status", "has_patent", "youth_ceo", "certifications", "tech_keywords", "interest_categories",
+  "export_status", "research_institute_status", "venture_status", "has_patent", "youth_ceo", "certifications", "tech_fields", "tech_keywords", "interest_categories",
 ] as const;
 
 export function encodeGuestProfile(p: Record<string, unknown>): string {

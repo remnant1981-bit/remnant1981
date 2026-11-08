@@ -4,7 +4,7 @@ import { seoulToday } from "@/lib/time";
 import { newId } from "@/lib/crypto";
 import { nowIso } from "@/lib/time";
 import type { Db } from "./db";
-import { SIDO } from "@/domain/taxonomy";
+import { SIDO, techFieldsIn } from "@/domain/taxonomy";
 
 /**
  * 공고의 지역 표기(구조화된 필드)로 지역 조건을 자동 생성한다.
@@ -96,6 +96,12 @@ export function textRulesFor(row: { title?: string | null; target_summary?: stri
   }
   // 특정 인증 대상(제목·대상에 명시된 경우)
   const head = `${row.title ?? ""} ${row.target_summary ?? ""}`;
+  // 기술 분야 한정 공고(공고명 기준). 도입·활용·보급·교육 성격이면 어느 기업이나 해당할 수 있어 '확인 필요'로만
+  const tf = techFieldsIn(row.title);
+  if (tf.length) {
+    const generic = /도입|활용|보급|설치|구매|교육|박람회|전시회|홍보|판로|수출/.test(row.title ?? "");
+    rules.push({ field_key: "tech_field", operator: "in", expected_value: JSON.stringify(tf), source_excerpt: `공고명: ${(row.title ?? "").slice(0, 60)}`, confidence: generic ? 0.5 : 0.6 });
+  }
   // 업종 한정 공고(공고명·지원대상에 수혜 업종이 명시된 경우). 가공·제조를 함께 언급하면 제외(식품가공 등 혼재)
   const groups = industryTargets(head);
   if (groups.length) rules.push({ field_key: "industry_group", operator: "in", expected_value: JSON.stringify(groups.map((g) => g[0])), source_excerpt: `공고명/대상: ${head.trim().slice(0, 80)}`, confidence: Math.min(...groups.map((g) => g[1])) });

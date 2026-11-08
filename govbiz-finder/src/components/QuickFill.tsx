@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { saveProfilePatch } from "./profile-save";
-import { SPECS } from "./profile-specs";
+import { SPECS, SIGUNGU } from "./profile-specs";
 
 export interface QuickItem { fieldKey: string; label: string; count: number }
 
@@ -50,7 +50,9 @@ export function QuickFill({ items, member, accuracy }: { items: QuickItem[]; mem
           return (
             <div key={it.fieldKey}>
               <label htmlFor={id} className="label">{it.label}{hint}</label>
-              {s.kind === "select"
+              {s.kind === "sigungu"
+                ? <select id={id} name={s.key} defaultValue="" className="input"><option value="">선택하세요</option>{Object.entries(SIGUNGU).map(([sd, list]) => <optgroup key={sd} label={sd}>{list.map((g) => <option key={sd + g} value={g}>{g}</option>)}</optgroup>)}</select>
+                : s.kind === "select"
                 ? <select id={id} name={s.key} defaultValue="" className="input"><option value="">선택하세요</option>{s.opts.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select>
                 : <input id={id} name={s.key} type={s.kind === "date" ? "date" : "text"} maxLength={s.kind === "date" ? 10 : 100} placeholder={s.kind === "text" ? s.placeholder : undefined} className="input" />}
             </div>);

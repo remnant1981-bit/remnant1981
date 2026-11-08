@@ -25,8 +25,12 @@ export default async function Home() {
        (SELECT COUNT(*) FROM data_sources WHERE enabled=1 AND integration_status='live') AS live,
        (SELECT COUNT(*) FROM data_sources WHERE enabled=1 AND integration_status='mock') AS mock`),
   ]);
+  // 기업정보가 있으면 '해당 안 됨' 공고는 홈 목록에서 제외(전체는 '더 보기'의 검색에서 확인)
   const section = async (title: string, id: string, res: typeof open, more: string) => {
-    const rows = await attachMatches(db, res.rows, v.profile);
+    const rows = v.profile
+      ? (await searchWithMatches(db, { ...parseSearchParams(Object.fromEntries(new URLSearchParams(more.split("?")[1] ?? ""))), pageSize: 5, eligible: true }, v.profile)).rows
+      : await attachMatches(db, res.rows, v.profile);
+    if (v.profile) { title = `${title} · 우리 기업 해당 가능`; more = `${more}&eligible=1`; }
     return (
       <section aria-labelledby={id} className="mt-8">
         <div className="mb-2 flex items-baseline justify-between"><h2 id={id} className="text-lg font-bold">{title}</h2><Link href={more} className="text-sm underline">더 보기</Link></div>
@@ -80,7 +84,7 @@ export default async function Home() {
           {" "}최종 갱신: {formatSeoul(meta?.last)} · 등록 공고 {meta?.total ?? 0}건
         </Notice>
       </div>
-      {await section("접수 중 공고", "open", open, "/search?status=open")}
+      {await section("접수 중 공고", "open", open, "/search?status=open&sort=latest")}
       {await section("마감 임박 (7일 이내)", "soon", soon, "/search?soon=1&sort=deadline")}
       {await section("신규 등록 공고", "new", fresh, "/search?sort=latest")}
       <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_HOME} className="mt-8" />

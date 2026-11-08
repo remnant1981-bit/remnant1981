@@ -1,6 +1,6 @@
 import { encryptText, hmacHex, isValidBizNoChecksum, maskBizNo, newId, normalizeBizNo } from "@/lib/crypto";
 import { isValidYmd, nowIso, seoulToday } from "@/lib/time";
-import { REVENUE_BANDS, EMPLOYEE_BANDS, SIDO, ENTERPRISE_SIZES, CERTIFICATIONS, CATEGORY_IDS, INDUSTRY_GROUPS } from "@/domain/taxonomy";
+import { REVENUE_BANDS, EMPLOYEE_BANDS, SIDO, ENTERPRISE_SIZES, CERTIFICATIONS, CATEGORY_IDS, INDUSTRY_GROUPS, TECH_FIELDS } from "@/domain/taxonomy";
 import type { CompanyProfile } from "@/domain/matching";
 import { ApiError } from "./auth";
 import type { Db } from "./db";
@@ -10,7 +10,7 @@ import { rateLimit } from "./auth";
 export const PROFILE_FIELDS = [
   "company_name", "representative_name", "region_sido", "region_sigungu", "industry_name", "established_at", "revenue_band",
   "employee_count_band", "research_institute_status", "venture_status", "export_status", "tech_keywords",
-  "enterprise_size", "certifications", "youth_ceo", "has_patent", "interest_categories", "industry_group",
+  "enterprise_size", "certifications", "youth_ceo", "has_patent", "interest_categories", "industry_group", "tech_fields",
 ] as const;
 export type ProfileInput = Partial<Record<(typeof PROFILE_FIELDS)[number], string | null>>;
 
@@ -60,7 +60,8 @@ export function validateProfile(input: Record<string, unknown>): Record<(typeof 
     youth_ceo: oneOf(input.youth_ceo, ["yes", "no"], "청년 대표자 여부"),
     has_patent: oneOf(input.has_patent, ["yes", "no"], "특허 보유 여부"),
     interest_categories: multi(input.interest_categories, CATEGORY_IDS, "관심 분야"),
-    industry_group: oneOf(input.industry_group, INDUSTRY_GROUPS, "업종 분야"),
+    industry_group: multi(input.industry_group, INDUSTRY_GROUPS, "업종 분야"),
+    tech_fields: multi(input.tech_fields, TECH_FIELDS, "기술 분야"),
   };
 }
 
@@ -161,11 +162,11 @@ export async function rejectClaim(db: Db, userId: string, companyId: string, rev
 export interface CompanyView extends CompanyProfile {
   id: string; business_number_masked: string | null; company_name: string | null; representative_name: string | null;
   tax_type: string | null; profile_source: string | null; profile_verified_at: string | null; tech_keywords: string | null;
-  enterprise_size: string | null; certifications: string | null; youth_ceo: string | null; has_patent: string | null; interest_categories: string | null; industry_group: string | null;
+  enterprise_size: string | null; certifications: string | null; youth_ceo: string | null; has_patent: string | null; interest_categories: string | null; industry_group: string | null; tech_fields: string | null;
 }
 const VIEW_COLS = `id, business_number_masked, company_name, representative_name, region_sido, region_sigungu, industry_name, established_at,
   revenue_band, employee_count_band, research_institute_status, venture_status, export_status, tech_keywords, business_status, tax_type,
-  profile_source, profile_verified_at, enterprise_size, certifications, youth_ceo, has_patent, interest_categories, industry_group`;
+  profile_source, profile_verified_at, enterprise_size, certifications, youth_ceo, has_patent, interest_categories, industry_group, tech_fields`;
 
 export async function getCompanyProfile(db: Db, userId: string, companyId?: string | null): Promise<CompanyView> {
   const id = await requireCompanyAccess(db, userId, companyId);
@@ -180,10 +181,10 @@ export async function saveCompanyProfile(db: Db, userId: string, input: Record<s
   await db.run(
     `UPDATE companies SET company_name=?, representative_name=?, region_sido=?, region_sigungu=?, industry_name=?, established_at=?, revenue_band=?,
       employee_count_band=?, research_institute_status=?, venture_status=?, export_status=?, tech_keywords=?,
-      enterprise_size=?, certifications=?, youth_ceo=?, has_patent=?, interest_categories=?, industry_group=?, updated_at=? WHERE id=?`,
+      enterprise_size=?, certifications=?, youth_ceo=?, has_patent=?, interest_categories=?, industry_group=?, tech_fields=?, updated_at=? WHERE id=?`,
     [p.company_name, p.representative_name, p.region_sido, p.region_sigungu, p.industry_name, p.established_at, p.revenue_band,
       p.employee_count_band, p.research_institute_status, p.venture_status, p.export_status, p.tech_keywords,
-      p.enterprise_size, p.certifications, p.youth_ceo, p.has_patent, p.interest_categories, p.industry_group, nowIso(), id]);
+      p.enterprise_size, p.certifications, p.youth_ceo, p.has_patent, p.interest_categories, p.industry_group, p.tech_fields, nowIso(), id]);
   return getCompanyProfile(db, userId, id);
 }
 

@@ -14,7 +14,7 @@ export function AnnouncementCard({ r, canBookmark, bookmarked }: { r: RowWithMat
   const soon = d !== null && d >= 0 && d <= 7;
   const check = r.match?.overall === "needs_check";
   return (
-    <article className={`card p-4 ${soon && bookmarked ? "ring-2 ring-red-400" : ""}`} style={check ? { borderLeft: "4px solid #f59e0b" } : r.match?.overall === "likely_met" ? { borderLeft: "4px solid #22c55e" } : undefined}>
+    <article className={`card p-4 ${soon && bookmarked ? "ring-2 ring-red-400" : ""} ${r.match?.overall === "likely_not_met" ? "opacity-75" : ""}`} style={check ? { borderLeft: "4px solid #f59e0b" } : r.match?.overall === "likely_met" ? { borderLeft: "4px solid #22c55e" } : undefined}>
       <div className="flex flex-wrap items-center gap-2">
         <StatusChip status={r.application_status} basis={r.status_basis} />
         {soon && <DeadlineChip d={d} />}
@@ -22,7 +22,7 @@ export function AnnouncementCard({ r, canBookmark, bookmarked }: { r: RowWithMat
         <CategoryTags ids={r.category_ids} />
         <TestBadge status={r.source_status} name={r.source_name} />
         {r.match && <FitChip match={r.match} />}
-        {r.match && <AccuracyChip match={r.match} />}
+        {r.match && r.match.overall !== "likely_not_met" && <AccuracyChip match={r.match} />}
       </div>
       {soon && bookmarked && (
         <p className="mt-2 rounded-lg bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-800">★ 관심 공고 · {d === 0 ? "오늘 마감입니다" : `마감까지 ${d}일 남았습니다`} — 신청 서류를 확인하세요</p>
@@ -37,6 +37,11 @@ export function AnnouncementCard({ r, canBookmark, bookmarked }: { r: RowWithMat
         <div><dt className="inline text-[var(--muted)]">접수 </dt><dd className="inline font-medium">{r.application_start || r.application_end ? `${r.application_start ?? "확인 필요"} ~ ${r.application_end ?? (r.application_status === "always" ? "상시" : "확인 필요")}` : r.application_status === "always" ? "상시 접수" : "기간 원문 확인"}</dd></div>
       </dl>
       {check && r.match && <CheckHighlight r={r} member={canBookmark} />}
+      {r.match?.overall === "likely_not_met" && (
+        <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm text-red-900">
+          우리 기업 해당 안 됨 — {r.match.results.filter((x) => x.state === "NOT_MET").map((x) => x.reason).slice(0, 2).join(" / ")}
+        </p>
+      )}
       {r.match && r.match.overall !== "likely_not_met" && <ConditionCheck announcementId={r.id} member={canBookmark} items={checkableConditions(r.match)} />}
       <p className="mt-2 line-clamp-2 text-sm text-[var(--muted)]">{r.support_amount_text || shortSummary(r.support_summary) || "지원내용은 상세 페이지에서 확인하세요."}</p>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">

@@ -1,5 +1,5 @@
 // 규칙 기반 적합성 엔진(AI 미사용). 미입력 → UNKNOWN(확인 필요), 명백한 불일치만 NOT_MET.
-import { REVENUE_BANDS, EMPLOYEE_BANDS } from "./taxonomy";
+import { REVENUE_BANDS, EMPLOYEE_BANDS, techFieldsIn } from "./taxonomy";
 import { daysBetween } from "@/lib/time";
 
 export type RuleState = "MET" | "NOT_MET" | "UNKNOWN";
@@ -23,6 +23,7 @@ export interface CompanyProfile {
   has_patent?: string | null;
   interest_categories?: string | null;
   industry_group?: string | null;
+  tech_fields?: string | null;
   /** 공고ID → 조건키 → 이용자가 원문 확인한 결과 */
   checks?: Record<string, Record<string, "yes" | "no">>;
 }
@@ -61,7 +62,7 @@ const LABELS: Record<string, string> = {
   region_sido: "소재지(시/도)", region_sigungu: "소재지(시/군/구)", industry: "업종", business_age_years: "업력",
   revenue_band: "매출 규모", employee_band: "종업원 수", research_institute: "기업부설연구소/전담부서", venture: "벤처기업 여부",
   export: "수출 여부", tech_keywords: "기술 분야", business_status: "사업자 상태",
-  enterprise_size: "기업 규모", certification: "보유 인증", industry_group: "업종 분야",
+  enterprise_size: "기업 규모", certification: "보유 인증", industry_group: "업종 분야", tech_field: "기술 분야",
 };
 const YN = (v: string) => (v === "yes" ? "예" : "아니오");
 
@@ -172,12 +173,23 @@ export function evaluateRule(rule: Rule, c: CompanyProfile, today: string): Rule
       return val === expected ? mk("MET", `${label}: ${YN(val)} (요건 ${YN(String(expected))})`) : notMet(`${label}: ${YN(val)} (요건 ${YN(String(expected))})`);
     }
     case "industry_group": {
-      const g = present(c.industry_group) ? c.industry_group : inferIndustryGroup(c.industry_name);
-      if (!g) return unknown();
+      const gs = present(c.industry_group) ? c.industry_group.split(",") : [inferIndustryGroup(c.industry_name)].filter((x): x is string => !!x);
+      if (!gs.length) return unknown();
       const allowed = (Array.isArray(expected) ? expected : [expected]).map(String);
       const src = present(c.industry_group) ? "" : " (업종명에서 추정)";
-      return allowed.includes(g) ? mk("MET", `업종 분야(${g}${src})가 지원 대상(${allowed.join(", ")})에 해당합니다.`)
+      const g = gs.find((x) => allowed.includes(x)) ?? gs.join(", ");
+      return gs.some((x) => allowed.includes(x)) ? mk("MET", `업종 분야(${g}${src})가 지원 대상(${allowed.join(", ")})에 해당합니다.`)
         : notMet(`업종 분야(${g}${src})가 지원 대상(${allowed.join(", ")})에 해당하지 않습니다.`);
+    }
+    case "tech_field": {
+      // 기업 주력 기술 분야(선택) → 없으면 보유 기술·업종명 문구에서 추정
+      const own = present(c.tech_fields) ? c.tech_fields.split(",") : techFieldsIn(`${c.tech_keywords ?? ""} ${c.industry_name ?? ""}`);
+      if (!own.length) return unknown();
+      const need = (Array.isArray(expected) ? expected : [expected]).map(String);
+      const hit = need.filter((x) => own.includes(x));
+      const src = present(c.tech_fields) ? "" : " (보유 기술 문구에서 추정)";
+      return hit.length ? mk("MET", `기술 분야(${hit.join(", ")}${src})가 공고 분야와 일치합니다.`)
+        : notMet(`공고 기술 분야(${need.join(", ")})가 우리 기업 분야(${own.join(", ")}${src})와 다릅니다.`);
     }
     case "enterprise_size": {
       if (!present(c.enterprise_size)) return unknown();

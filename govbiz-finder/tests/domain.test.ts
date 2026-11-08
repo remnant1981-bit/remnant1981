@@ -454,3 +454,28 @@ describe("공고별 조건 직접 확인", () => {
     expect(Object.keys(decodeChecks(encodeChecks(many))).length).toBe(50);
   });
 });
+
+describe("기술 분야 판정", () => {
+  it("6G 공모는 통신 분야, 수소·극저온 기업이면 해당 안 됨 / 도입·활용 공고는 확인 필요로만", async () => {
+    const { textRulesFor } = await import("@/server/recommend");
+    const r = textRulesFor({ title: "6G 서비스 시나리오 공모전 - 6G 시연 기획 Track 공고", target_summary: "중소기업", region_scope: "전국" }).find((x) => x.field_key === "tech_field")!;
+    expect(r).toMatchObject({ expected_value: JSON.stringify(["통신·네트워크(5G/6G)"]), confidence: 0.6 });
+    const smg = { tech_keywords: "액체수소, 극저온 펌프", industry_name: "기계 제조업" };
+    expect(evaluateRule(r, smg, TODAY).state).toBe("NOT_MET");
+    expect(evaluateRule(r, { tech_fields: "통신·네트워크(5G/6G)" }, TODAY).state).toBe("MET");
+    expect(evaluateRule(r, {}, TODAY)).toMatchObject({ state: "UNKNOWN", missing: true });
+    const h2 = textRulesFor({ title: "액화수소 화물창 핵심기술 개발 과제 공고", region_scope: "전국" }).find((x) => x.field_key === "tech_field")!;
+    expect(evaluateRule(h2, smg, TODAY).state).toBe("MET");
+    const robot = textRulesFor({ title: "제조 로봇 도입 지원사업 공고", region_scope: "전국" }).find((x) => x.field_key === "tech_field")!;
+    expect(robot.confidence).toBe(0.5);
+    expect(evaluateRule(robot, smg, TODAY).state).toBe("UNKNOWN");
+  });
+});
+
+describe("업종 분야 복수 선택", () => {
+  it("여러 업종 중 하나라도 대상이면 충족", () => {
+    const rule: Rule = { field_key: "industry_group", operator: "in", expected_value: JSON.stringify(["농림축수산업"]), confidence: 0.7 };
+    expect(evaluateRule(rule, { industry_group: "제조업,농림축수산업" }, TODAY).state).toBe("MET");
+    expect(evaluateRule(rule, { industry_group: "제조업,정보통신·SW" }, TODAY).state).toBe("NOT_MET");
+  });
+});
