@@ -5,7 +5,7 @@ import Link from "next/link";
 import { api } from "@/lib/client";
 import { ProfileFields, formToProfile } from "./ProfileFields";
 import { encodeGuestProfile, GUEST_COOKIE } from "@/lib/guest-profile";
-import { Notice } from "./ui";
+import { AccuracyChip, Notice } from "./ui";
 
 const OVERALL: Record<string, [string, string]> = { likely_met: ["충족 가능성 높음", "chip-met"], needs_check: ["확인 필요", "chip-check"], likely_not_met: ["미충족 가능성 높음", "chip-notmet"] };
 const STATE: Record<string, [string, string]> = { MET: ["충족", "chip-met"], NOT_MET: ["미충족", "chip-notmet"], UNKNOWN: ["확인 필요", "chip-check"] };
@@ -15,7 +15,7 @@ export function RecommendPanel({ loggedIn = false, initial }: { loggedIn?: boole
   const [nts, setNts] = useState<any>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<"met" | "all">("met");
+  const [tab, setTab] = useState<"met" | "all">("all");
   const [remember, setRemember] = useState(true);
   const router = useRouter();
 
@@ -30,7 +30,7 @@ export function RecommendPanel({ loggedIn = false, initial }: { loggedIn?: boole
       const secure = location.protocol === "https:" ? "; Secure" : "";
       document.cookie = `${GUEST_COOKIE}=${encodeGuestProfile(profile)}; Path=/; Max-Age=${180 * 86400}; SameSite=Lax${secure}`;
       setBusy(false);
-      router.push("/recommend?tab=met");
+      router.push("/recommend");
       router.refresh();
       return;
     }
@@ -73,7 +73,7 @@ export function RecommendPanel({ loggedIn = false, initial }: { loggedIn?: boole
           <h2 className="font-bold">추천 결과 <span className="text-sm font-normal text-[var(--muted)]">(참고용)</span></h2>
           <p className="text-sm">조건 충족 <strong className="text-green-800">{res.counts?.likely_met ?? 0}건</strong> · 확인 필요 <strong className="text-amber-800">{res.counts?.needs_check ?? 0}건</strong> · 해당 안 됨(제외) {res.excluded}건</p>
           <div role="tablist" className="flex gap-1 border-b border-[var(--line)]">
-            {([["met", `조건 충족 공고 (${res.counts?.likely_met ?? 0})`], ["all", `검토 필요 포함 (${(res.counts?.likely_met ?? 0) + (res.counts?.needs_check ?? 0)})`]] as const).map(([k, t]) => (
+            {([["all", `맞춤 공고 (${(res.counts?.likely_met ?? 0) + (res.counts?.needs_check ?? 0)})`], ["met", `조건 충족만 (${res.counts?.likely_met ?? 0})`]] as const).map(([k, t]) => (
               <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
                 className={`-mb-px rounded-t-lg border px-4 py-2 text-sm font-semibold ${tab === k ? "border-[var(--line)] border-b-white bg-white text-[var(--brand)]" : "border-transparent text-[var(--muted)]"}`}>{t}</button>
             ))}
@@ -84,21 +84,23 @@ export function RecommendPanel({ loggedIn = false, initial }: { loggedIn?: boole
               ? <>입력한 정보를 <Link className="font-semibold underline" href="/company">기업정보</Link>에 저장하면 다음부터 다시 입력하지 않아도 되고, 새 공고·마감 임박 알림을 받을 수 있습니다.</>
               : <><strong>이 정보를 저장하고 맞춤 알림을 받으려면</strong> <Link className="font-semibold underline" href="/register">회원가입</Link> 후 기업정보 화면에서 불러오기만 하면 됩니다(같은 브라우저에서 자동으로 채워짐).</>}
           </div>
-          {shown.length === 0 && <p className="text-sm text-[var(--muted)]">이 탭에 해당하는 공고가 없습니다. 기업정보를 더 입력하거나 ‘검토 필요 포함’을 확인해 보세요.</p>}
+          {shown.length === 0 && <p className="text-sm text-[var(--muted)]">이 탭에 해당하는 공고가 없습니다. 기업정보를 더 입력하거나 ‘맞춤 공고’ 탭을 확인해 보세요.</p>}
           {shown.map((r: any) => (
-            <article key={r.id} className="card p-4">
+            <article key={r.id} className="card p-4" style={{ borderLeft: `4px solid ${r.match.overall === "needs_check" ? "#f59e0b" : "#22c55e"}` }}>
               <div className="flex flex-wrap items-center gap-2">
                 <span className={`chip ${OVERALL[r.match.overall][1]}`}>{OVERALL[r.match.overall][0]}</span>
+                <AccuracyChip match={r.match} />
                 {r.local && <span className="chip bg-teal-100 text-teal-900">내 지역</span>}
                 {r.source_status === "mock" && <span className="chip chip-test">테스트 데이터</span>}
                 <span className="text-xs text-[var(--muted)]">접수 {r.application_start || r.application_end ? `${r.application_start ?? "확인 필요"} ~ ${r.application_end ?? "확인 필요"}` : "기간 원문 확인"}</span>
               </div>
               <h3 className="mt-1 font-semibold"><Link className="hover:underline" href={`/announcements/${r.id}`}>{r.title}</Link></h3>
               <p className="text-sm text-[var(--muted)]">{r.organization} · {r.region_scope}</p>
+              {r.match.overall === "needs_check" && r.match.missingLabels?.length > 0 && <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-amber-950">✎ 기업정보 미입력: {r.match.missingLabels.join(", ")} — 입력하면 자동 판정됩니다.</p>}
               <ul className="mt-2 grid gap-1 text-sm">
                 {r.match.results.length === 0 && <li className="text-[var(--muted)]">자동 판정 가능한 조건이 없습니다. 원문을 확인하세요.</li>}
                 {r.match.results.map((x: any, i: number) => (
-                  <li key={i}><span className={`chip ${STATE[x.state][1]}`}>{STATE[x.state][0]}</span> <strong>{x.label}</strong> — {x.reason}{x.excerpt && <em className="text-[var(--muted)]"> (근거: “{x.excerpt}”)</em>}</li>
+                  <li key={i} className={x.state === "UNKNOWN" ? "rounded bg-amber-50 px-1" : ""}><span className={`chip ${STATE[x.state][1]}`}>{STATE[x.state][0]}</span> <strong>{x.label}</strong> — {x.reason}{x.excerpt && <em className="text-[var(--muted)]"> (근거: “{x.excerpt}”)</em>}</li>
                 ))}
               </ul>
             </article>

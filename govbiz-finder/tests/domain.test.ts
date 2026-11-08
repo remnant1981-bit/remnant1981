@@ -196,6 +196,18 @@ describe("기업 적합성(MET/NOT_MET/UNKNOWN)", () => {
     expect(evaluateMatch(rules, { region_sido: "경기도", venture_status: "yes" }, T).overall).toBe("likely_met");
     expect(evaluateMatch([], null, T).overall).toBe("needs_check");
   });
+  it("판정 정확도: 정보를 입력할수록 높아지고, 미입력 항목은 따로 집계된다", () => {
+    const rules = [rule("region_sido", "in", ["경기도"]), rule("venture", "eq", "yes"), { ...rule("enterprise_size", "in", ["중소기업"]), confidence: 0.5 }];
+    const a = evaluateMatch(rules, { region_sido: "경기도" }, T);
+    expect(a.accuracy).toBe(33);
+    expect(a.missingLabels).toEqual(["벤처기업 여부", "기업 규모"]);
+    const b = evaluateMatch(rules, { region_sido: "경기도", venture_status: "yes", enterprise_size: "중소기업" }, T);
+    expect(b.accuracy).toBe(83); // 신뢰도 0.5 규칙은 절반만 반영
+    expect(b.missingLabels).toEqual([]);
+    expect(evaluateMatch([], null, T).accuracy).toBeNull();
+    // 원문 해석 불가(미입력 아님)는 missing 으로 세지 않음
+    expect(evaluateRule(rule("business_age_years", "lte", 3), { established_at: "2027-01-01" }, T).missing).toBeUndefined();
+  });
   it("미입력으로 점수가 과도하게 낮아지지 않는다(UNKNOWN 중립 50%)", () => {
     const rules = [rule("region_sido", "in", ["경기도"]), rule("venture", "eq", "yes"), rule("export", "eq", "yes")];
     const empty = evaluateMatch(rules, {}, T);

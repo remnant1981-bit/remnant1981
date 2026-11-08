@@ -124,6 +124,25 @@ export async function attachMatches(db: Db, rows: AnnouncementRow[], company: Co
 export const MATCH_CANDIDATE_LIMIT = 20000;
 
 export interface MatchCounts { likely_met: number; needs_check: number; likely_not_met: number }
+/** 미입력 기업정보 항목별로 판정을 막고 있는 공고 수(정확도 높이기 안내용) */
+export interface MissingStat { fieldKey: string; label: string; count: number }
+
+function missingStatsOf(rows: RowWithMatch[]): { missing: MissingStat[]; accuracy: number | null } {
+  const m = new Map<string, MissingStat>();
+  let sum = 0, n = 0;
+  for (const r of rows) {
+    if (!r.match || r.match.overall === "likely_not_met") continue;
+    if (r.match.accuracy !== null) { sum += r.match.accuracy; n++; }
+    const seen = new Set<string>();
+    for (const x of r.match.results) {
+      if (!x.missing || seen.has(x.fieldKey)) continue;
+      seen.add(x.fieldKey);
+      const cur = m.get(x.fieldKey) ?? { fieldKey: x.fieldKey, label: x.label, count: 0 };
+      cur.count++; m.set(x.fieldKey, cur);
+    }
+  }
+  return { missing: [...m.values()].sort((a, b) => b.count - a.count), accuracy: n ? Math.round(sum / n) : null };
+}
 
 function interestHit(row: AnnouncementRow, c: CompanyProfile): boolean {
   if (!c.interest_categories || !row.category_ids) return false;
@@ -138,6 +157,7 @@ export async function searchWithMatches(db: Db, p: SearchParams, company: Compan
     let all = await attachMatches(db, candidates, company, today);
     const counts: MatchCounts = { likely_met: 0, needs_check: 0, likely_not_met: 0 };
     for (const r of all) counts[r.match!.overall]++;
+    const stats = missingStatsOf(all);
     if (p.metOnly) all = all.filter((r) => r.match!.overall === "likely_met"); // 확인된 조건을 모두 충족한 공고만
     else if (p.eligible) all = all.filter((r) => r.match!.overall !== "likely_not_met"); // 미충족 가능성 높음 제외(확인 필요는 유지)
     if (p.sort === "fit") {
@@ -149,10 +169,11 @@ export async function searchWithMatches(db: Db, p: SearchParams, company: Compan
     return {
       total: all.length, rows: all.slice(start, start + p.pageSize), page: p.page, pageSize: p.pageSize,
       pages: Math.max(1, Math.ceil(all.length / p.pageSize)), counts, truncated: candidates.length >= MATCH_CANDIDATE_LIMIT,
+      missing: stats.missing, accuracy: stats.accuracy,
     };
   }
   const r = await searchAnnouncements(db, p, today);
-  return { ...r, rows: await attachMatches(db, r.rows, company, today), counts: null as MatchCounts | null, truncated: false };
+  return { ...r, rows: await attachMatches(db, r.rows, company, today), counts: null as MatchCounts | null, truncated: false, missing: [] as MissingStat[], accuracy: null as number | null };
 }
 
 /** 추천 이력(company_matches) 저장 — 인증된 기업 컨텍스트에서만 호출. */

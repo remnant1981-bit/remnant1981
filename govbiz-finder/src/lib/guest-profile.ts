@@ -24,3 +24,9 @@ export function decodeGuestProfile(raw: string | undefined | null): Record<strin
     return null;
   }
 }
+
+/** 브라우저에서만 호출: 비회원 맞춤 정보를 쿠키(180일)에 저장. */
+export function writeGuestCookie(p: Record<string, unknown>): void {
+  const secure = location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${GUEST_COOKIE}=${encodeGuestProfile(p)}; Path=/; Max-Age=${180 * 86400}; SameSite=Lax${secure}`;
+}
