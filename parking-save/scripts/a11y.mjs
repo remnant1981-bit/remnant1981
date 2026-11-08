@@ -1,0 +1,33 @@
+// 접근성 자동 점검(axe-core, WCAG 2.1 A/AA). 앱이 떠 있어야 함: BASE_URL=http://localhost:3000 node scripts/a11y.mjs
+// playwright는 프로젝트 의존성이 아니므로 별도 설치/NODE_PATH 필요(CI 미포함). 자동 점검은 수동 점검(스크린리더 등)을 대체하지 못함.
+import { createRequire } from "node:module";
+import fs from "node:fs";
+const require = createRequire(import.meta.url);
+const { chromium } = require("playwright");
+const axeSource = fs.readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
+const BASE = process.env.BASE_URL || "http://localhost:3000";
+const P = "start=2026-11-09T10:00&end=2026-11-09T12:00";
+const PAGES = [
+  ["홈", "/"],
+  ["검색 결과", `/search?destination=${encodeURIComponent("서울시청")}&${P}&radiusMeters=3000`],
+  ["검색 빈 결과", `/search?lat=35.1&lng=129.0&${P}`],
+  ["검색 입력 오류", `/search?destination=${encodeURIComponent("없는곳")}&${P}`],
+  ["상세(요금 계산)", "/lots/1?startAt=2026-11-09T10:00:00%2B09:00&endAt=2026-11-09T12:00:00%2B09:00&destLat=37.5663&destLng=126.9779&destName=%EC%84%9C%EC%9A%B8%EC%8B%9C%EC%B2%AD"],
+  ["상세(정보 없음)", "/lots/4?startAt=2026-11-09T10:00:00%2B09:00&endAt=2026-11-09T12:00:00%2B09:00"],
+  ["404", "/lots/9999"],
+];
+const browser = await chromium.launch();
+let total = 0;
+for (const [vpName, viewport] of [["모바일 390px", { width: 390, height: 844 }], ["데스크톱 1280px", { width: 1280, height: 800 }]]) {
+  const page = await (await browser.newContext({ viewport })).newPage();
+  for (const [name, path] of PAGES) {
+    await page.goto(BASE + path);
+    await page.evaluate(axeSource);
+    const res = await page.evaluate(() => axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"] } }));
+    total += res.violations.length;
+    console.log(`[${vpName}] ${name}: 위반 ${res.violations.length}건 (통과 규칙 ${res.passes.length})`);
+    for (const v of res.violations) console.log(`   - ${v.id} (${v.impact}): ${v.help} → ${v.nodes.length}곳 예) ${v.nodes[0].target.join(" ")}`);
+  }
+}
+await browser.close();
+process.exit(total ? 1 : 0);

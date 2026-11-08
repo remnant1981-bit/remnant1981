@@ -17,7 +17,7 @@ export type TypeFilter = "on_street" | "off_street" | "all";
 export const DEFAULT_RADIUS = 1000;
 export const MAX_RADIUS = 5000;
 export const MAX_STAY_DAYS = 31;
-const STALE_DATA_DAYS = 7; // 원천 기준일 신선도 임시값
+export const STALE_DATA_DAYS = 7; // 원천 기준일 신선도 임시값
 
 export interface SearchParams {
   center: LatLng; centerLabel: string; centerKind: "current_location" | "destination";

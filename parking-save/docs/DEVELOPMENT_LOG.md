@@ -52,6 +52,12 @@
 - 거리 유의점 임계값 `FAR_METERS=700m`(직선거리, **임시값**): 무료라도 멀면 거리 유의점을 함께 표시(SEARCH_SPEC: 먼 시설을 무조건 최적으로 단정하지 않음).
 - 혼잡·여유 표기는 임계값(OPEN_ISSUES #8) 확정 전 임시 설정값 기준.
 
+## 데이터 품질 리포트·접근성 점검 (2026-11-08)
+- ADMIN_DATA.md에 따라 관리자 화면 대신 읽기 전용 CLI `npm run quality`(`src/server/quality.ts`): 원천별 시설 수·제외 수·마지막 수집·마지막 성공·기준일 지난 시설, 품질 플래그 집계, 좌표/면수/요금/운영시간 보유 현황, 기준 기간(다음 날 10~12시 KST) 요금 계산 가능 비율과 불가 사유, 공휴일 커버리지 나이, 중복 후보 대기 건수.
+- 운영 알림(임계값은 **임시값**, `QUALITY_THRESHOLDS`): `SYNC_FAILED`, `SYNC_STALE`(3일), `RECORDS_DROP`(30%↓), `STALE_LOTS`, `AUTH_FAILURE`/`QUOTA_EXCEEDED`(공공데이터포털 오류코드 20·30·31 / 22·23), `HOLIDAY_COVERAGE_MISSING/EXPIRED`, `COORD_QUALITY`(5%↑), `FEE_UNKNOWN_HIGH`, `DUPLICATES_PENDING`. 목업/샘플 원천은 운영 경보 대상에서 제외하고 `NON_PRODUCTION_SOURCE`로 표시. ERROR 수준 알림이 있으면 종료 코드 1(스케줄러 연동용).
+- 접근성: `npm run a11y`(`scripts/a11y.mjs`, axe-core WCAG 2.1 A/AA). 홈·검색 결과·빈 결과·입력 오류·상세 2종·404 × 모바일 390px/데스크톱 1280px = **위반 0건**. 대조 실험(alt 없는 이미지·라벨 없는 입력·저대비)으로 점검 동작 확인. playwright는 프로젝트 의존성이 아니라 CI 미포함. **자동 점검만 수행 — 스크린리더·키보드 수동 점검은 미실시.**
+- 운영 알림 전달 채널(메일·메신저)과 스케줄러 연동은 미구현(OPEN_ISSUES #10 인프라 결정 후).
+
 ## 미구현·후속
 - 운영시간 판정, 시간대별 요금 차등, 단가 혼합 구간, 정기권, 회차 시간: 엔진 미지원(근거 있는 원천 규칙 확인 후 추가).
 - 공휴일 원천(OPEN_ISSUES #4) 미정: 현재 holidays 테이블만 있음.
