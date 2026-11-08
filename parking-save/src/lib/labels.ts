@@ -22,7 +22,7 @@ export const FEE_REASON_LABEL: Record<string, string> = {
   INVALID_PERIOD: "주차 기간 오류",
 };
 export function feeText(f: FeeView): { main: string; sub?: string; tone: "free" | "paid" | "unknown" } {
-  if (f.status === "OK") return f.isFree ? { main: "무료", sub: "시설 규칙상 입력 시간 전체 무료", tone: "free" } : { main: `예상 ${won(f.amount!)}`, tone: "paid" };
+  if (f.status === "OK") return f.isFree ? { main: "무료", sub: "시설 규칙상 입력 시간 전체 무료", tone: "free" } : { main: `예상 ${won(f.amount!)}`, sub: f.assumptions?.[0] ? "1일권 요금 상한 적용(추정)" : undefined, tone: "paid" };
   return { main: "요금 정보 없음", sub: FEE_REASON_LABEL[f.reason ?? ""] ?? "정확한 요금 계산 불가", tone: "unknown" };
 }
 export function occupancyText(o: LotItem["occupancy"]): { main: string; sub?: string } {

@@ -1,7 +1,8 @@
 // 데이터 품질·운영 점검 리포트 (docs/ADMIN_DATA.md). 관리자 화면 대신 CLI(`npm run quality`)로 사용.
 // 읽기 전용. 개인정보(사용자 위치 등)는 다루지 않는다.
 import type { Db } from "./db";
-import { STALE_DATA_DAYS, feeView, loadHolidays, toFeeRules } from "./search";
+import { feeView, loadHolidays, toFeeRules } from "./search";
+import { staleDaysFor } from "./freshness";
 import { calculateFee } from "@/domain/fee";
 import { NON_PRODUCTION_SOURCES } from "./mock";
 import { kstYmd } from "@/lib/time";
@@ -48,7 +49,7 @@ export async function buildQualityReport(db: Db, now = new Date()): Promise<Qual
       "SELECT status, finished_at, records_received, error_summary FROM source_sync_logs WHERE source_name=? ORDER BY id DESC LIMIT 1", [r.source_name]);
     const ok = await db.get<{ finished_at: string }>("SELECT finished_at FROM source_sync_logs WHERE source_name=? AND status IN ('SUCCESS','PARTIAL') ORDER BY id DESC LIMIT 1", [r.source_name]);
     const stale = (await db.all<{ d: string | null; c: string }>(`SELECT source_updated_at AS d, collected_at AS c FROM parking_lots WHERE source_name=? AND ${live}`, [r.source_name]))
-      .filter((x) => days(now, x.d ?? x.c) > STALE_DATA_DAYS).length;
+      .filter((x) => days(now, x.d ?? x.c) > staleDaysFor(r.source_name)).length;
     const nonProd = NON_PRODUCTION_SOURCES.includes(r.source_name);
     sources.push({ source: r.source_name, isNonProduction: nonProd, lots: r.lots, excluded: r.excluded,
       lastSync: last ? { status: last.status, finishedAt: last.finished_at, received: last.records_received, errorSummary: last.error_summary } : null,
@@ -60,7 +61,7 @@ export async function buildQualityReport(db: Db, now = new Date()): Promise<Qual
     if (prev.length === 2 && prev[1].records_received! > 0 && prev[0].records_received! < prev[1].records_received! * (1 - QUALITY_THRESHOLDS.recordsDropRatio)) {
       alerts.push({ code: "RECORDS_DROP", level: "WARN", message: `${r.source_name}: 수집 건수 급감 (${prev[1].records_received} → ${prev[0].records_received})` });
     }
-    if (stale > 0) alerts.push({ code: "STALE_LOTS", level: "WARN", message: `${r.source_name}: 기준일이 ${STALE_DATA_DAYS}일 넘은 시설 ${stale}곳` });
+    if (stale > 0) alerts.push({ code: "STALE_LOTS", level: "WARN", message: `${r.source_name}: 기준일이 ${staleDaysFor(r.source_name)}일 넘은 시설 ${stale}곳` });
   }
   // 인증·쿼터 오류(최근 로그의 오류 요약: 공공데이터포털 오류코드)
   const errs = await db.all<{ source_name: string; error_summary: string }>("SELECT source_name, error_summary FROM source_sync_logs WHERE status='FAILED' AND error_summary IS NOT NULL ORDER BY id DESC LIMIT 20");
@@ -111,6 +112,7 @@ export async function buildQualityReport(db: Db, now = new Date()): Promise<Qual
     if (badCoord / prodTotal > QUALITY_THRESHOLDS.badCoordRatio) alerts.push({ code: "COORD_QUALITY", level: "WARN", message: `좌표 없음/불량 ${badCoord}/${prodTotal}곳 (${((badCoord / prodTotal) * 100).toFixed(1)}%)` });
     if (calculableRatio != null && 1 - calculableRatio > QUALITY_THRESHOLDS.feeUnknownRatio) alerts.push({ code: "FEE_UNKNOWN_HIGH", level: "INFO", message: `기준 기간 요금 계산 불가 시설 비율 ${((1 - calculableRatio) * 100).toFixed(0)}%` });
   }
+  if ((flags.SOURCE_KEY_COLLISION ?? 0) > 0) alerts.push({ code: "SOURCE_KEY_COLLISION", level: "INFO", message: `원천 관리번호가 한 번의 수집에서 반복된 시설 ${flags.SOURCE_KEY_COLLISION}곳 — 같은 장소의 다른 버전은 기준일이 최신인 행만 반영, 다른 장소는 별도 시설로 보존` });
   const pending = await one("SELECT COUNT(*) c FROM duplicate_candidates WHERE status='PENDING'");
   if (pending > 0) alerts.push({ code: "DUPLICATES_PENDING", level: "INFO", message: `중복 후보 ${pending}건 검토 대기(자동 병합 없음)` });
 

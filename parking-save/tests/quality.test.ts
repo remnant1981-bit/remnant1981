@@ -36,8 +36,8 @@ describe("데이터 품질 리포트", () => {
     expect(r.totals).toMatchObject({ lots: 9, withCoords: 8, ownershipUnknown: 1, typeUnknown: 1 });
     expect(r.flags.COORD_OUT_OF_RANGE).toBe(1);
     expect(r.flags.FEE_INCOMPLETE).toBe(1);
-    expect(r.feeCalculation).toMatchObject({ calculable: 5, free: 2, unknown: 4 });
-    expect(r.feeCalculation.unknownByReason).toMatchObject({ NO_RULES: 3, UNSUPPORTED_DAILY_MAX_BASIS: 1 });
+    expect(r.feeCalculation).toMatchObject({ calculable: 6, free: 2, unknown: 3 }); // 1일권 보유 시설도 단일 일자 기준 기간에서는 계산
+    expect(r.feeCalculation.unknownByReason).toEqual({ NO_RULES: 3 });
     expect(r.duplicates.pending).toBeGreaterThanOrEqual(1);
     expect(codes(r)).toContain("DUPLICATES_PENDING");
   });

@@ -115,10 +115,34 @@ describe("일일 최대요금", () => {
   it("날짜별 상한 각각 적용", () => {
     expect(amt(run("2026-11-09T00:00", "2026-11-10T12:00", max))).toBe(5000 + 5000);
   });
-  it("상한 기준이 불명확하면 계산 불가", () => {
-    const r: FeeRule[] = [...std, { ruleType: "DAILY_MAX", amount: 5000, dayType: "EVERYDAY", dailyMaxBasis: "UNKNOWN" }];
-    expect(amt(run("2026-11-09T10:00", "2026-11-09T11:00", r))).toBe("UNSUPPORTED_DAILY_MAX_BASIS");
+  it("기준 필드가 아예 없으면(null/undefined) 계속 계산 불가", () => {
     const r2: FeeRule[] = [...std, { ruleType: "DAILY_MAX", amount: 5000, dayType: "EVERYDAY" }];
     expect(amt(run("2026-11-09T10:00", "2026-11-09T11:00", r2))).toBe("UNSUPPORTED_DAILY_MAX_BASIS");
+  });
+  describe("기준 불명(UNKNOWN)/입차 24시간 상한 — 자정을 넘지 않는 단일 일자 이용에서만 (사용자 결정 2026-11-08)", () => {
+    const unk: FeeRule[] = [...std, { ruleType: "DAILY_MAX", amount: 5000, dayType: "EVERYDAY", dailyMaxBasis: "UNKNOWN" }];
+    it("상한이 걸리지 않으면 시간제 요금 그대로, 추정 표시 없음", () => {
+      const r = run("2026-11-09T10:00", "2026-11-09T11:00", unk);
+      expect(r.status === "OK" && r.amount === 2000 && r.assumptions.length === 0).toBe(true);
+    });
+    it("상한이 걸리면 낮은 값 + 추정 표시", () => {
+      const r = run("2026-11-09T08:00", "2026-11-09T20:00", unk);
+      expect(r.status).toBe("OK");
+      if (r.status === "OK") { expect(r.amount).toBe(5000); expect(r.assumptions).toHaveLength(1); expect(r.assumptions[0]).toContain("추정"); }
+    });
+    it("입차 24시간 기준도 단일 일자에서는 동일하게 적용", () => {
+      const r: FeeRule[] = [...std, { ruleType: "DAILY_MAX", amount: 5000, dayType: "EVERYDAY", dailyMaxBasis: "ENTRY_24H" }];
+      expect(amt(run("2026-11-09T08:00", "2026-11-09T20:00", r))).toBe(5000);
+    });
+    it("자정까지(정확히 다음 자정 종료)는 단일 일자, 자정을 넘기면 계산 불가", () => {
+      expect(amt(run("2026-11-09T22:00", "2026-11-10T00:00", unk))).toBe(4000); // 120분: 1000+6*500=4000 < 상한 5000
+      expect(amt(run("2026-11-09T23:30", "2026-11-10T00:30", unk))).toBe("UNSUPPORTED_DAILY_MAX_BASIS");
+      expect(amt(run("2026-11-09T10:00", "2026-11-10T10:00", unk))).toBe("UNSUPPORTED_DAILY_MAX_BASIS");
+    });
+    it("달력일 기준이 확인된 상한은 기존대로 날짜별 적용 + 추정 표시 없음", () => {
+      const cal: FeeRule[] = [...std, { ruleType: "DAILY_MAX", amount: 5000, dayType: "EVERYDAY", dailyMaxBasis: "CALENDAR_DAY" }];
+      const r = run("2026-11-09T08:00", "2026-11-09T20:00", cal);
+      expect(r.status === "OK" && r.amount === 5000 && r.assumptions.length === 0).toBe(true);
+    });
   });
 });

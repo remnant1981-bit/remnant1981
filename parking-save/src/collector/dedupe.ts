@@ -10,7 +10,13 @@ const addrKey = (a: string | null) => (a ? a.replace(/\s+/g, "") : "");
 export function findCandidates(a: DedupeLot, b: DedupeLot): DuplicateCandidate | null {
   if (a.id === b.id || a.latitude == null || a.longitude == null || b.latitude == null || b.longitude == null) return null;
   const d = distanceMeters({ lat: a.latitude, lng: a.longitude }, { lat: b.latitude, lng: b.longitude });
-  const sameName = nameKey(a.name) !== "" && nameKey(a.name) === nameKey(b.name);
+  const na = nameKey(a.name), nb = nameKey(b.name);
+  const sameName = na !== "" && na === nb;
+  const partialName = na.length >= 3 && nb.length >= 3 && (na.includes(nb) || nb.includes(na));
+  // 실데이터 표본에서 같은 도로명주소를 쓰는 '제2/제3주차장', '공항1/공항2'가 후보로 올라오는 오탐 확인 → 이름 유사성을 필수로 하고, 번호가 서로 다르면 제외
+  const numA = (a.name.match(/\d+/g) ?? []).join(","), numB = (b.name.match(/\d+/g) ?? []).join(",");
+  if (numA !== "" && numB !== "" && numA !== numB) return null;
+  if (!sameName && !partialName) return null;
   const sameAddr = addrKey(a.roadAddress) !== "" && addrKey(a.roadAddress) === addrKey(b.roadAddress);
   let score = 0; const why: string[] = [];
   if (sameName && d <= 150) { score += 0.6; why.push("동일 시설명·150m 이내"); }

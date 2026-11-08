@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 import type { Db } from "@/server/db";
-import type { SourceAdapter, RawRow } from "./types";
+import type { SourceAdapter, RawRow, NormalizedLot } from "./types";
 import { normalizeStandardRow } from "./standard-parking";
 import { findCandidates } from "./dedupe";
+import { resolveKeyCollisions, type Candidate } from "./collisions";
 
-export interface SyncSummary { status: "SUCCESS" | "PARTIAL" | "FAILED"; received: number; inserted: number; updated: number; unchanged: number; excluded: number; invalid: number; errors: number; duplicateCandidates: number }
+export interface SyncSummary { status: "SUCCESS" | "PARTIAL" | "FAILED"; keyCollisions: number; collisionSuperseded: number; collisionSplit: number; received: number; inserted: number; updated: number; unchanged: number; excluded: number; invalid: number; errors: number; duplicateCandidates: number }
 
 const stable = (row: RawRow) => JSON.stringify(Object.keys(row).sort().map((k) => [k, row[k] ?? null]));
 const sha = (x: string) => createHash("sha256").update(x).digest("hex");
@@ -15,7 +16,7 @@ const sha = (x: string) => createHash("sha256").update(x).digest("hex");
  */
 export async function runSync(db: Db, adapter: SourceAdapter, now = new Date()): Promise<SyncSummary> {
   const startedAt = now.toISOString();
-  const sum: SyncSummary = { status: "SUCCESS", received: 0, inserted: 0, updated: 0, unchanged: 0, excluded: 0, invalid: 0, errors: 0, duplicateCandidates: 0 };
+  const sum: SyncSummary = { status: "SUCCESS", keyCollisions: 0, collisionSuperseded: 0, collisionSplit: 0, received: 0, inserted: 0, updated: 0, unchanged: 0, excluded: 0, invalid: 0, errors: 0, duplicateCandidates: 0 };
   const log = await db.run("INSERT INTO source_sync_logs(source_name, started_at, status) VALUES (?,?, 'RUNNING')", [adapter.sourceName, startedAt]);
   void log;
   const logId = (await db.get<{ id: number }>("SELECT MAX(id) AS id FROM source_sync_logs"))!.id;
@@ -23,6 +24,8 @@ export async function runSync(db: Db, adapter: SourceAdapter, now = new Date()):
   let fatal: string | null = null;
   let newestBase: string | null = null;
   try {
+    // 1단계: 수집·정규화(범위 제외/형식 불량은 즉시 집계). 같은 관리번호 판정은 전체를 모은 뒤에 해야 수집 순서와 무관해진다
+    const pending: Array<Candidate<{ row: RawRow; lot: NormalizedLot }>> = [];
     for await (const row of adapter.fetch()) {
       sum.received++;
       try {
@@ -34,7 +37,20 @@ export async function runSync(db: Db, adapter: SourceAdapter, now = new Date()):
           await db.run("UPDATE parking_lots SET data_status='EXCLUDED_SCOPE', updated_at=? WHERE source_name=? AND source_record_id=?", [startedAt, adapter.sourceName, key]);
           continue;
         }
-        const lot = res.lot;
+        pending.push({ key, lat: res.lot.latitude, lng: res.lot.longitude, date: res.lot.sourceUpdatedAt, seq: pending.length, payload: { row, lot: res.lot } });
+      } catch (e) {
+        sum.errors++;
+        console.error("[sync] row error", adapter.sourceName, e instanceof Error ? e.message : e);
+      }
+    }
+    // 2단계: 같은 관리번호 반복 판정 — 같은 장소(50m 이내)는 기준일이 최신인 행만, 다른 장소는 별도 시설로 보존(사용자 결정 2026-11-08 + 실데이터 확인)
+    const plan = resolveKeyCollisions(pending);
+    sum.collisionSuperseded = plan.superseded; sum.collisionSplit = plan.split; sum.keyCollisions = plan.superseded + plan.split;
+    // 3단계: 저장
+    for (const { id: key, item, collided } of plan.items) {
+      try {
+        const { row, lot } = item.payload;
+        if (collided) lot.qualityFlags.push("SOURCE_KEY_COLLISION");
         const hash = sha(stable(row));
         if (lot.sourceUpdatedAt && (!newestBase || lot.sourceUpdatedAt > newestBase)) newestBase = lot.sourceUpdatedAt;
         await db.run("INSERT OR IGNORE INTO source_raw_records(source_name, source_record_id, payload_json, payload_hash, source_updated_at, collected_at) VALUES (?,?,?,?,?,?)",
