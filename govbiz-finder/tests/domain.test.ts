@@ -74,8 +74,24 @@ describe("중복 판정·upsert", () => {
     const db = await freshDb({ mock: false });
     const a = await normalizeAnnouncement(base, "2026-01-10");
     await upsertAnnouncement(db, "bizinfo", a, "t");
-    const b = await normalizeAnnouncement({ ...base, sourceNoticeId: "OTHER", url: "https://other.example/x", title: "테스트 사업 (재공고)" }, "2026-01-10");
+    const b = await normalizeAnnouncement({ ...base, sourceNoticeId: "OTHER", url: "https://other.example/x", title: "[공고] 테스트 사업 (재공고)" }, "2026-01-10");
     expect(await findDuplicate(db, "mss", b)).toMatchObject({ by: "title_org_period" });
+  });
+});
+
+describe("중복 판정: 지역만 다른 공고는 합치지 않는다", () => {
+  it("지역 접두어·지역 범위가 다르면 별개, 같은 공고의 재공고 표기는 병합", async () => {
+    const db = await freshDb({ mock: false });
+    const mk = (id: string, title: string, region: string) => normalizeAnnouncement({ ...base, sourceNoticeId: id, url: `https://example.org/${id}`, title, regionScope: region }, "2026-01-10");
+    await upsertAnnouncement(db, "bizinfo", await mk("A", "[서울] 청년일자리도약장려금 모집 공고", "서울특별시"), "t");
+    const b = await upsertAnnouncement(db, "bizinfo", await mk("B", "[충북] 청년일자리도약장려금 모집 공고", "충청북도"), "t");
+    expect(b.action).toBe("inserted");
+    // 접두어가 달라도 지역 범위가 같으면 서로 다른 사업명이므로 병합되지 않음
+    const c = await upsertAnnouncement(db, "bizinfo", await mk("C", "[서울] 청년일자리도약장려금 모집 공고(재공고)", "서울특별시"), "t");
+    expect(c.action).toBe("merged");
+    const d = await upsertAnnouncement(db, "bizinfo", await mk("D", "[서울] 다른 사업 모집 공고", "서울특별시"), "t");
+    expect(d.action).toBe("inserted");
+    expect((await db.get<{ n: number }>("SELECT COUNT(*) n FROM announcements"))!.n).toBe(3);
   });
 });
 
