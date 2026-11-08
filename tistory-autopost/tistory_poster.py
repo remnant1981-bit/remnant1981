@@ -233,26 +233,44 @@ class TistoryBot:
             return False
 
     # --- 쿠키 (모바일/클라우드 실행용 세션 이전)
+    # 티스토리 세션 쿠키는 몇 시간 안에 만료되지만, 카카오 "로그인 상태 유지" 쿠키는 오래 감 →
+    # 둘 다 내보내고, 티스토리 쪽이 만료되면 카카오 쿠키로 다시 로그인(SSO)해 세션을 되살림
+    COOKIE_SITES = (("tistory.com", "https://www.tistory.com/"),
+                    ("kakao.com", "https://accounts.kakao.com/"))
+
     def export_cookies(self) -> str:
-        self.d.get("https://www.tistory.com/")
-        time.sleep(2)
-        cookies = [c for c in self.d.get_cookies() if "tistory.com" in c.get("domain", "")]
+        cookies = []
+        for domain, url in self.COOKIE_SITES:
+            try:
+                self.d.get(url)
+                time.sleep(2)
+                cookies += [c for c in self.d.get_cookies() if domain in c.get("domain", "")]
+            except Exception as e:
+                log.warning("%s 쿠키 수집 실패: %s", domain, e)
         raw = json.dumps(cookies, ensure_ascii=False).encode("utf-8")
         return base64.b64encode(raw).decode("ascii")
 
-    def import_cookies(self, encoded: str):
+    def import_cookies(self, encoded: str) -> dict:
+        """도메인별 적용 개수 반환 (예: {'tistory.com': 6, 'kakao.com': 4})"""
         cookies = json.loads(base64.b64decode(encoded.strip()))
-        self.d.get("https://www.tistory.com/")
-        for c in cookies:
-            c = {k: v for k, v in c.items() if k in
-                 ("name", "value", "domain", "path", "secure", "httpOnly", "expiry")}
-            if "expiry" in c:
-                c["expiry"] = int(c["expiry"])
-            try:
-                self.d.add_cookie(c)
-            except Exception as e:
-                log.debug("쿠키 추가 실패 %s: %s", c.get("name"), e)
-        log.info("로그인 쿠키 %d개 적용", len(cookies))
+        counts = {}
+        for domain, url in self.COOKIE_SITES:
+            mine = [c for c in cookies if domain in c.get("domain", "")]
+            if not mine:
+                continue
+            self.d.get(url)
+            for c in mine:
+                c = {k: v for k, v in c.items() if k in
+                     ("name", "value", "domain", "path", "secure", "httpOnly", "expiry")}
+                if "expiry" in c:
+                    c["expiry"] = int(c["expiry"])
+                try:
+                    self.d.add_cookie(c)
+                except Exception as e:
+                    log.debug("쿠키 추가 실패 %s: %s", c.get("name"), e)
+            counts[domain] = len(mine)
+        log.info("로그인 쿠키 적용: %s", ", ".join(f"{k} {v}개" for k, v in counts.items()) or "없음")
+        return counts
 
     def _on_manage(self) -> bool:
         url = self.d.current_url
@@ -278,7 +296,7 @@ class TistoryBot:
             for name, cookies in self._cookie_sources():
                 try:
                     self.d.delete_all_cookies()
-                    self.import_cookies(cookies)
+                    counts = self.import_cookies(cookies)
                 except Exception as e:
                     log.warning("%s 적용 실패: %s", name, e)
                     continue
@@ -288,6 +306,12 @@ class TistoryBot:
                     log.info("로그인 성공 (%s)", name)
                     self.save_session()
                     return True
+                if counts.get("kakao.com"):
+                    log.info("%s 의 티스토리 세션 만료 → 카카오 쿠키로 재로그인 시도", name)
+                    if self.kakao_sso_login():
+                        log.info("로그인 성공 (%s, 카카오 재로그인)", name)
+                        self.save_session()
+                        return True
                 log.info("%s 만료 → 다음 방법 시도", name)
         if os.environ.get("KAKAO_ID") and os.environ.get("KAKAO_PW") \
                 and not getattr(self, "_kakao_tried", False):
@@ -313,13 +337,7 @@ class TistoryBot:
         from selenium.webdriver.common.by import By
         d = self.d
         log.info("카카오 계정 로그인 시도")
-        d.get("https://www.tistory.com/auth/login")
-        time.sleep(2)
-        try:
-            self.wait("a.link_kakao_id, a[class*='kakao']", timeout=10, clickable=True).click()
-        except Exception:
-            log.error("티스토리 로그인 화면에서 카카오 버튼 미발견")
-            self._log_page()
+        if not self._click_tistory_kakao_button():
             return False
 
         try:
@@ -333,8 +351,37 @@ class TistoryBot:
         pw_box.clear(); pw_box.send_keys(kpw)
         time.sleep(0.5)
         d.find_element(By.CSS_SELECTOR, "button[type='submit'], button.submit").click()
+        if self._wait_kakao_redirect(int(os.environ.get("KAKAO_APPROVE_WAIT", "180"))):
+            log.info("카카오 로그인 성공")
+            return True
+        return False
 
-        wait_sec = int(os.environ.get("KAKAO_APPROVE_WAIT", "180"))
+    def _click_tistory_kakao_button(self) -> bool:
+        self.d.get("https://www.tistory.com/auth/login")
+        time.sleep(2)
+        try:
+            self.wait("a.link_kakao_id, a[class*='kakao']", timeout=10, clickable=True).click()
+            return True
+        except Exception:
+            log.error("티스토리 로그인 화면에서 카카오 버튼 미발견")
+            self._log_page()
+            return False
+
+    def kakao_sso_login(self) -> bool:
+        """카카오 '로그인 상태 유지' 쿠키가 살아 있으면 비밀번호 없이 티스토리 세션 재발급 (클라우드 실행용)"""
+        from selenium.webdriver.common.by import By
+        if not self._click_tistory_kakao_button():
+            return False
+        time.sleep(3)
+        if self.d.find_elements(By.CSS_SELECTOR, "input[name='loginId'], input#loginId--1, input[type='password']"):
+            log.info("카카오 쿠키도 만료 (비밀번호 입력 화면) → 재로그인 불가")
+            return False
+        return self._wait_kakao_redirect(int(os.environ.get("KAKAO_SSO_WAIT", "40")))
+
+    def _wait_kakao_redirect(self, wait_sec: int) -> bool:
+        """카카오 → 티스토리 복귀를 기다리며 동의 화면은 자동 진행"""
+        from selenium.webdriver.common.by import By
+        d = self.d
         notified = False
         end = time.time() + wait_sec
         while time.time() < end:
@@ -344,7 +391,6 @@ class TistoryBot:
                 d.get(self.manage_url)
                 time.sleep(3)
                 if self._on_manage():
-                    log.info("카카오 로그인 성공")
                     return True
                 break
             text = self._page_text()

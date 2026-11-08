@@ -38,11 +38,13 @@ const SIDO_TAG: Record<string, string> = {
   경기: "경기도", 강원: "강원특별자치도", 충북: "충청북도", 충남: "충청남도", 전북: "전북특별자치도", 경북: "경상북도", 경남: "경상남도", 제주: "제주특별자치도",
   전남광주: "전남광주", // 문서의 통합 지역 태그. 단일 시/도로 매핑할 수 없어 원문 표기를 유지
 };
+const MID_CATEGORY: [RegExp, string][] = [[/사업화/, "commercialization"], [/지식재산|인증/, "ip"], [/판로|마케팅/, "marketing"], [/시설|설비/, "facility"]];
 const FIELD_CATEGORY: Record<string, string[]> = { 금융: ["finance"], 기술: ["rnd"], 인력: ["hr"], 수출: ["export"], 내수: ["marketing"], 창업: ["startup"] }; // 경영·기타는 대응 분야가 없어 미분류
 
 export function regionFromTags(tags: string[]): string {
   const regions = [...new Set(tags.map((t) => SIDO_TAG[t]).filter(Boolean))];
-  if (regions.length === 0) return "전국";
+  // 실제 응답: 전국 대상 공고는 모든 시도 태그를 나열한다(17개 중 15개 이상이면 전국으로 본다)
+  if (regions.length === 0 || regions.length >= 15) return "전국";
   if (regions.length === 1) return regions[0];
   return `${regions[0]} 외 ${regions.length - 1}곳`; // 복수 지역 공고: 첫 지역 기준 표기(지역 필터는 첫 지역에만 매칭 — 알려진 제한)
 }
@@ -60,7 +62,7 @@ export function mapItem(it: Item): RawAnnouncement | null {
   const title = first(it.pblancNm, it.title);
   const org = first(it.jrsdInsttNm, it.author);
   if (!id || !url || !title || !org) return null;
-  const tags = first(it.hashTags).split(",").map((t) => t.trim()).filter(Boolean);
+  const tags = first(it.hashtags, it.hashTags).split(",").map((t) => t.trim()).filter(Boolean);
   const field = first(it.pldirSportRealmLclasCodeNm, it.lcategory);
   const periodRaw = first(it.reqstBeginEndDe, it.reqstDt);
   const [start, end] = parsePeriod(periodRaw);
@@ -70,15 +72,18 @@ export function mapItem(it: Item): RawAnnouncement | null {
     stripHtml(first(it.reqstMthPapersCn)),
     first(it.rceptEngnHmpgUrl) ? `접수 사이트: ${first(it.rceptEngnHmpgUrl)}` : "",
   ].filter(Boolean).join("\n");
-  const files: NonNullable<RawAnnouncement["files"]> = [];
-  if (first(it.flpthNm) && first(it.fileNm)) files.push({ name: first(it.fileNm), url: first(it.flpthNm) });
-  if (first(it.printFlpthNm) && first(it.printFileNm)) files.push({ name: first(it.printFileNm), url: first(it.printFlpthNm) });
+  // 첨부: 이름은 '@'로 이어져 오고 파일 URL 에는 서명 토큰(downloadToken)이 포함되어 만료될 수 있어
+  // 토큰 URL 은 저장하지 않고 파일명만 보존하며 링크는 공식 공고 상세 페이지로 연결한다.
+  const names = [...first(it.fileNm).split("@"), ...first(it.printFileNm).split("@")].map((n) => n.trim()).filter(Boolean);
+  const files: NonNullable<RawAnnouncement["files"]> = [...new Set(names)].map((name) => ({ name, url }));
+  const mid = first(it.pldirSportRealmMlsfcCodeNm);
+  const categories = [...new Set([...(FIELD_CATEGORY[field] ?? []), ...MID_CATEGORY.filter(([re]) => re.test(mid)).map(([, c]) => c)])];
   return {
     sourceNoticeId: id,
     url,
     title,
     organization: org,
-    categories: FIELD_CATEGORY[field] ?? [],
+    categories,
     regionScope: regionFromTags(tags),
     targetSummary: first(it.trgetNm) || undefined,
     supportSummary: summary ? summary.slice(0, 500) : undefined,
@@ -88,7 +93,7 @@ export function mapItem(it: Item): RawAnnouncement | null {
     contactInfo: stripHtml(first(it.refrncNm)) || undefined,
     originalText: summary || undefined,
     publishedAt: toIsoKst(first(it.creatPnttm, it.pubDate)),
-    files: files.filter((f) => /^https?:\/\//.test(f.url)),
+    files,
   };
 }
 
