@@ -13,6 +13,12 @@ import { SIDO } from "@/domain/taxonomy";
  */
 export function regionRulesFor(scope: string): Rule[] {
   if (!scope || scope === "전국" || /\s외\s*\d+곳$/.test(scope)) return [];
+  if (scope.includes("·")) {
+    // 복수 지역: 모든 항목이 시/도일 때만 '이 중 하나'로 판정(전남광주 등 해석 불가 항목이 있으면 판정하지 않음)
+    const parts = scope.split("·");
+    if (!parts.every((x) => (SIDO as readonly string[]).includes(x))) return [];
+    return [{ field_key: "region_sido", operator: "in", expected_value: JSON.stringify(parts), source_excerpt: `공고 지역: ${parts.join(", ")}`, confidence: 1 }];
+  }
   const sido = SIDO.find((x) => scope === x || scope.startsWith(x + " "));
   if (!sido) return [];
   const rules: Rule[] = [{ field_key: "region_sido", operator: "in", expected_value: JSON.stringify([sido]), source_excerpt: `공고 지역: ${scope}`, confidence: 1 }];
@@ -42,7 +48,7 @@ export async function loadRules(db: Db, ids: string[]): Promise<Map<string, Rule
 
 export function isLocal(row: AnnouncementRow, c: CompanyProfile): boolean {
   if (!c.region_sido || row.region_scope === "전국") return false;
-  return row.region_scope === c.region_sido || row.region_scope.startsWith(c.region_sido + " ");
+  return row.region_scope.split("·").some((x) => x === c.region_sido || x.startsWith(c.region_sido + " "));
 }
 
 export type RowWithMatch = AnnouncementRow & { match: MatchResult | null; local: boolean };

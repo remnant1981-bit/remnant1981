@@ -15,13 +15,13 @@ export default async function Page() {
   const v = await getViewer();
   if (v.company && v.session) {
     const db = await getDb();
-    const res = await searchWithMatches(db, parseSearchParams({ sort: "fit", size: "30", status: "open,upcoming,always,unknown" }), v.company);
+    const res = await searchWithMatches(db, parseSearchParams({ sort: "fit", size: "30", status: "open,upcoming,always,unknown", eligible: "1" }), v.company);
     await saveMatches(db, v.company.id, res.rows);
     const marks = await bookmarkedIds(db, v.session.user.id, v.company.id);
     return (
       <>
         <PageTitle sub="입력된 기업정보만으로 판단하며, 미입력 항목은 ‘확인 필요’입니다.">맞춤 추천</PageTitle>
-        <Notice>추천은 참고정보입니다. 최종 신청 자격은 공식 원문과 담당기관 확인이 기준입니다.</Notice>
+        <Notice>추천은 참고정보입니다. 최종 신청 자격은 공식 원문과 담당기관 확인이 기준입니다. 지역 등 입력한 정보와 맞지 않는 공고(‘미충족 가능성 높음’)는 제외하고, 확인이 필요한 공고는 남겨 두었습니다.</Notice>
         <div className="mt-4 grid gap-3">
           {res.rows.length ? res.rows.map((r) => <AnnouncementCard key={r.id} r={r} canBookmark bookmarked={marks.has(r.id)} />) : <Empty title="추천할 공고가 없습니다." />}
         </div>

@@ -51,6 +51,7 @@ export function RecommendPanel() {
       {res && (
         <section aria-live="polite" className="grid gap-3">
           <h2 className="font-bold">추천 결과 {res.total}건 <span className="text-sm font-normal text-[var(--muted)]">(참고용 · 상위 {res.rows.length}건)</span></h2>
+          {res.excluded > 0 && <p className="text-sm text-[var(--muted)]">입력한 정보와 맞지 않는 공고 {res.excluded}건은 제외했습니다. 입력하지 않은 항목이 있는 공고는 ‘확인 필요’로 남아 있습니다.</p>}
           {res.rows.map((r: any) => (
             <article key={r.id} className="card p-4">
               <div className="flex flex-wrap items-center gap-2">

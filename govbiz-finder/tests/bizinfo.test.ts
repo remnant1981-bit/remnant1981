@@ -37,10 +37,10 @@ describe("기업마당 매핑", () => {
     expect(parsePeriod("20260230 ~ 20260301")).toEqual([null, null]);
     expect(parsePeriod("20260301 ~ 20260201")).toEqual([null, null]);
   });
-  it("지역 태그: 없음→전국, 1개→시도, 복수→첫 지역 외 N곳, HTML 제거", () => {
+  it("지역 태그: 없음→전국, 1개→시도, 복수→전체 목록(중점), HTML 제거", () => {
     expect(regionFromTags(["금융", "2026"])).toBe("전국");
     expect(regionFromTags(["서울"])).toBe("서울특별시");
-    expect(regionFromTags(["경기", "서울"])).toBe("경기도 외 1곳");
+    expect(regionFromTags(["경기", "서울"])).toBe("경기도·서울특별시");
     expect(stripHtml("<script>x</script>a&lt;b")).toBe("xa<b");
   });
   it("위험 원문 URL 은 거부, 첨부는 서명 토큰 URL 을 저장하지 않고 공식 상세 링크로 연결", async () => {

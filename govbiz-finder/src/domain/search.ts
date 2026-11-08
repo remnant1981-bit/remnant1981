@@ -84,8 +84,9 @@ const SELECT = `SELECT a.id, a.title, a.organization, a.category, a.region_scope
 function regionClause(region: string, params: SqlValue[]): string {
   if (!region) return "";
   const [sido] = region.split(" ");
-  params.push(region, sido, sido + " %");
-  return " AND (a.region_scope='전국' OR a.region_scope=? OR a.region_scope=? OR a.region_scope LIKE ?)";
+  // 복수 지역 공고는 '서울특별시·경기도'처럼 중점으로 이어져 있다
+  params.push(region, sido, sido + " %", sido + "·%", "%·" + sido + "%");
+  return " AND (a.region_scope='전국' OR a.region_scope=? OR a.region_scope=? OR a.region_scope LIKE ? OR a.region_scope LIKE ? OR a.region_scope LIKE ?)";
 }
 
 export function buildWhere(p: SearchParams, today: string): { where: string; params: SqlValue[] } {
