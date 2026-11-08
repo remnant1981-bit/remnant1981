@@ -246,3 +246,17 @@ describe("국세청 상태조회 adapter", () => {
     await expect(net.lookupStatus("1234567891")).rejects.toBeInstanceOf(NtsError);
   });
 });
+
+import { parseBlocks, shortSummary } from "@/lib/format";
+describe("본문 포맷", () => {
+  it("☞/※/- 줄을 소제목·주석·글머리표로 나누고 HTML 은 해석하지 않는다", () => {
+    const b = parseBlocks("소개 문장입니다.\n\n☞ 지원 대상\n- 중소기업\nㆍ 제조업\n※ 자세한 내용은 공고문 참조\n<b>x</b>");
+    expect(b.map((x) => x.type)).toEqual(["para", "heading", "bullet", "bullet", "note", "para"]);
+    expect(b[5].text).toBe("<b>x</b>"); // 텍스트 그대로(렌더 시 React 가 이스케이프)
+  });
+  it("요약은 첫 문장 기준으로 길이를 제한한다", () => {
+    expect(shortSummary("짧은 문장 하나뿐입니다.")).toBe("짧은 문장 하나뿐입니다.");
+    expect(shortSummary("가".repeat(300)).length).toBeLessThanOrEqual(111);
+    expect(shortSummary("")).toBe("");
+  });
+});
