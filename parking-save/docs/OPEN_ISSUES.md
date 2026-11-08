@@ -98,4 +98,38 @@
   4. appname은 환경변수 `SITE_URL`(운영 도메인) 사용.
 - 미검증/후속: Android·iOS 실기기에서 앱 호출·미설치 분기 확인, iOS 대체 동작 실측, 웹 지도 대체 URL(공식 문서 미확인이라 미구현), URL Scheme 이용 약관·브랜드 표기 정책 확인(릴리스 체크리스트).
 
+---
+- 항목: #1 보강 — 전국주차장정보표준데이터 OpenAPI 엔드포인트·응답 키 (**공식 포털 페이지 확인, 실호출 미검증**)
+- 조사일: 2026-11-08
+- 확인한 공식 문서/샘플: https://www.data.go.kr/data/15012896/standard.do (API 기본 정보·출력결과 표)
+- 확인 결과: 요청주소 `https://api.data.go.kr/openapi/tn_pubr_prkplce_info_api`, 개발계정 10,000건. **API 응답 키는 파일 컬럼(한글)과 다른 영문 camelCase**: prkplceNo, prkplceNm, prkplceSe, prkplceType, rdnmadr, lnmadr, prkcmprt, feedingSe, enforceSe, operDay, weekdayOperOpenHhmm, weekdayOperColseHhmm, satOperOperOpenHhmm, satOperCloseHhmm, holidayOperOpenHhmm, holidayCloseOpenHhmm, parkingchrgeInfo, basicTime, basicCharge, addUnitTime, addUnitCharge, dayCmmtktAdjTime, dayCmmtkt, monthCmmtkt, metpay, spcmnt, institutionNm, phoneNumber, latitude, longitude, pwdbsPpkZoneYn, referenceDate, instt_code(제공기관코드). 일부 키에 오탈자(`Colse`, `satOperOper`)가 있어 공식 표기 그대로 매핑해야 함.
+- 영향: 현재 `normalizeStandardRow`는 한글 컬럼명 입력 → 실제 API 어댑터는 camelCase→한글 컬럼 매핑 계층이 필요. 응답 JSON 형태(items 위치)·페이지네이션·값 분포는 실호출 후 확인.
+---
+- 항목: #2 한국교통안전공단 주차정보 제공 API (**구조 확인, 실시간 오퍼레이션 명세·커버리지 미확인**)
+- 조사일: 2026-11-08
+- 확인한 공식 문서/샘플: https://www.data.go.kr/data/15099883/openapi.do , 파일데이터 15150101(주차장실시간정보) 설명
+- 확인 결과:
+  - 서비스 URL `https://apis.data.go.kr/B553881/Parking_v1`. 서비스 3종: **주차장 시설정보**(`PrkSttusInfo_v1`, 페이지에 표시된 유일한 오퍼레이션), **주차장 운영정보**, **주차장 실시간 정보**(둘의 오퍼레이션명·응답 필드는 페이지에 표시되지 않음).
+  - 요청: serviceKey, pageNo, numOfRows, format(1=XML, 2=JSON), sidoCd(2자리, 선택), sigunguCd(5자리, 선택). 무료, 이용허락범위 제한 없음, 갱신 "실시간", 개발계정 10,000건/일. 형식은 ITS Korea의 실시간 주차정보 수집·연계 규격 준용. 각 API는 **주차장 관리번호를 PK**로 함.
+  - 공식 설명: "주차장 운영정보, 실시간 주차정보는 주차장 시설정보에 비하여 정보의 수가 적다" → 실시간 잔여면수 제공 시설은 전국 일부.
+  - 파일데이터 15150101(주차장실시간정보)은 특정 시점 스냅샷이며 실시간이 필요하면 이 API를 쓰라고 안내.
+- 미확인: 운영·실시간 오퍼레이션명/응답 필드, 실시간 제공 시설 수·지역 분포, 이 API의 주차장 관리번호가 표준데이터 `주차장관리번호`와 같은 체계인지(같으면 조인 가능). 상세는 참고문서 `주차정보시스템_기술문서_20261001.docx`에 있으나 미열람 → **키 발급 후 문서 열람 + 실호출 필요**.
+---
+- 항목: #3 서울시 시영주차장 실시간 주차대수 정보 (OA-21709) (**공개 샘플키로 실제 응답 5행 확인**)
+- 조사일: 2026-11-08
+- 확인한 공식 문서/샘플: https://data.seoul.go.kr/dataList/OA-21709/A/1/datasetView.do , `http://openapi.seoul.go.kr:8088/sample/json/GetParkingInfo/1/5/` (문서에 공개된 샘플키 `sample`, 5건 제한)
+- 확인 결과:
+  - 서울시 시영주차장 122건, 실시간 갱신, 공공누리 제1유형(출처표시, 상업적 이용·변경 가능), 제3저작권자 없음. 인증키는 서울 열린데이터광장에서 별도 발급, 1회 최대 1000건. 호출 형식 `http://openapi.seoul.go.kr:8088/(KEY)/json/GetParkingInfo/(START)/(END)/[자치구]` — **문서 예시는 http이며 키가 URL 경로에 들어감**(https 지원 여부 미확인, 로그·오류에 URL 노출 금지).
+  - 유의사항: "실제 데이터와 5분 이상 차이가 날 수 있습니다." "주차장 여건에 따라 실제 정보와 다를 수 있음."
+  - 실제 응답 구조 `{"GetParkingInfo":{"list_total_count","RESULT":{"CODE","MESSAGE"},"row":[...]}}`, 정상 코드 `INFO-000`.
+  - **잔여면수 의미**: `TPKCT`(총 주차면, 실수형) − `NOW_PRK_VHCL_CNT`(현재 주차 차량수). 갱신시각 `NOW_PRK_VHCL_UPDT_TM` = `YYYY-MM-DD HH:mm:ss`(시간대 표기 없음 → KST 가정).
+  - **문서와 다른 점**: `PRK_STTS_YN`은 Y/N이 아니라 코드(샘플 "1" = "현재~20분이내 연계데이터 존재(현재 주차대수 표현)"). 다른 코드값 집합 미확인.
+  - **좌표 없음**: 응답에 위·경도 필드가 없고 주소는 `종로구 세종로 80-1`처럼 시·도가 생략됨 → 좌표 검색에 쓰려면 다른 원천(표준데이터 등)과 연결하거나 지오코딩 필요.
+  - **의미 불명 값(요금 규칙으로 변환 금지)**: `SAT_CHGD_FREE_SE="N"`인데 이름이 "무료", `LHLDY_CHGD_FREE_SE="N"`("무료")이 샘플 5곳 모두 동일하고, 동시에 `PAY_YN="Y"(유료)`·주말 24시간 운영. 실제로 토요일·공휴일 무료인지, 기본값 채움인지 확인 불가. `DAY_MAX_CRG=0.0`은 '상한 없음'인지 '미기재'인지 구분 불가(0원 상한일 수 없음).
+  - 기본요금 `BSC_PRK_CRG`/`BSC_PRK_HR`(분)·추가 `ADD_PRK_CRG`/`ADD_PRK_HR`(분): 샘플은 5분당 270~550원. 운영시각 `HHMM`("0000"~"2400"), 평일/주말(`WE_`)/공휴일 3구분 — 이 원천에서는 **일요일이 '주말'에 포함**되는 구조.
+  - 문서 페이지에 "서비스 종료 안내" 문구가 있으나 같은 페이지의 갱신일이 2026.11.08이고 샘플 API가 당일 시각으로 응답 → 숨은 템플릿 문구로 판단(공식 확인은 아님).
+- 영향 범위: `src/collector/seoul-parking.ts`(파서·점유 변환, 테스트는 실제 샘플 픽스처), 잔여면수 신선도 기준(#7), 원천 간 시설 연결.
+- 결정(잠정): (1) 잔여면수는 `PRK_STTS_YN=="1"`이고 총면수>0, 점유 0≤N≤총면수, 갱신시각이 유효할 때만 `TPKCT−NOW_PRK_VHCL_CNT`로 산출, 나머지는 `실시간 확인 불가`. (2) 토요일/공휴일 무료 플래그·일 최대요금은 검증 전 규칙으로 만들지 않음. (3) 좌표 없는 행은 저장은 가능하되 검색에는 노출하지 않음(기존 정책).
+- **사용자 결정 필요**: (a) 서울 시영주차장과 표준데이터 시설을 연결하는 방법 — 주소 정규화 매칭으로 후보를 만들고 관리자 승인(기존 `duplicate_candidates` 활용) vs 지오코딩 API 도입. (b) 신선도 기준 — 현재 10분, 제공처는 "20분 이내"를 현재 데이터로 표기·"5분 이상 차이 가능"이라 고지. 서울 원천에 한해 20분으로 완화할지. (c) 서울 요금 플래그(`SAT/LHLDY_CHGD_FREE_SE`)와 `DAY_MAX_CRG=0` 해석을 서울시(주차계획과 02-2133-2356)에 문의할지.
+
 (원천 조사·검증 후 위 "결정 기록 형식"으로 계속 추가)
