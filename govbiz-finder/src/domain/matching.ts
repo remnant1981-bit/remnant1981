@@ -173,11 +173,12 @@ export function evaluateRule(rule: Rule, c: CompanyProfile, today: string): Rule
       return val === expected ? mk("MET", `${label}: ${YN(val)} (요건 ${YN(String(expected))})`) : notMet(`${label}: ${YN(val)} (요건 ${YN(String(expected))})`);
     }
     case "industry_group": {
-      const g = present(c.industry_group) ? c.industry_group : inferIndustryGroup(c.industry_name);
-      if (!g) return unknown();
+      const gs = present(c.industry_group) ? c.industry_group.split(",") : [inferIndustryGroup(c.industry_name)].filter((x): x is string => !!x);
+      if (!gs.length) return unknown();
       const allowed = (Array.isArray(expected) ? expected : [expected]).map(String);
       const src = present(c.industry_group) ? "" : " (업종명에서 추정)";
-      return allowed.includes(g) ? mk("MET", `업종 분야(${g}${src})가 지원 대상(${allowed.join(", ")})에 해당합니다.`)
+      const g = gs.find((x) => allowed.includes(x)) ?? gs.join(", ");
+      return gs.some((x) => allowed.includes(x)) ? mk("MET", `업종 분야(${g}${src})가 지원 대상(${allowed.join(", ")})에 해당합니다.`)
         : notMet(`업종 분야(${g}${src})가 지원 대상(${allowed.join(", ")})에 해당하지 않습니다.`);
     }
     case "tech_field": {

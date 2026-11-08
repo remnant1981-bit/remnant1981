@@ -1,7 +1,7 @@
 "use client";
 import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
-import { SPECS } from "./profile-specs";
+import { SPECS, SIGUNGU } from "./profile-specs";
 import { saveProfilePatch } from "./profile-save";
 
 /**
@@ -30,6 +30,15 @@ export function InlineFill({ fields, member }: { fields: { fieldKey: string; lab
         const s = SPECS[f.fieldKey];
         const id = `${uid}-${s.key}`;
         const saving = busy === s.key;
+        if (s.kind === "sigungu") return (
+          <div key={f.fieldKey} className="flex flex-wrap items-center gap-2">
+            <label htmlFor={id} className="text-sm font-medium">✎ {f.label}</label>
+            <select id={id} defaultValue="" disabled={saving} className="input !w-auto !py-1 text-sm" onChange={(e) => save(s.key, e.target.value)}>
+              <option value="">선택하면 바로 판정</option>
+              {Object.entries(SIGUNGU).map(([sd, list]) => <optgroup key={sd} label={sd}>{list.map((g) => <option key={sd + g} value={g}>{g}</option>)}</optgroup>)}
+            </select>
+            {saving && <span className="text-xs">판정 중…</span>}
+          </div>);
         if (s.kind === "select") return (
           <div key={f.fieldKey} className="flex flex-wrap items-center gap-2">
             <label htmlFor={id} className="text-sm font-medium">✎ {f.label}</label>

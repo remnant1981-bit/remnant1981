@@ -471,3 +471,11 @@ describe("기술 분야 판정", () => {
     expect(evaluateRule(robot, smg, TODAY).state).toBe("UNKNOWN");
   });
 });
+
+describe("업종 분야 복수 선택", () => {
+  it("여러 업종 중 하나라도 대상이면 충족", () => {
+    const rule: Rule = { field_key: "industry_group", operator: "in", expected_value: JSON.stringify(["농림축수산업"]), confidence: 0.7 };
+    expect(evaluateRule(rule, { industry_group: "제조업,농림축수산업" }, TODAY).state).toBe("MET");
+    expect(evaluateRule(rule, { industry_group: "제조업,정보통신·SW" }, TODAY).state).toBe("NOT_MET");
+  });
+});

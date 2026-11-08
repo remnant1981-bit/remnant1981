@@ -5,6 +5,7 @@ export type Spec =
   | { key: string; kind: "select"; opts: [string, string][] }
   | { key: string; kind: "text"; placeholder?: string }
   | { key: string; kind: "date" }
+  | { key: string; kind: "sigungu" }
   | { key: string; kind: "checks"; items: readonly string[] };
 
 const YN: [string, string][] = [["yes", "예"], ["no", "아니오"]];
@@ -13,8 +14,8 @@ const opts = (a: readonly string[]): [string, string][] => a.map((x) => [x, x]);
 /** 판정 규칙 항목 → 입력 필드. 사업자 상태는 국세청 조회로만 채우므로 제외 */
 export const SPECS: Record<string, Spec> = {
   region_sido: { key: "region_sido", kind: "select", opts: opts(SIDO) },
-  region_sigungu: { key: "region_sigungu", kind: "text", placeholder: "예: 시흥시" },
-  industry_group: { key: "industry_group", kind: "select", opts: opts(INDUSTRY_GROUPS) },
+  region_sigungu: { key: "region_sigungu", kind: "sigungu" },
+  industry_group: { key: "industry_group", kind: "checks", items: INDUSTRY_GROUPS },
   industry: { key: "industry_name", kind: "text", placeholder: "예: 금속가공 제조업" },
   business_age_years: { key: "established_at", kind: "date" },
   enterprise_size: { key: "enterprise_size", kind: "select", opts: opts(ENTERPRISE_SIZES) },
@@ -28,3 +29,5 @@ export const SPECS: Record<string, Spec> = {
   tech_keywords: { key: "tech_keywords", kind: "text", placeholder: "예: 수소, 극저온" },
 };
 
+
+export { SIGUNGU } from "@/domain/regions";

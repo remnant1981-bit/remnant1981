@@ -60,7 +60,7 @@ export function validateProfile(input: Record<string, unknown>): Record<(typeof 
     youth_ceo: oneOf(input.youth_ceo, ["yes", "no"], "청년 대표자 여부"),
     has_patent: oneOf(input.has_patent, ["yes", "no"], "특허 보유 여부"),
     interest_categories: multi(input.interest_categories, CATEGORY_IDS, "관심 분야"),
-    industry_group: oneOf(input.industry_group, INDUSTRY_GROUPS, "업종 분야"),
+    industry_group: multi(input.industry_group, INDUSTRY_GROUPS, "업종 분야"),
     tech_fields: multi(input.tech_fields, TECH_FIELDS, "기술 분야"),
   };
 }
