@@ -17,6 +17,8 @@ export interface NormalizedFeeRule {
 export interface NormalizedSchedule {
   dayType: "WEEKDAY" | "SATURDAY" | "SUNDAY" | "HOLIDAY" | "EVERYDAY";
   openTime: string | null; closeTime: string | null; allDay: boolean;
+  /** 원천에 없는 규칙을 정책으로 채운 경우(예: 일요일에 공휴일 규칙 적용). UI에 추정으로 표시 */
+  assumed?: boolean;
 }
 export interface NormalizedLot {
   sourceRecordId: string; name: string; operatorName: string | null;

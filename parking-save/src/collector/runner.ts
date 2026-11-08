@@ -67,8 +67,8 @@ export async function runSync(db: Db, adapter: SourceAdapter, now = new Date()):
             [id, f.ruleType, f.amount, f.durationMinutes, f.dayType, f.dailyMaxBasis, f.ruleType === "FREE" ? 1 : null, key, lot.sourceUpdatedAt]);
         }
         for (const sc of lot.schedules) {
-          await db.run(`INSERT INTO operating_schedules(parking_lot_id, day_type, open_time, close_time, all_day_flag, closed_flag, source_record_id, verified_at) VALUES (?,?,?,?,?,0,?,?)`,
-            [id, sc.dayType, sc.openTime, sc.closeTime, sc.allDay ? 1 : 0, key, lot.sourceUpdatedAt]);
+          await db.run(`INSERT INTO operating_schedules(parking_lot_id, day_type, open_time, close_time, all_day_flag, closed_flag, holiday_policy, source_record_id, verified_at) VALUES (?,?,?,?,?,0,?,?,?)`,
+            [id, sc.dayType, sc.openTime, sc.closeTime, sc.allDay ? 1 : 0, sc.assumed ? "SUNDAY_ASSUMED" : null, key, lot.sourceUpdatedAt]);
         }
         touched.push(id);
       } catch (e) {

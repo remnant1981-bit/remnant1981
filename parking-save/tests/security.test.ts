@@ -101,6 +101,23 @@ describe("POST /api/admin/sync", () => {
     expect(res.status).toBe(502);
     expect((await audits()).some((l) => l.outcome === "FAILED")).toBe(true);
   });
+  it("서울 실시간 job: 키 없으면 400, 있으면 수집(합성 아닌 실제 샘플 응답 픽스처) + 감사로그, 응답에 키 없음", async () => {
+    process.env.ADMIN_API_TOKEN = TOKEN;
+    delete process.env.SEOUL_OPENAPI_KEY;
+    const r0 = await post("10.0.0.7", `Bearer ${TOKEN}`, { job: "seoul-occupancy" });
+    expect(r0.status).toBe(400);
+    expect((await r0.json()).error.code).toBe("KEY_MISSING");
+    process.env.SEOUL_OPENAPI_KEY = "SECRET-SEOUL-KEY";
+    const body = (await import("node:fs")).readFileSync(new URL("./fixtures/seoul-getparkinginfo.sample.json", import.meta.url), "utf8");
+    vi.stubGlobal("fetch", async (u: string) => { expect(String(u)).toContain("/SECRET-SEOUL-KEY/json/GetParkingInfo/1/1000/"); return new Response(body); });
+    const res = await post("10.0.0.7", `Bearer ${TOKEN}`, { job: "seoul-occupancy" });
+    const j = await res.json();
+    expect(res.status).toBe(200);
+    expect(j).toMatchObject({ job: "seoul-occupancy", status: "SUCCESS", lots: 5, snapshots: 5 });
+    expect(JSON.stringify(j)).not.toContain("SECRET-SEOUL-KEY");
+    expect((await audits()).some((l) => l.action === "sync:seoul-occupancy" && l.outcome === "OK")).toBe(true);
+    delete process.env.SEOUL_OPENAPI_KEY;
+  });
   it("관리자 API는 분당 5회 제한", async () => {
     process.env.ADMIN_API_TOKEN = TOKEN;
     const statuses: number[] = [];

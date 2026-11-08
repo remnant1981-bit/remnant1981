@@ -9,6 +9,15 @@ export interface OccupancyConfig {
   relaxedAtOrAbovePct: number; // 잔여비율 ≥ 값 → 여유  (OPEN_ISSUES #8, 임시값)
   busyBelowPct: number;        // 잔여비율 < 값 → 혼잡
 }
+/** 서울 시영주차장 실시간(OA-21709) 스냅샷의 source_name */
+export const SEOUL_OCCUPANCY_SOURCE = "SEOUL_OA21709";
+/** 원천별 신선도 기준(분). 서울: 제공처가 '20분 이내'를 현재 데이터로 표기(사용자 결정 2026-11-08). 관측시각은 항상 UI에 표시 */
+const MAX_AGE_BY_SOURCE: Record<string, number> = { [SEOUL_OCCUPANCY_SOURCE]: 20 };
+export function occupancyConfigFor(source: string | null | undefined): OccupancyConfig {
+  const m = source ? MAX_AGE_BY_SOURCE[source] : undefined;
+  return m ? { ...DEFAULT_OCCUPANCY_CONFIG, maxAgeMinutes: m } : DEFAULT_OCCUPANCY_CONFIG;
+}
+
 export const DEFAULT_OCCUPANCY_CONFIG: OccupancyConfig = { maxAgeMinutes: 10, relaxedAtOrAbovePct: 30, busyBelowPct: 10 };
 
 export type OccupancyResult =

@@ -3,8 +3,8 @@ import type { Db } from "./db";
 import { MOCK_PLACES, NON_PRODUCTION_SOURCES, mockEnabled, refreshMockOccupancy } from "./mock";
 import { calculateFee, type FeeResult, type FeeRule, type DayType } from "@/domain/fee";
 import { distanceMeters, isValidCoord, type LatLng } from "@/domain/geo";
-import { operatingForStay, type OperatingStatus, type ScheduleRow } from "@/domain/operating";
-import { evaluateOccupancy, type OccupancyResult } from "@/domain/occupancy";
+import { operatingForStay, operatingUsesAssumed, type OperatingStatus, type ScheduleRow } from "@/domain/operating";
+import { evaluateOccupancy, occupancyConfigFor, type OccupancyResult } from "@/domain/occupancy";
 import { explainAll, type Explanation } from "@/domain/recommend";
 import { kstYmd, parseOffsetIso } from "@/lib/time";
 import { HOLIDAY_COVERAGE_MAX_AGE_DAYS } from "@/collector/holidays";
@@ -67,7 +67,7 @@ interface LotRow {
   source_updated_at: string | null; collected_at: string; data_status: string; quality_flags: string | null;
 }
 interface FeeRow { id: number; rule_type: string; amount: number | null; duration_minutes: number | null; valid_day_type: DayType; start_time: string | null; end_time: string | null; daily_max_basis: string | null }
-interface SchedRow { day_type: DayType; open_time: string | null; close_time: string | null; all_day_flag: number | null; closed_flag: number | null }
+interface SchedRow { day_type: DayType; open_time: string | null; close_time: string | null; all_day_flag: number | null; closed_flag: number | null; holiday_policy: string | null }
 
 export function toFeeRules(rows: FeeRow[]): FeeRule[] | "UNSUPPORTED" {
   const out: FeeRule[] = [];
@@ -80,7 +80,7 @@ export function toFeeRules(rows: FeeRow[]): FeeRule[] | "UNSUPPORTED" {
   return out;
 }
 export const toSchedules = (rows: SchedRow[]): ScheduleRow[] =>
-  rows.map((r) => ({ dayType: r.day_type, openTime: r.open_time, closeTime: r.close_time, allDay: r.all_day_flag === 1, closed: r.closed_flag === 1 }));
+  rows.map((r) => ({ dayType: r.day_type, openTime: r.open_time, closeTime: r.close_time, allDay: r.all_day_flag === 1, closed: r.closed_flag === 1, assumed: r.holiday_policy === "SUNDAY_ASSUMED" }));
 
 /** 기간이 공휴일 데이터 보장 범위 안일 때만 공휴일 집합 반환, 아니면 null(판정 불가) */
 export async function loadHolidays(db: Db, start: Date, end: Date, now = new Date()): Promise<Set<string> | null> {
@@ -101,10 +101,23 @@ export function feeView(r: FeeResult | { status: "UNKNOWN"; reason: string; deta
 export interface LotItem {
   id: number; name: string; address: string | null; parkingType: LotRow["parking_type"]; ownershipType: LotRow["ownership_type"];
   latitude: number; longitude: number; distanceMeters: number; totalSpaces: number | null;
-  fee: FeeView; operating: OperatingStatus; occupancy: OccupancyResult;
+  fee: FeeView; operating: OperatingStatus; operatingAssumed: boolean; occupancy: OccupancyResult;
   source: { name: string; url: string | null; updatedAt: string | null; collectedAt: string; freshness: "FRESH" | "STALE" };
   isMock: boolean; qualityFlags: string[];
   explanation: Explanation;
+}
+
+/**
+ * 시설의 최신 실시간 점유. 자기 스냅샷 + 관리자가 '동일 시설'로 승인한(duplicate_candidates.status='MERGED') 레코드의 스냅샷 중 가장 최근 것.
+ * 승인되지 않은 후보는 쓰지 않는다. 신선도 기준은 스냅샷 원천별.
+ */
+async function occupancyFor(db: Db, lotId: number, now: Date): Promise<OccupancyResult> {
+  const snap = await db.get<{ total_spaces: number | null; available_spaces: number | null; observed_at: string | null; source_name: string }>(
+    `SELECT total_spaces, available_spaces, observed_at, source_name FROM occupancy_snapshots
+     WHERE parking_lot_id = ? OR parking_lot_id IN (
+       SELECT CASE WHEN lot_a_id = ? THEN lot_b_id ELSE lot_a_id END FROM duplicate_candidates WHERE status = 'MERGED' AND (lot_a_id = ? OR lot_b_id = ?))
+     ORDER BY collected_at DESC, id DESC LIMIT 1`, [lotId, lotId, lotId, lotId]);
+  return evaluateOccupancy({ totalSpaces: snap?.total_spaces, availableSpaces: snap?.available_spaces, observedAt: snap?.observed_at }, now, occupancyConfigFor(snap?.source_name));
 }
 
 async function evaluateLot(db: Db, lot: LotRow, p: Pick<SearchParams, "startAt" | "endAt">, holidays: Set<string> | null, now: Date) {
@@ -115,11 +128,10 @@ async function evaluateLot(db: Db, lot: LotRow, p: Pick<SearchParams, "startAt" 
     : feeView(calculateFee({ startAt: p.startAt, endAt: p.endAt, rules, holidays }));
   const sched = toSchedules(await db.all<SchedRow>("SELECT * FROM operating_schedules WHERE parking_lot_id=?", [lot.id]));
   const operating = operatingForStay(sched, p.startAt.getTime(), p.endAt.getTime(), holidays);
-  const snap = await db.get<{ total_spaces: number | null; available_spaces: number | null; observed_at: string | null }>(
-    "SELECT total_spaces, available_spaces, observed_at FROM occupancy_snapshots WHERE parking_lot_id=? ORDER BY collected_at DESC, id DESC LIMIT 1", [lot.id]);
-  const occupancy = evaluateOccupancy({ totalSpaces: snap?.total_spaces, availableSpaces: snap?.available_spaces, observedAt: snap?.observed_at }, now);
+  const operatingAssumed = operating !== "UNKNOWN" && operatingUsesAssumed(sched, p.startAt.getTime(), p.endAt.getTime(), holidays);
+  const occupancy = await occupancyFor(db, lot.id, now);
   const stale = (now.getTime() - Date.parse(lot.source_updated_at ?? lot.collected_at)) / 86400_000 > STALE_DATA_DAYS;
-  return { fee, operating, occupancy, freshness: (stale ? "STALE" : "FRESH") as "FRESH" | "STALE", rules, sched };
+  return { fee, operating, operatingAssumed, occupancy, freshness: (stale ? "STALE" : "FRESH") as "FRESH" | "STALE", rules, sched };
 }
 
 export interface SearchResponse {
@@ -149,7 +161,7 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
     items.push({
       id: lot.id, name: lot.name, address: lot.road_address ?? lot.address, parkingType: lot.parking_type, ownershipType: lot.ownership_type,
       latitude: here.lat, longitude: here.lng, distanceMeters: Math.round(dist), totalSpaces: lot.total_spaces,
-      fee: ev.fee, operating: ev.operating, occupancy: ev.occupancy,
+      fee: ev.fee, operating: ev.operating, operatingAssumed: ev.operatingAssumed, occupancy: ev.occupancy,
       source: { name: lot.source_name, url: lot.source_url, updatedAt: lot.source_updated_at, collectedAt: lot.collected_at, freshness: ev.freshness },
       isMock: NON_PRODUCTION_SOURCES.includes(lot.source_name), qualityFlags: lot.quality_flags ? JSON.parse(lot.quality_flags) : [],
       explanation: { highlights: [], cautions: [] },
@@ -203,15 +215,13 @@ export async function getLotDetail(db: Db, id: number, period: { startAt: Date; 
   if (!lot) return null;
   const feeRules = await db.all<FeeRow>("SELECT * FROM fee_rules WHERE parking_lot_id=? ORDER BY id", [id]);
   const schedules = await db.all<SchedRow>("SELECT * FROM operating_schedules WHERE parking_lot_id=?", [id]);
-  const snap = await db.get<{ total_spaces: number | null; available_spaces: number | null; observed_at: string | null }>(
-    "SELECT total_spaces, available_spaces, observed_at FROM occupancy_snapshots WHERE parking_lot_id=? ORDER BY collected_at DESC, id DESC LIMIT 1", [id]);
-  const occupancy = evaluateOccupancy({ totalSpaces: snap?.total_spaces, availableSpaces: snap?.available_spaces, observedAt: snap?.observed_at }, now);
-  let fee: FeeView | null = null, operating: OperatingStatus | null = null, holidayDataAvailable: boolean | null = null;
+  const occupancy = await occupancyFor(db, id, now);
+  let fee: FeeView | null = null, operating: OperatingStatus | null = null, operatingAssumed = false, holidayDataAvailable: boolean | null = null;
   if (period) {
     const holidays = await loadHolidays(db, period.startAt, period.endAt, now);
     holidayDataAvailable = holidays !== null;
     const ev = await evaluateLot(db, lot, period, holidays, now);
-    fee = ev.fee; operating = ev.operating;
+    fee = ev.fee; operating = ev.operating; operatingAssumed = ev.operatingAssumed;
   }
   return {
     lot: {
@@ -221,8 +231,8 @@ export async function getLotDetail(db: Db, id: number, period: { startAt: Date; 
     },
     source: { name: lot.source_name, url: lot.source_url, updatedAt: lot.source_updated_at, collectedAt: lot.collected_at },
     feeRules: feeRules.map((r) => ({ ruleType: r.rule_type, amount: r.amount, durationMinutes: r.duration_minutes, dayType: r.valid_day_type, startTime: r.start_time, endTime: r.end_time, dailyMaxBasis: r.daily_max_basis })),
-    operatingSchedules: schedules.map((s) => ({ dayType: s.day_type, openTime: s.open_time, closeTime: s.close_time, allDay: s.all_day_flag === 1, closed: s.closed_flag === 1 })),
-    occupancy, fee, operating, holidayDataAvailable,
+    operatingSchedules: schedules.map((s) => ({ dayType: s.day_type, openTime: s.open_time, closeTime: s.close_time, allDay: s.all_day_flag === 1, closed: s.closed_flag === 1, assumed: s.holiday_policy === "SUNDAY_ASSUMED" })),
+    occupancy, fee, operating, operatingAssumed, holidayDataAvailable,
     requestedPeriod: period ? { startAt: period.startAt.toISOString(), endAt: period.endAt.toISOString(), timezone: "Asia/Seoul" } : null,
   };
 }
