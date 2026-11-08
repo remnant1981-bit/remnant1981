@@ -28,6 +28,12 @@
 | 6 | UptimeRobot 무료 가입 → HTTP 모니터 `https://도메인/api/health` | 알림 받을 이메일·앱 설정 |
 | 7 | (승인 후) 애드센스 코드 값을 서버 `.env`의 `NEXT_PUBLIC_ADSENSE_*`에 입력 → `FORCE=1` 배포 | 광고 표시 시작 |
 
+### Oracle Cloud 무료 서버(Always Free)로 시작하는 경우
+- Home Region 서울/춘천, Ampere A1(OCPU 2·메모리 12GB), Ubuntu 24.04, 공인 IP 할당
+- 콘솔 Security List 에 TCP 80·443 Ingress 추가(OS 방화벽은 setup-server.sh 가 자동 개방)
+- 도메인 없이 시작 가능: `DOMAIN` 생략 시 `공인IP.sslip.io` 주소로 HTTPS 자동 구성. 도메인 구입 후 `.env`의 `SITE_URL`과 `/etc/caddy/Caddyfile`의 주소만 바꾸고 `sudo systemctl reload caddy` + `FORCE=1` 배포
+- 설치 중 `[1c]` 단계에서 기업마당 접속 가능 여부를 출력함(국내 IP 확인)
+
 설치 스크립트 받는 법: `git clone https://github.com/remnant1981-bit/remnant1981.git && cd remnant1981/govbiz-finder/deploy`
 
 ## 평소 (자동)

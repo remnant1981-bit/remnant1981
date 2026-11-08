@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import "./globals.css";
 import Script from "next/script";
@@ -10,7 +10,10 @@ export const metadata: Metadata = {
   metadataBase: new URL(process.env.SITE_URL || "http://localhost:3000"),
   title: { default: "GovBiz Finder - 기업지원사업 통합 검색", template: "%s | GovBiz Finder" },
   description: "몰라서 놓치는 지원사업이 없도록. 중앙부처·공공기관·지자체 기업지원사업을 한곳에서 검색하고 공식 원문으로 확인하세요.",
+  applicationName: "GovBiz Finder",
+  appleWebApp: { capable: true, title: "GovBiz", statusBarStyle: "default" },
 };
+export const viewport: Viewport = { themeColor: "#1d4ed8", width: "device-width", initialScale: 1 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const v = await getViewer();

@@ -10,6 +10,7 @@ import { Empty, Notice } from "@/components/ui";
 import { formatSeoul } from "@/lib/time";
 import { searchWithMatches } from "@/server/recommend";
 import { AdSlot } from "@/components/AdSlot";
+import { InstallApp } from "@/components/InstallApp";
 
 export default async function Home() {
   const db = await getDb();
@@ -29,7 +30,7 @@ export default async function Home() {
     return (
       <section aria-labelledby={id} className="mt-8">
         <div className="mb-2 flex items-baseline justify-between"><h2 id={id} className="text-lg font-bold">{title}</h2><Link href={more} className="text-sm underline">더 보기</Link></div>
-        {rows.length ? <div className="grid gap-3">{rows.map((r) => <AnnouncementCard key={r.id} r={r} canBookmark={false} />)}</div> : <Empty title="해당하는 공고가 없습니다." />}
+        {rows.length ? <div className="grid gap-3">{rows.map((r) => <AnnouncementCard key={r.id} r={r} canBookmark={!!v.company} />)}</div> : <Empty title="해당하는 공고가 없습니다." />}
       </section>
     );
   };
@@ -41,6 +42,7 @@ export default async function Home() {
         <p className="mt-3 text-sm opacity-90">회원가입 없이 검색할 수 있습니다. 기업정보 입력은 선택사항입니다.</p>
       </section>
       <div className="-mt-6 px-2"><SearchForm p={{}} compact /></div>
+      <InstallApp />
 
       {v.profile && await (async (company) => {
         const base = parseSearchParams({ sort: "fit", size: "1", status: "open,upcoming,always,unknown", eligible: "1" });

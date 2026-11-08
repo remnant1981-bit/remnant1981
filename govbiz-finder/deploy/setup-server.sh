@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
 # GovBiz Finder 국내 서버 1회 설치 스크립트 (Ubuntu 22.04/24.04, root 로 실행)
 # 사용: sudo DOMAIN=example.kr ADMIN_EMAIL=me@example.com BIZINFO_API_KEY=xxxx bash setup-server.sh
+#   도메인이 아직 없으면 DOMAIN 을 생략 → 공인 IP 기반 무료 주소(예: 152-70-1-2.sslip.io)로 HTTPS 자동 구성
+#   AWS Lightsail·Oracle Cloud(Ubuntu, x86/ARM) 모두 지원. Oracle 은 OS 방화벽(iptables)도 자동으로 80·443 개방
 # 하는 일: Node.js·Caddy 설치 → 전용 계정·디렉터리 → 비밀키 생성(.env) → 첫 배포 → systemd 서비스/타이머 등록
 set -euo pipefail
-: "${DOMAIN:?DOMAIN 필요(예: govbiz.example.kr)}"
 : "${ADMIN_EMAIL:?ADMIN_EMAIL 필요(관리자 로그인 이메일)}"
+PUBLIC_IP="$(curl -fsS --max-time 10 https://api.ipify.org || true)"
+if [ -z "${DOMAIN:-}" ]; then
+  [ -n "$PUBLIC_IP" ] || { echo "공인 IP 확인 실패: DOMAIN=도메인 을 지정해 다시 실행"; exit 1; }
+  DOMAIN="${PUBLIC_IP//./-}.sslip.io"
+  echo ">>> 도메인 미지정: 임시 주소 ${DOMAIN} 사용(나중에 도메인 연결 시 .env SITE_URL·Caddyfile 만 바꾸면 됨)"
+fi
 REPO="${REPO:-https://github.com/remnant1981-bit/remnant1981.git}"
 BASE=/opt/govbiz
 APP_SUBDIR=govbiz-finder
@@ -21,6 +28,18 @@ if ! command -v caddy >/dev/null; then
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
   apt-get update -y && apt-get install -y caddy
 fi
+
+echo "[1b] OS 방화벽 80·443 개방(Oracle Cloud Ubuntu 이미지는 기본 차단)"
+if command -v iptables >/dev/null && iptables -S INPUT 2>/dev/null | grep -- "-j REJECT" >/dev/null; then
+  for p in 80 443; do
+    iptables -C INPUT -p tcp -m state --state NEW --dport "$p" -j ACCEPT 2>/dev/null || iptables -I INPUT 1 -p tcp -m state --state NEW --dport "$p" -j ACCEPT
+  done
+  command -v netfilter-persistent >/dev/null && netfilter-persistent save || true
+fi
+
+echo "[1c] 기업마당 접속 확인(국내 IP 여부)"
+if curl -fsS -o /dev/null --max-time 15 https://www.bizinfo.go.kr/; then echo "    OK: 기업마당 접속 가능 (서버 공인 IP: ${PUBLIC_IP:-확인 불가})"
+else echo "    경고: 기업마당 접속 실패 — 해외 IP로 차단됐을 수 있음. 설치는 계속하지만 수집은 실패함"; fi
 
 echo "[2/7] 스왑(빌드 메모리 여유, 2GB)"
 if ! swapon --show | grep -q /swapfile; then
