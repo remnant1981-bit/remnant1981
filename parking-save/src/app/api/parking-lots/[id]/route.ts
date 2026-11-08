@@ -1,12 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getAppDb } from "@/server/app-db";
 import { getLotDetail } from "@/server/search";
-import { apiError, internalError } from "@/server/http";
+import { apiError, internalError, limited } from "@/server/http";
+import { searchLimiter } from "@/server/rate-limit";
 import { parseOffsetIso } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const tooMany = limited(req, searchLimiter);
+  if (tooMany) return tooMany;
   const { id } = await ctx.params;
   if (!/^\d{1,9}$/.test(id)) return apiError(400, "INVALID_ID", "주차장 ID가 올바르지 않습니다.");
   const sp = req.nextUrl.searchParams;
