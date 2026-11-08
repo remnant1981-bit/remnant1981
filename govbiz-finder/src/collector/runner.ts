@@ -64,7 +64,11 @@ export async function runSource(db: Db, adapter: SourceAdapter, opts: RunOptions
   else {
     await db.run("UPDATE data_sources SET last_success_at=?, last_error=? WHERE id=?", [finished, status === "partial" ? summary : null, adapter.sourceId]);
     // 실제 호출 성공(공고 1건 이상 저장/확인) 후에만 '연동(live)'으로 전환
-    if (counts.fetched > 0) await db.run("UPDATE data_sources SET integration_status='live' WHERE id=? AND integration_status='pending_key'", [adapter.sourceId]);
+    if (counts.fetched > 0) {
+      await db.run(
+        "UPDATE data_sources SET integration_status='live', quota_note='연동됨(실제 수집 성공 확인). 이용약관·재배포·출처표시 범위는 사용신청 약관 확인 필요.' WHERE id=? AND integration_status='pending_key'",
+        [adapter.sourceId]);
+    }
   }
   return { runId, status, ...counts, errors };
 }

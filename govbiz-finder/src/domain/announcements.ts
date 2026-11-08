@@ -66,8 +66,17 @@ export function canonicalizeUrl(input: string): string | null {
   return s;
 }
 
+/**
+ * 중복 판정용 사업명 정규화.
+ * - [지역] 같은 대괄호 접두어는 유지한다(지역만 다른 별개 공고를 합치지 않기 위함).
+ * - 재공고·연장·변경 같은 상태 표기 괄호만 제거한다.
+ */
 export function normalizeTitle(t: string): string {
-  return t.normalize("NFKC").toLowerCase().replace(/\[[^\]]*\]|\([^)]*\)/g, " ").replace(/[^0-9a-z가-힣]+/g, "");
+  return t
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/\([^)]*(재공고|연장|변경|수정|정정|추가)[^)]*\)/g, " ")
+    .replace(/[^0-9a-z가-힣]+/g, "");
 }
 
 const clean = (s: string | undefined | null, max = 20000) => (s ?? "").replace(/\u0000/g, "").trim().slice(0, max);
@@ -123,9 +132,10 @@ export async function findDuplicate(db: Db, sourceId: string, n: Normalized): Pr
       "SELECT a.id FROM announcements a WHERE a.organization=? AND a.source_notice_id=?", [n.organization, n.noticeNumber]);
     if (r) return { id: r.id, by: "org_notice_no" };
   }
+  // 지역 범위가 다른 공고는 사업명이 같아도 별개로 본다
   const cands = await db.all<{ id: string; title: string; content_hash: string }>(
-    "SELECT id, title, content_hash FROM announcements WHERE organization=? AND COALESCE(application_start,'')=? AND COALESCE(application_end,'')=?",
-    [n.organization, n.applicationStart ?? "", n.applicationEnd ?? ""],
+    "SELECT id, title, content_hash FROM announcements WHERE organization=? AND region_scope=? AND COALESCE(application_start,'')=? AND COALESCE(application_end,'')=?",
+    [n.organization, n.regionScope, n.applicationStart ?? "", n.applicationEnd ?? ""],
   );
   for (const c of cands) if (normalizeTitle(c.title) === n.normalizedTitle) return { id: c.id, by: "title_org_period" };
   return undefined;
