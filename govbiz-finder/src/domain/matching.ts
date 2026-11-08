@@ -93,7 +93,10 @@ export function evaluateRule(rule: Rule, c: CompanyProfile, today: string): Rule
       const val = rule.field_key === "region_sido" ? c.region_sido : c.region_sigungu;
       if (!present(val)) return unknown();
       const list = (Array.isArray(expected) ? expected : [expected]).map(String);
-      return list.includes(val) ? mk("MET", `${label}가 ${val}로 요건에 해당합니다.`) : notMet(`${label} ${val}은(는) 요건(${list.join(", ")})에 해당하지 않습니다.`);
+      // 시/군/구는 입력 표기 차이('시흥' vs '시흥시')를 허용
+      const sameSigungu = (a: string, b: string) => { const x = a.replace(/\s/g, ""), y = b.replace(/\s/g, ""); return x === y || x.startsWith(y) || y.startsWith(x); };
+      const ok = rule.field_key === "region_sigungu" ? list.some((x) => sameSigungu(x, val)) : list.includes(val);
+      return ok ? mk("MET", `${label}가 ${val}로 요건에 해당합니다.`) : notMet(`${label} ${val}은(는) 요건(${list.join(", ")})에 해당하지 않습니다.`);
     }
     case "industry": {
       if (!present(c.industry_name)) return unknown();
