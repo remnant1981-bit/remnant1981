@@ -7,6 +7,9 @@ import { buildNaverLinks } from "@/domain/map-link";
 import { isValidCoord } from "@/domain/geo";
 import { DAY_LABEL, OPERATING_LABEL, OWNERSHIP_LABEL, RULE_LABEL, TYPE_LABEL, feeText, occupancyText, sourceLabel, won } from "@/lib/labels";
 import { formatKst, parseOffsetIso } from "@/lib/time";
+import { headers } from "next/headers";
+import { clientKey, searchLimiter } from "@/server/rate-limit";
+import { TooManyRequests } from "@/components/TooManyRequests";
 
 export const dynamic = "force-dynamic";
 type SP = Record<string, string | string[] | undefined>;
@@ -15,6 +18,8 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 export default async function LotPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<SP> }) {
   const { id } = await params;
   if (!/^\d{1,9}$/.test(id)) notFound();
+  const rl = searchLimiter.check(clientKey(await headers()));
+  if (!rl.ok) return <TooManyRequests retryAfterSec={rl.retryAfterSec} />;
   const sp = await searchParams;
   const s = parseOffsetIso(one(sp.startAt)), e = parseOffsetIso(one(sp.endAt));
   const period = s && e && e > s ? { startAt: s, endAt: e } : null;

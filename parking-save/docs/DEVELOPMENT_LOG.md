@@ -89,6 +89,12 @@
 - `npm run profile`(`src/server/profile.ts`): 수집된 원천의 범주형 값 분포(`주차장구분`·`주차장유형`·`요금정보` 등), 결측률, 숫자 범위, 좌표 범위 밖, 운영시각 표기 형식 요약 — 정규화 규칙이 실제 값 집합을 놓치지 않는지 점검하는 도구.
 - 코드로 할 수 있는 키 없는 작업은 여기까지. 이후는 키 발급·인프라 결정·실기기 확인 후 `FIRST_RUN.md`를 따라 진행.
 
+## 보안 보강 (2026-11-08)
+- **CSP 추가**(`next.config.ts`): `default-src 'self'`, `object-src 'none'`, `frame-ancestors 'none'`, `base-uri/form-action 'self'`, `connect-src 'self'`, 개발 모드에서만 `unsafe-eval`. 하이드레이션용 `script-src 'unsafe-inline'`은 유지(nonce 방식은 후속). 운영 빌드를 Playwright(모바일/데스크톱)로 열어 콘솔 오류·`securitypolicyviolation` 없음, 빠른 선택·현재 위치 버튼 동작, axe 14개 조합 위반 0건 확인.
+- **화면 경로 요청 제한**: `/search`와 `/lots/{id}`도 API와 같은 한도(분당 60회/클라이언트)로 DB 조회 전에 차단하고 안내 표시. 한계는 동일(프로세스 메모리, `x-forwarded-for` 신뢰). 상태 코드는 200(안내 화면) — 엣지/프록시 단계 제한은 인프라 결정 후.
+- **의존성 점검(`npm audit`)**: 운영 의존성 0건. 개발 의존성 중간 등급 8건(typescript-eslint 체인의 minimatch 서비스 거부)은 린트 실행 시에만 관여하며, npm이 제안한 수정은 `eslint-config-next` 15.5로의 **하향**(breaking)이라 적용하지 않음. 업스트림 수정 시 갱신.
+- 오류 화면 테스트 추가: `error.tsx`가 내부 오류 메시지·경로를 노출하지 않고 재시도 버튼 제공.
+
 ## 미구현·후속
 - 운영시간 판정, 시간대별 요금 차등, 단가 혼합 구간, 정기권, 회차 시간: 엔진 미지원(근거 있는 원천 규칙 확인 후 추가).
 - 공휴일 원천(OPEN_ISSUES #4) 미정: 현재 holidays 테이블만 있음.

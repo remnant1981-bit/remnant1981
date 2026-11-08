@@ -6,6 +6,9 @@ import { getAppDb } from "@/server/app-db";
 import { parseSearchParams, searchLots } from "@/server/search";
 import { MOCK_PLACES } from "@/server/mock";
 import { kstLocalToIso, formatKst } from "@/lib/time";
+import { headers } from "next/headers";
+import { clientKey, searchLimiter } from "@/server/rate-limit";
+import { TooManyRequests } from "@/components/TooManyRequests";
 
 export const metadata: Metadata = { title: "검색 결과" };
 export const dynamic = "force-dynamic";
@@ -13,6 +16,9 @@ type SP = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
 export default async function SearchPage({ searchParams }: { searchParams: Promise<SP> }) {
+  // 화면 경로도 API와 같은 한도(분당 60회/클라이언트)로 제한 — DB 조회 전에 차단
+  const rl = searchLimiter.check(clientKey(await headers()));
+  if (!rl.ok) return <TooManyRequests retryAfterSec={rl.retryAfterSec} />;
   const sp = await searchParams;
   const g = (k: string) => one(sp[k]);
   const qs = new URLSearchParams();
