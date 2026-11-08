@@ -12,7 +12,6 @@ import { bookmarkedIds } from "@/server/userdata";
 import { profileCompleteness } from "@/domain/taxonomy";
 import { GuestProfileClear } from "@/components/GuestProfileActions";
 import { QuickFill } from "@/components/QuickFill";
-import { GUEST_KEYS } from "@/lib/guest-profile";
 
 export const metadata: Metadata = { title: "맞춤 추천", alternates: { canonical: "/recommend" } };
 
@@ -53,8 +52,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
           <div className="card p-4"><p className="text-xs text-[var(--muted)]">확인 필요(검토 권장)</p><p className="text-2xl font-bold text-amber-800">{c.needs_check.toLocaleString()}건</p></div>
           <div className="card p-4"><p className="text-xs text-[var(--muted)]">해당 안 됨(제외)</p><p className="text-2xl font-bold text-[var(--muted)]">{c.likely_not_met.toLocaleString()}건</p></div>
         </div>
-        <QuickFill items={res.missing} accuracy={res.accuracy} member={member}
-          current={Object.fromEntries([...GUEST_KEYS, ...(member ? ["company_name", "representative_name"] : [])].map((k) => [k, ((profile as unknown as Record<string, unknown>)[k] as string | null | undefined) ?? null]))} />
+        <QuickFill items={res.missing} accuracy={res.accuracy} member={member} />
         {comp.filled < 8 && res.missing.length === 0 && (
           <div className="mt-3"><Notice tone="warn">기업정보 {comp.total}개 항목 중 {comp.filled}개만 입력되어 ‘확인 필요’ 공고가 많습니다. <Link className="underline" href={member ? "/company" : "/recommend"}>기업정보를 더 입력</Link>하면 조건 충족 공고를 더 정확하게 골라 드립니다(모두 선택 입력).</Notice></div>
         )}

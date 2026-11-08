@@ -31,13 +31,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <NavLinks items={[
                 { href: "/search", label: "공고 검색" },
                 ...(v.profile ? [{ href: "/recommend", label: "우리 기업 공고", strong: true }] : [{ href: "/recommend", label: "우리 기업 맞춤 공고", strong: true }]),
-                ...(v.session ? [{ href: "/my", label: "내 공고·알림" }, { href: "/company", label: "기업정보" }] : []),
+                ...(v.session ? [{ href: "/my", label: "내 공고·알림" }, { href: "/company", label: "기업정보" }] : [{ href: "/my", label: "관심 공고" }]),
                 ...(v.session?.user.role === "admin" ? [{ href: "/admin", label: "관리자" }] : []),
               ]} />
             </nav>
             <div className="ml-auto flex items-center gap-3 text-sm">
               {v.session ? (<><span className="hidden text-[var(--muted)] sm:inline" aria-label="로그인 계정">{v.session.user.email}</span><LogoutButton /></>) : (
-                <><Link href="/login" className="hover:underline">로그인</Link><Link href="/register" className="btn">회원가입</Link></>
+                <><span className="chip bg-gray-100 text-gray-700" title="로그인 없이 사용 중. 입력한 정보·관심 공고는 이 브라우저에만 저장됩니다.">게스트 모드</span><Link href="/login" className="hover:underline">로그인</Link><Link href="/register" className="btn">회원가입</Link></>
               )}
             </div>
           </div>

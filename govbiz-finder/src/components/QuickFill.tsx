@@ -2,40 +2,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { api } from "@/lib/client";
-import { writeGuestCookie } from "@/lib/guest-profile";
-import { REVENUE_BANDS, EMPLOYEE_BANDS, SIDO, ENTERPRISE_SIZES, CERTIFICATIONS } from "@/domain/taxonomy";
-
-type V = Record<string, string | null | undefined>;
-type Spec =
-  | { key: string; kind: "select"; opts: [string, string][] }
-  | { key: string; kind: "text"; placeholder?: string }
-  | { key: string; kind: "date" }
-  | { key: string; kind: "checks"; items: readonly string[] };
-
-const YN: [string, string][] = [["yes", "예"], ["no", "아니오"]];
-const opts = (a: readonly string[]): [string, string][] => a.map((x) => [x, x]);
-
-/** 판정 규칙 항목 → 입력 필드. 사업자 상태는 국세청 조회로만 채우므로 제외 */
-const SPECS: Record<string, Spec> = {
-  region_sido: { key: "region_sido", kind: "select", opts: opts(SIDO) },
-  region_sigungu: { key: "region_sigungu", kind: "text", placeholder: "예: 시흥시" },
-  industry: { key: "industry_name", kind: "text", placeholder: "예: 금속가공 제조업" },
-  business_age_years: { key: "established_at", kind: "date" },
-  enterprise_size: { key: "enterprise_size", kind: "select", opts: opts(ENTERPRISE_SIZES) },
-  revenue_band: { key: "revenue_band", kind: "select", opts: opts(REVENUE_BANDS) },
-  employee_band: { key: "employee_count_band", kind: "select", opts: opts(EMPLOYEE_BANDS) },
-  research_institute: { key: "research_institute_status", kind: "select", opts: YN },
-  venture: { key: "venture_status", kind: "select", opts: YN },
-  export: { key: "export_status", kind: "select", opts: YN },
-  certification: { key: "certifications", kind: "checks", items: CERTIFICATIONS },
-  tech_keywords: { key: "tech_keywords", kind: "text", placeholder: "예: 수소, 극저온" },
-};
+import { saveProfilePatch } from "./profile-save";
+import { SPECS } from "./profile-specs";
 
 export interface QuickItem { fieldKey: string; label: string; count: number }
 
 /** 맞춤 정확도를 높이는 미입력 항목을 영향 큰 순서로 바로 입력받는다. */
-export function QuickFill({ items, current, member, accuracy }: { items: QuickItem[]; current: V; member: boolean; accuracy: number | null }) {
+export function QuickFill({ items, member, accuracy }: { items: QuickItem[]; member: boolean; accuracy: number | null }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -52,16 +25,9 @@ export function QuickFill({ items, current, member, accuracy }: { items: QuickIt
       if (val) next[s.key] = val;
     }
     if (!Object.keys(next).length) { setErr("입력한 항목이 없습니다."); return; }
-    const merged: Record<string, string> = {};
-    for (const [k, v] of Object.entries(current)) if (typeof v === "string" && v) merged[k] = v;
-    Object.assign(merged, next);
     setBusy(true);
-    if (member) {
-      const r = await api<any>("PUT", "/api/company", merged);
-      if (!r.ok) { setBusy(false); setErr(r.data?.message ?? "저장하지 못했습니다."); return; }
-    } else {
-      writeGuestCookie(merged);
-    }
+    const e2 = await saveProfilePatch(member, next);
+    if (e2) { setBusy(false); setErr(e2); return; }
     setBusy(false);
     router.refresh();
   }

@@ -186,6 +186,15 @@ export async function saveCompanyProfile(db: Db, userId: string, input: Record<s
   return getCompanyProfile(db, userId, id);
 }
 
+/** 일부 항목만 갱신(맞춤 공고 화면의 바로 입력용). 전달하지 않은 항목은 기존 값 유지. */
+export async function patchCompanyProfile(db: Db, userId: string, input: Record<string, unknown>, companyId?: string | null) {
+  const cur = await getCompanyProfile(db, userId, companyId);
+  const merged: Record<string, unknown> = {};
+  for (const k of PROFILE_FIELDS) merged[k] = (cur as unknown as Record<string, unknown>)[k] ?? null;
+  for (const k of PROFILE_FIELDS) if (k in input) merged[k] = input[k];
+  return saveCompanyProfile(db, userId, merged, companyId);
+}
+
 /** 인증된 구성원이 국세청 상태조회 결과를 자신의 기업에 반영. 응답 원문은 저장하지 않고 요약 상태만 저장. */
 export async function applyNtsStatus(db: Db, userId: string, bizNoRaw: unknown, ipKey: string, companyId?: string | null, adapter?: NtsAdapter) {
   const id = await requireCompanyAccess(db, userId, companyId);

@@ -70,7 +70,7 @@ export default async function Detail({ params }: Props) {
         <div className="no-print mt-3 flex flex-wrap items-center gap-2">
           <a className="btn" href={a.canonical_url} target="_blank" rel="noopener noreferrer nofollow">공식 원문 바로가기</a>
           <PrintButton />
-          {v.company && <BookmarkButton announcementId={a.id} initial={bookmarked} />}
+          <BookmarkButton announcementId={a.id} initial={bookmarked} guest={!v.company} meta={{ title: a.title, organization: a.organization, end: a.application_end }} />
         </div>
         <div className="mt-3"><Provenance url={a.canonical_url} sourceName={a.source_name} sourceStatus={a.source_status} checkedAt={a.last_checked_at} /></div>
       </header>
