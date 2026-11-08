@@ -12,6 +12,7 @@ import { CategoryTags, FitChip, Notice, Provenance, RuleChip, StatusChip, TestBa
 import { BookmarkButton } from "@/components/BookmarkButton";
 import { PrintButton } from "@/components/PrintButton";
 import { seoulToday, formatSeoul } from "@/lib/time";
+import { FormattedText } from "@/components/FormattedText";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -28,11 +29,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+const t = (v: unknown): string | null => (v === null || v === undefined ? null : String(v));
+
+function Section({ title, children, text }: { title: string; children?: React.ReactNode; text?: string | null }) {
   return (
     <section className="card p-4">
       <h2 className="mb-2 font-bold">{title}</h2>
-      <div className="whitespace-pre-wrap text-sm leading-relaxed">{children || "확인 필요 (원문 참고)"}</div>
+      {children ?? <FormattedText text={text} />}
     </section>
   );
 }
@@ -75,15 +78,18 @@ export default async function Detail({ params }: Props) {
       {a.source_status === "mock" && <Notice tone="warn">이 공고는 개발용 <strong>테스트(모의) 데이터</strong>이며 실제 공고가 아닙니다.</Notice>}
       {a.status_basis === "estimated" && a.application_status !== "unknown" && <Notice>접수 상태는 접수 기간 날짜로 <strong>추정</strong>한 값입니다. 정확한 상태는 공식 원문에서 확인하세요.</Notice>}
 
-      <Section title="사업 개요">{a.support_summary}</Section>
-      <Section title="지원 대상·신청 자격">{[a.target_summary, a.eligibility_text].filter(Boolean).join("\n\n")}</Section>
-      <Section title="지원 내용·한도">{[a.support_summary, money].filter(Boolean).join("\n")}</Section>
+      <Section title="사업 개요" text={t(a.original_text) || t(a.support_summary)} />
+      <Section title="지원 대상·신청 자격" text={[t(a.target_summary), t(a.eligibility_text)].filter(Boolean).join("\n")} />
+      <Section title="지원 내용·한도" text={[money, a.support_summary && !a.original_text ? t(a.support_summary) : ""].filter(Boolean).join("\n")} />
       <Section title="신청 기간 및 상태">
-        {`접수 시작: ${a.application_start ?? "확인 필요"}\n접수 마감: ${a.application_end ?? (a.application_status === "always" ? "상시 접수" : "확인 필요")}`}
+        <dl className="grid gap-1 text-sm sm:grid-cols-2">
+          <div><dt className="inline text-[var(--muted)]">접수 시작 </dt><dd className="inline font-medium">{a.application_start ?? "확인 필요"}</dd></div>
+          <div><dt className="inline text-[var(--muted)]">접수 마감 </dt><dd className="inline font-medium">{a.application_end ?? (a.application_status === "always" ? "상시 접수" : "확인 필요")}</dd></div>
+        </dl>
       </Section>
-      <Section title="제출 서류">{a.required_documents}</Section>
-      <Section title="신청 방법">{a.application_method}</Section>
-      <Section title="문의처">{a.contact_info}</Section>
+      <Section title="제출 서류" text={t(a.required_documents)} />
+      <Section title="신청 방법" text={t(a.application_method)} />
+      <Section title="문의처" text={t(a.contact_info)} />
 
       <section className="card p-4">
         <h2 className="mb-2 font-bold">첨부파일</h2>

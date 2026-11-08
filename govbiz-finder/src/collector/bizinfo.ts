@@ -5,6 +5,7 @@
 // - 문서에 없는 값은 추정하지 않는다(신청기간이 날짜 형식이 아니면 null → '상태 확인 필요').
 import type { RawAnnouncement } from "@/domain/announcements";
 import type { SourceAdapter } from "./types";
+import { shortSummary } from "@/lib/format";
 
 const ENDPOINT = "https://www.bizinfo.go.kr/uss/rss/bizinfoApi.do";
 const MAX_PAGES = 30;
@@ -86,7 +87,7 @@ export function mapItem(it: Item): RawAnnouncement | null {
     categories,
     regionScope: regionFromTags(tags),
     targetSummary: first(it.trgetNm) || undefined,
-    supportSummary: summary ? summary.slice(0, 500) : undefined,
+    supportSummary: summary ? shortSummary(summary, 160) : undefined, // 전체 본문은 originalText 에 보존
     applicationStart: start,
     applicationEnd: end,
     applicationMethod: method || undefined,
