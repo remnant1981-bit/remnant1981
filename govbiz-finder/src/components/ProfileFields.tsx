@@ -1,5 +1,5 @@
 "use client";
-import { REVENUE_BANDS, EMPLOYEE_BANDS, SIDO, ENTERPRISE_SIZES, CERTIFICATIONS, CATEGORIES, INDUSTRY_GROUPS } from "@/domain/taxonomy";
+import { REVENUE_BANDS, EMPLOYEE_BANDS, SIDO, ENTERPRISE_SIZES, CERTIFICATIONS, CATEGORIES, INDUSTRY_GROUPS, TECH_FIELDS } from "@/domain/taxonomy";
 
 type V = Record<string, string | null | undefined>;
 const YN: [string, string][] = [["", "미입력(확인 필요)"], ["yes", "예"], ["no", "아니오"]];
@@ -56,6 +56,7 @@ export function ProfileFields({ v = {} }: { v?: V }) {
         <Sel id="has_patent" label="특허 보유" v={v.has_patent} opts={YN} />
         <Sel id="youth_ceo" label="청년 대표자(만 39세 이하)" v={v.youth_ceo} opts={YN} hint="생년월일은 받지 않습니다." />
         <Checks name="certifications" label="보유 인증(복수 선택)" items={CERTIFICATIONS.map((c) => [c, c] as const)} v={v.certifications} />
+        <Checks name="tech_fields" label="주력 기술 분야(복수 선택)" items={TECH_FIELDS.map((c) => [c, c] as const)} v={v.tech_fields} hint="6G·반도체 등 특정 기술 분야 공고 중 우리와 다른 분야를 걸러냅니다. 비우면 아래 보유 기술 문구로 추정합니다." />
         <Txt id="tech_keywords" label="기술 분야/보유 기술 (쉼표 구분)" v={v.tech_keywords} max={200} placeholder="예: 극저온, 수소, 스마트공장" />
       </Group>
       <Group title="관심 분야">
@@ -65,7 +66,7 @@ export function ProfileFields({ v = {} }: { v?: V }) {
   );
 }
 
-const MULTI = ["certifications", "interest_categories"];
+const MULTI = ["certifications", "interest_categories", "tech_fields"];
 export function formToProfile(f: FormData): Record<string, string> {
   const o: Record<string, string> = {};
   for (const [k, val] of f.entries()) {
