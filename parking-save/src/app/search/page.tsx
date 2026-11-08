@@ -36,7 +36,11 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
     return (<><h1 className="mb-4 text-xl font-bold">검색 결과</h1>
       <p role="alert" className="mb-4 rounded border border-red-400 bg-red-50 p-3 text-sm text-red-900">일시적인 오류로 검색하지 못했습니다. 잠시 후 다시 시도해 주세요.</p>{form}</>);
   }
-  const detailQuery = new URLSearchParams({ startAt: sIso!, endAt: eIso! }).toString();
+  const dq = new URLSearchParams({ startAt: sIso!, endAt: eIso! });
+  if (res.searchCenter.kind === "destination") { // 주차 후 목적지까지 도보 안내용(현재 위치 검색은 목적지 없음)
+    dq.set("destLat", String(res.searchCenter.lat)); dq.set("destLng", String(res.searchCenter.lng)); dq.set("destName", res.searchCenter.label);
+  }
+  const detailQuery = dq.toString();
   const cov = res.dataCoverage;
   return (
     <>

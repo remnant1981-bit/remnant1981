@@ -5,6 +5,7 @@ import { calculateFee, type FeeResult, type FeeRule, type DayType } from "@/doma
 import { distanceMeters, isValidCoord, type LatLng } from "@/domain/geo";
 import { operatingForStay, type OperatingStatus, type ScheduleRow } from "@/domain/operating";
 import { evaluateOccupancy, type OccupancyResult } from "@/domain/occupancy";
+import { explainAll, type Explanation } from "@/domain/recommend";
 import { kstYmd, parseOffsetIso } from "@/lib/time";
 import { HOLIDAY_COVERAGE_MAX_AGE_DAYS } from "@/collector/holidays";
 
@@ -103,6 +104,7 @@ export interface LotItem {
   fee: FeeView; operating: OperatingStatus; occupancy: OccupancyResult;
   source: { name: string; url: string | null; updatedAt: string | null; collectedAt: string; freshness: "FRESH" | "STALE" };
   isMock: boolean; qualityFlags: string[];
+  explanation: Explanation;
 }
 
 async function evaluateLot(db: Db, lot: LotRow, p: Pick<SearchParams, "startAt" | "endAt">, holidays: Set<string> | null, now: Date) {
@@ -150,6 +152,7 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
       fee: ev.fee, operating: ev.operating, occupancy: ev.occupancy,
       source: { name: lot.source_name, url: lot.source_url, updatedAt: lot.source_updated_at, collectedAt: lot.collected_at, freshness: ev.freshness },
       isMock: NON_PRODUCTION_SOURCES.includes(lot.source_name), qualityFlags: lot.quality_flags ? JSON.parse(lot.quality_flags) : [],
+      explanation: { highlights: [], cautions: [] },
     });
   }
   const candidates = items.length;
@@ -157,6 +160,8 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
   if (p.realtimeOnly) items = items.filter((i) => i.occupancy.status === "AVAILABLE");
   items.sort(comparator(p.sort));
   items = items.slice(0, p.limit);
+  const why = explainAll(items); // 표시되는 시설 집합 기준 설명(정렬에는 영향 없음)
+  for (const i of items) i.explanation = why.get(i.id)!;
 
   const warnings: string[] = [];
   if (items.some((i) => i.isMock)) warnings.push("MOCK_DATA: 표시된 일부 정보는 목업 또는 샘플(검증 전) 데이터이며 실제 서비스 데이터가 아닙니다.");
