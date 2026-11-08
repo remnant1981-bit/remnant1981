@@ -40,3 +40,16 @@ describe("occupancy", () => {
     expect([c(50), c(30), c(29), c(10), c(9)]).toEqual(["RELAXED", "RELAXED", "NORMAL", "NORMAL", "BUSY"]);
   });
 });
+
+describe("표시 문구", () => {
+  it("출처 코드는 사람이 읽는 이름으로, 요금 규칙 없음은 무료가 아님을 명시", async () => {
+    const { sourceLabel, feeText } = await import("@/lib/labels");
+    expect(sourceLabel("DATA_GO_KR_15012896")).toContain("전국주차장정보표준데이터");
+    expect(sourceLabel("SEOUL_OA21709")).toContain("서울 열린데이터광장");
+    expect(sourceLabel("UNKNOWN_X")).toBe("UNKNOWN_X");
+    const t = feeText({ status: "UNKNOWN", reason: "NO_RULES" });
+    expect(t.main).toBe("요금 정보 없음");
+    expect(t.sub).toContain("무료 아님");
+    expect(t.sub).not.toBe(t.main);
+  });
+});
