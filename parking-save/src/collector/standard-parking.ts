@@ -49,7 +49,7 @@ export function normalizeStandardRow(row: RawRow): NormalizeResult {
     lot: {
       sourceRecordId: key, name, operatorName: nz(s(row["관리기관명"])), parkingType, ownershipType: ownership,
       address: nz(s(row["소재지지번주소"])), roadAddress: nz(s(row["소재지도로명주소"])), latitude: lat, longitude: lng,
-      totalSpaces, phone: nz(s(row["전화번호"])), sourceUpdatedAt, qualityFlags: flags,
+      totalSpaces, phone: nz(s(row["전화번호"])), feeNote: nz(s(row["특기사항"]).slice(0, 300)), sourceUpdatedAt, qualityFlags: flags,
       feeRules: mapFees(row, flags), schedules: mapSchedules(row, flags),
     },
   };
@@ -75,7 +75,8 @@ function mapFees(row: RawRow, flags: string[]): NormalizedFeeRule[] {
       // 1일주차권: 날짜 경계·적용 방식이 원천에 명시되지 않음(OPEN_ISSUES #5) → 기준 UNKNOWN으로 보존, 요금엔진은 계산 불가 처리
       if (dayAmt != null && dayAmt > 0) out.push({ ruleType: "DAILY_MAX", amount: dayAmt, durationMinutes: dayHours != null && dayHours > 0 ? Math.round(dayHours * 60) : null, dayType: "EVERYDAY", dailyMaxBasis: "UNKNOWN" });
     }
-  } else flags.push(kind === "" ? "FEE_KIND_MISSING" : "FEE_KIND_UNSUPPORTED"); // 혼합 등: 요금 미확인
+  } else if (kind === "혼합") flags.push("FEE_MIXED"); // 무료·유료 구간 구분이 구조화되어 있지 않음 → 계산하지 않음(사용자 결정 2026-11-08)
+  else flags.push(kind === "" ? "FEE_KIND_MISSING" : "FEE_KIND_UNSUPPORTED");
   if (monthly != null && monthly > 0 && out.length > 0) out.push({ ruleType: "SEASON_PASS", amount: monthly, durationMinutes: null, dayType: "EVERYDAY", dailyMaxBasis: null });
   return out;
 }

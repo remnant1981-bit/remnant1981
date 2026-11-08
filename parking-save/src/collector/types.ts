@@ -25,7 +25,7 @@ export interface NormalizedLot {
   parkingType: "ON_STREET" | "OFF_STREET" | "UNKNOWN"; ownershipType: "PUBLIC" | "UNKNOWN";
   address: string | null; roadAddress: string | null; latitude: number | null; longitude: number | null;
   totalSpaces: number | null; phone: string | null; sourceUpdatedAt: string | null;
-  qualityFlags: string[]; feeRules: NormalizedFeeRule[]; schedules: NormalizedSchedule[];
+  feeNote: string | null; qualityFlags: string[]; feeRules: NormalizedFeeRule[]; schedules: NormalizedSchedule[];
 }
 export type NormalizeResult =
   | { kind: "ok"; lot: NormalizedLot }

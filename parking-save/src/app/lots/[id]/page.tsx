@@ -58,6 +58,9 @@ export default async function LotPage({ params, searchParams }: { params: Promis
           <>
             <p className="text-sm text-gray-700">{formatKst(d.requestedPeriod.startAt)} ~ {formatKst(d.requestedPeriod.endAt)}</p>
             <p className="text-lg font-bold">{fee.main}</p>{fee.sub && <p className="text-sm text-gray-700">{fee.sub}</p>}
+            {d.fee?.status !== "OK" && d.lot.qualityFlags.includes("FEE_MIXED") && (
+              <p className="mt-1 rounded border border-amber-400 bg-amber-50 p-2 text-sm">무료·유료 혼합 시설: 어느 시간대·구간이 무료인지 데이터에 없어 요금을 계산하지 않았습니다.{d.lot.feeNote && <> 원천 특기사항: “{d.lot.feeNote}”</>} 현장 안내를 확인하세요.</p>
+            )}
             {d.fee?.status === "OK" && d.fee.assumptions?.map((a) => <p key={a} className="mt-1 rounded border border-amber-400 bg-amber-50 p-2 text-sm">{a}</p>)}
             {d.fee?.status === "OK" && d.fee.notes && <ul className="mt-1 list-disc pl-5 text-xs text-gray-600">{d.fee.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
             {d.operating && <p className="mt-1 text-sm">운영 상태(입·출차 시각 기준): {OPERATING_LABEL[d.operating]}{d.operatingAssumed && <span className="text-amber-800"> (일요일은 공휴일 규칙 적용 · 추정)</span>}</p>}

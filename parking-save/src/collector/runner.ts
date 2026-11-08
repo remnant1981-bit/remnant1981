@@ -58,23 +58,23 @@ export async function runSync(db: Db, adapter: SourceAdapter, now = new Date()):
         const raw = (await db.get<{ id: number }>("SELECT id FROM source_raw_records WHERE source_name=? AND source_record_id=? AND payload_hash=?", [adapter.sourceName, key, hash]))!;
         const existing = await db.get<{ id: number; raw_record_id: number | null }>("SELECT id, raw_record_id FROM parking_lots WHERE source_name=? AND source_record_id=?", [adapter.sourceName, key]);
         if (existing && existing.raw_record_id === raw.id) {
-          await db.run("UPDATE parking_lots SET collected_at=?, data_status='ACTIVE' WHERE id=?", [startedAt, existing.id]);
+          await db.run("UPDATE parking_lots SET collected_at=?, data_status='ACTIVE', fee_note=?, quality_flags=? WHERE id=?", [startedAt, lot.feeNote, JSON.stringify(lot.qualityFlags), existing.id]);
           sum.unchanged++; continue;
         }
         const flags = JSON.stringify(lot.qualityFlags);
         let id: number;
         if (existing) {
           id = existing.id;
-          await db.run(`UPDATE parking_lots SET name=?, operator_name=?, parking_type=?, ownership_type=?, address=?, road_address=?, latitude=?, longitude=?, total_spaces=?, phone=?,
+          await db.run(`UPDATE parking_lots SET name=?, operator_name=?, parking_type=?, ownership_type=?, address=?, road_address=?, latitude=?, longitude=?, total_spaces=?, phone=?, fee_note=?,
             source_updated_at=?, collected_at=?, data_status='ACTIVE', quality_flags=?, updated_at=?, raw_record_id=? WHERE id=?`,
-            [lot.name, lot.operatorName, lot.parkingType, lot.ownershipType, lot.address, lot.roadAddress, lot.latitude, lot.longitude, lot.totalSpaces, lot.phone, lot.sourceUpdatedAt, startedAt, flags, startedAt, raw.id, id]);
+            [lot.name, lot.operatorName, lot.parkingType, lot.ownershipType, lot.address, lot.roadAddress, lot.latitude, lot.longitude, lot.totalSpaces, lot.phone, lot.feeNote, lot.sourceUpdatedAt, startedAt, flags, startedAt, raw.id, id]);
           await db.run("DELETE FROM fee_rules WHERE parking_lot_id=?", [id]);
           await db.run("DELETE FROM operating_schedules WHERE parking_lot_id=?", [id]);
           sum.updated++;
         } else {
-          await db.run(`INSERT INTO parking_lots(source_name, source_record_id, name, operator_name, parking_type, ownership_type, address, road_address, latitude, longitude, total_spaces, phone,
-            source_updated_at, collected_at, data_status, quality_flags, created_at, updated_at, raw_record_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'ACTIVE',?,?,?,?)`,
-            [adapter.sourceName, key, lot.name, lot.operatorName, lot.parkingType, lot.ownershipType, lot.address, lot.roadAddress, lot.latitude, lot.longitude, lot.totalSpaces, lot.phone, lot.sourceUpdatedAt, startedAt, flags, startedAt, startedAt, raw.id]);
+          await db.run(`INSERT INTO parking_lots(source_name, source_record_id, name, operator_name, parking_type, ownership_type, address, road_address, latitude, longitude, total_spaces, phone, fee_note,
+            source_updated_at, collected_at, data_status, quality_flags, created_at, updated_at, raw_record_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'ACTIVE',?,?,?,?)`,
+            [adapter.sourceName, key, lot.name, lot.operatorName, lot.parkingType, lot.ownershipType, lot.address, lot.roadAddress, lot.latitude, lot.longitude, lot.totalSpaces, lot.phone, lot.feeNote, lot.sourceUpdatedAt, startedAt, flags, startedAt, startedAt, raw.id]);
           id = (await db.get<{ id: number }>("SELECT id FROM parking_lots WHERE source_name=? AND source_record_id=?", [adapter.sourceName, key]))!.id;
           sum.inserted++;
         }
