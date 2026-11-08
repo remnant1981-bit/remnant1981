@@ -95,6 +95,19 @@ describe("중복 판정: 지역만 다른 공고는 합치지 않는다", () => 
   });
 });
 
+describe("잘못된 병합 흔적 정리", () => {
+  it("공고로 독립된 원천 공고ID의 출처 연결은 다른 공고에서 제거된다", async () => {
+    const db = await freshDb({ mock: false });
+    const a = await upsertAnnouncement(db, "bizinfo", await normalizeAnnouncement({ ...base, sourceNoticeId: "A", url: "https://example.org/a" }, "2026-01-10"), "t");
+    // 과거 규칙으로 B 가 A 에 병합된 상태를 재현
+    await db.run("INSERT INTO announcement_sources(announcement_id, source_id, source_notice_id, url, first_seen_at) VALUES (?,?,?,?,?)", [a.id, "bizinfo", "B", "https://example.org/b", "2026-01-01T00:00:00Z"]);
+    const b = await upsertAnnouncement(db, "bizinfo", await normalizeAnnouncement({ ...base, sourceNoticeId: "B", url: "https://example.org/b", title: "다른 사업 공고", applicationStart: "2026-02-01", applicationEnd: "2026-02-28" }, "2026-01-10"), "t");
+    expect(b.action).toBe("inserted");
+    const rows = await db.all<{ announcement_id: string; source_notice_id: string }>("SELECT announcement_id, source_notice_id FROM announcement_sources ORDER BY source_notice_id");
+    expect(rows).toEqual([{ announcement_id: a.id, source_notice_id: "A" }, { announcement_id: b.id, source_notice_id: "B" }]);
+  });
+});
+
 describe("수집 runner", () => {
   it("한 원천의 실패가 다른 원천을 막지 않고, 지수 백오프로 재시도하며 로그를 남긴다", async () => {
     const db = await freshDb({ mock: false });
