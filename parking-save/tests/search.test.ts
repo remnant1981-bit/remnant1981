@@ -188,3 +188,25 @@ describe("동일 시설 후보 묶음 표시", () => {
     expect((await db.get<{ c: number }>("SELECT COUNT(*) AS c FROM parking_lots WHERE id=?", [otherId]))!.c).toBe(1); // 삭제 아님
   });
 });
+
+describe("최근 수집에서 미확인 시설", () => {
+  it("최근 성공 수집보다 collected_at이 이른 시설만 표시하고, 실패 수집은 기준에서 제외", async () => {
+    const base = await run({ limit: "50" });
+    const [x, y] = base.items.map((i) => i.id);
+    const src = (await db.get<{ source_name: string; collected_at: string }>("SELECT source_name, collected_at FROM parking_lots WHERE id=?", [x]))!;
+    const old = "2026-11-01T00:00:00.000Z", fresh = "2026-11-08T00:00:00.000Z", failed = "2026-11-09T00:00:00.000Z";
+    await db.run("UPDATE parking_lots SET collected_at=? WHERE id=?", [old, x]);
+    await db.run("UPDATE parking_lots SET collected_at=? WHERE id=?", [fresh, y]);
+    // 이력 없는 원천은 판정하지 않음
+    expect((await run({ limit: "50" })).items.every((i) => !i.source.notInLatestSync)).toBe(true);
+    await db.run("INSERT INTO source_sync_logs(source_name, started_at, status) VALUES (?,?,'SUCCESS')", [src.source_name, fresh]);
+    await db.run("INSERT INTO source_sync_logs(source_name, started_at, status) VALUES (?,?,'FAILED')", [src.source_name, failed]);
+    const r = await run({ limit: "50" });
+    expect(r.items.find((i) => i.id === x)!.source.notInLatestSync).toBe(true);
+    expect(r.items.find((i) => i.id === y)!.source.notInLatestSync).toBe(false);
+    expect(r.warnings.some((w) => w.startsWith("NOT_IN_LATEST_SYNC"))).toBe(true);
+    const det = await getLotDetail(db, x, null, NOW);
+    expect(det!.source.notInLatestSync).toBe(true);
+    expect((await db.get<{ c: number }>("SELECT COUNT(*) AS c FROM parking_lots WHERE id=?", [x]))!.c).toBe(1);
+  });
+});

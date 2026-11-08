@@ -84,6 +84,7 @@ export default async function LotPage({ params, searchParams }: { params: Promis
       <section className="mt-4" aria-labelledby="src"><h2 id="src" className="font-semibold">데이터 출처</h2>
         <p className="text-sm">{sourceLabel(d.source.name)}</p>
         <p className="text-xs text-gray-600">원천 기준일 {d.source.updatedAt ? formatKst(d.source.updatedAt) : "미확인"} · 수집 {formatKst(d.source.collectedAt)}</p>
+        {d.source.notInLatestSync && <p role="status" className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-900">최근 수집에서 이 시설이 확인되지 않았습니다. 폐쇄되었거나 정보가 바뀌었을 수 있으니 현장 확인이 필요합니다.</p>}
         {d.holidayDataAvailable === false && <p className="text-xs text-amber-800">입력 기간의 공휴일 데이터가 없어 요일별 규칙은 적용하지 않았습니다.</p>}
       </section>
     </>
