@@ -38,6 +38,11 @@ export function LotCard({ item, query }: { item: LotItem; query: string }) {
           </ul>
         </details>
       )}
+      {item.fee.status !== "OK" && item.qualityFlags.includes("FEE_MIXED") && (
+        <p className="mt-2 rounded bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          무료·유료 혼합 시설: 어느 시간대·구간이 무료인지 데이터에 없어 요금을 계산하지 않았습니다.{item.feeNote && <> 원천 특기사항: “{item.feeNote}”</>} 현장 안내를 확인하세요.
+        </p>
+      )}
       <p className="mt-3 text-xs text-gray-600">
         출처: {sourceLabel(item.source.name)} · 기준일 {formatKst(item.source.updatedAt ?? item.source.collectedAt)}
         {item.source.freshness === "STALE" && <strong className="ml-1 text-amber-800">· 오래된 데이터</strong>}

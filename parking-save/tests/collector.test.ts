@@ -53,7 +53,7 @@ describe("정규화", () => {
   });
   it("무료인데 요금 기재 → 충돌, 혼합 → 요금 미확인", () => {
     expect(ok("SYN-8").feeRules).toEqual([]); expect(ok("SYN-8").qualityFlags).toContain("FEE_CONFLICT");
-    expect(ok("SYN-9").feeRules).toEqual([]); expect(ok("SYN-9").qualityFlags).toContain("FEE_KIND_UNSUPPORTED");
+    expect(ok("SYN-9").feeRules).toEqual([]); expect(ok("SYN-9").qualityFlags).toContain("FEE_MIXED");
   });
 });
 
@@ -291,5 +291,18 @@ describe("1일권·신선도·키 충돌 결정 반영 (사용자 결정 2026-11
       expect((await run([a, b])).lot.name).toBe("B");
       expect((await run([b, a])).lot.name).toBe("A");
     });
+  });
+});
+
+describe("혼합 요금", () => {
+  it("계산하지 않고 FEE_MIXED + 원천 특기사항 원문만 보존 (추정 금지)", () => {
+    const res = normalizeStandardRow({
+      주차장관리번호: "MIX-1", 주차장명: "혼합시설", 주차장구분: "공영", 주차장유형: "노외", 소재지도로명주소: "서울 어딘가 1", 위도: "37.5", 경도: "127.0", 주차구획수: "50",
+      요금정보: "혼합", 주차기본시간: "30", 주차기본요금: "0", 추가단위시간: "10", 추가단위요금: "100", 특기사항: "최초30분 무료 / 2시간 초과 시 10분마다 200원", 데이터기준일자: "2026-10-01",
+    });
+    if (res.kind !== "ok") throw new Error("not ok");
+    expect(res.lot.feeRules).toEqual([]);
+    expect(res.lot.qualityFlags).toContain("FEE_MIXED");
+    expect(res.lot.feeNote).toBe("최초30분 무료 / 2시간 초과 시 10분마다 200원");
   });
 });

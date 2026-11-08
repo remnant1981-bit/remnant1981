@@ -64,7 +64,7 @@ interface LotRow {
   parking_type: "ON_STREET" | "OFF_STREET" | "UNKNOWN"; ownership_type: "PUBLIC" | "UNKNOWN";
   address: string | null; road_address: string | null; latitude: number | null; longitude: number | null;
   total_spaces: number | null; phone: string | null; source_url: string | null;
-  source_updated_at: string | null; collected_at: string; data_status: string; quality_flags: string | null;
+  source_updated_at: string | null; collected_at: string; data_status: string; quality_flags: string | null; fee_note: string | null;
 }
 interface FeeRow { id: number; rule_type: string; amount: number | null; duration_minutes: number | null; valid_day_type: DayType; start_time: string | null; end_time: string | null; daily_max_basis: string | null }
 interface SchedRow { day_type: DayType; open_time: string | null; close_time: string | null; all_day_flag: number | null; closed_flag: number | null; holiday_policy: string | null }
@@ -103,7 +103,7 @@ export interface LotItem {
   latitude: number; longitude: number; distanceMeters: number; totalSpaces: number | null;
   fee: FeeView; operating: OperatingStatus; operatingAssumed: boolean; occupancy: OccupancyResult;
   source: { name: string; url: string | null; updatedAt: string | null; collectedAt: string; freshness: "FRESH" | "STALE"; notInLatestSync: boolean };
-  isMock: boolean; qualityFlags: string[];
+  isMock: boolean; qualityFlags: string[]; feeNote: string | null;
   explanation: Explanation;
   /** 같은 시설일 가능성이 높아 이 항목 아래로 묶인 다른 레코드(삭제·병합 아님, 상세에서 개별 확인 가능) */
   similar: Array<{ id: number; name: string; distanceMeters: number; status: "MERGED" | "PENDING"; source: string }>;
@@ -179,7 +179,7 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
       latitude: here.lat, longitude: here.lng, distanceMeters: Math.round(dist), totalSpaces: lot.total_spaces,
       fee: ev.fee, operating: ev.operating, operatingAssumed: ev.operatingAssumed, occupancy: ev.occupancy,
       source: { name: lot.source_name, url: lot.source_url, updatedAt: lot.source_updated_at, collectedAt: lot.collected_at, freshness: ev.freshness, notInLatestSync: notInLatestSync(lot, syncStarts) },
-      isMock: NON_PRODUCTION_SOURCES.includes(lot.source_name), qualityFlags: lot.quality_flags ? JSON.parse(lot.quality_flags) : [],
+      isMock: NON_PRODUCTION_SOURCES.includes(lot.source_name), qualityFlags: lot.quality_flags ? JSON.parse(lot.quality_flags) : [], feeNote: lot.fee_note,
       explanation: { highlights: [], cautions: [] }, similar: [],
     });
   }
@@ -274,7 +274,7 @@ export async function getLotDetail(db: Db, id: number, period: { startAt: Date; 
     lot: {
       id: lot.id, name: lot.name, operatorName: lot.operator_name, parkingType: lot.parking_type, ownershipType: lot.ownership_type, address: lot.address, roadAddress: lot.road_address,
       latitude: lot.latitude, longitude: lot.longitude, totalSpaces: lot.total_spaces, phone: lot.phone, isMock: NON_PRODUCTION_SOURCES.includes(lot.source_name),
-      qualityFlags: lot.quality_flags ? (JSON.parse(lot.quality_flags) as string[]) : [],
+      qualityFlags: lot.quality_flags ? (JSON.parse(lot.quality_flags) as string[]) : [], feeNote: lot.fee_note,
     },
     source: { name: lot.source_name, url: lot.source_url, updatedAt: lot.source_updated_at, collectedAt: lot.collected_at, notInLatestSync: notInLatestSync(lot, await latestSyncStarts(db)) },
     feeRules: feeRules.map((r) => ({ ruleType: r.rule_type, amount: r.amount, durationMinutes: r.duration_minutes, dayType: r.valid_day_type, startTime: r.start_time, endTime: r.end_time, dailyMaxBasis: r.daily_max_basis })),
