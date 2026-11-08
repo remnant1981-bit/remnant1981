@@ -182,6 +182,8 @@ export async function upsertAnnouncement(db: Db, sourceId: string, n: Normalized
     );
     await db.run("INSERT INTO announcement_sources(announcement_id, source_id, source_notice_id, url, first_seen_at) VALUES (?,?,?,?,?)",
       [id, sourceId, n.sourceNoticeId, n.canonicalUrl, now]);
+    // 이전에 다른 공고에 병합 기록돼 있던 같은 원천 공고ID 연결은 제거(자기 자신의 공고로 독립)
+    await db.run("DELETE FROM announcement_sources WHERE source_id=? AND source_notice_id=? AND announcement_id<>?", [sourceId, n.sourceNoticeId, id]);
     await writeChildren(db, id, n, now);
     return { id, action: "inserted" };
   }
