@@ -428,3 +428,29 @@ describe("업종 분야 판정", () => {
     expect(evaluateRule({ ...rule, confidence: 0.5 }, { industry_group: "제조업" }, TODAY).state).toBe("UNKNOWN");
   });
 });
+
+describe("공고별 조건 직접 확인", () => {
+  it("직접 확인 결과는 해당 공고에만 적용되고 정확도를 100으로 만든다", async () => {
+    const { checkableConditions } = await import("@/domain/matching");
+    const rules: Rule[] = [{ field_key: "enterprise_size", operator: "in", expected_value: JSON.stringify(["중소기업"]), confidence: 0.5 }];
+    const base = evaluateMatch(rules, { enterprise_size: "중소기업" }, TODAY, "A1");
+    expect(base.accuracy).toBe(50);
+    expect(checkableConditions(base).map((x) => x.fieldKey)).toEqual(["enterprise_size"]);
+    const c = { enterprise_size: "중소기업", checks: { A1: { enterprise_size: "yes" as const } } };
+    const yes = evaluateMatch(rules, c, TODAY, "A1");
+    expect(yes).toMatchObject({ overall: "likely_met", accuracy: 100 });
+    expect(checkableConditions(yes)[0].userChecked).toBe("yes");
+    expect(evaluateMatch(rules, c, TODAY, "B2").accuracy).toBe(50); // 다른 공고에는 영향 없음
+    const no = evaluateMatch(rules, { checks: { A1: { enterprise_size: "no" as const } } }, TODAY, "A1");
+    expect(no.overall).toBe("likely_not_met");
+    expect(no.missingLabels).toEqual([]); // 직접 확인하면 미입력 안내도 사라짐
+  });
+  it("비회원 쿠키 형식: 잘못된 값 무시, 50건 상한", async () => {
+    const { decodeChecks, encodeChecks } = await import("@/lib/guest-checks");
+    const id = "0123456789abcdef0123456789abcdef";
+    expect(decodeChecks(encodeChecks([[id, "venture", "yes"], [id, "export", "no"]]))).toEqual({ [id]: { venture: "yes", export: "no" } });
+    expect(decodeChecks("bad~x~y|" + id + "~BAD~y|" + id + "~venture~z")).toEqual({});
+    const many = Array.from({ length: 60 }, (_, i) => [`${id.slice(0, 30)}${String(i).padStart(2, "0")}`, "venture", "yes"] as [string, string, "yes"]);
+    expect(Object.keys(decodeChecks(encodeChecks(many))).length).toBe(50);
+  });
+});

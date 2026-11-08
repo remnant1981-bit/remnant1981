@@ -1,5 +1,6 @@
 import { route, json, readJson, type Ctx } from "./api";
 import { guestProfileFromCookie } from "./viewer";
+import { guestChecksFromCookie, loadCompanyChecks, saveCompanyCheck } from "./checks";
 import type { CompanyView } from "./company";
 import type { CompanyProfile } from "@/domain/matching";
 import {
@@ -31,11 +32,13 @@ type RouteCtx = { params: Promise<{ id?: string; format?: string }> };
 const searchOf = (req: Request) => parseSearchParams(Object.fromEntries(new URL(req.url).searchParams.entries()));
 
 async function viewerCompany(c: Ctx, req?: Request): Promise<{ companyId: string | null; profile: CompanyView | CompanyProfile | null; guest: boolean }> {
-  const guest = req ? guestProfileFromCookie(req.headers.get("cookie")) : null;
+  const g = req ? guestProfileFromCookie(req.headers.get("cookie")) : null;
+  const guest = g ? { ...g, checks: guestChecksFromCookie(req!.headers.get("cookie")) } : null;
   if (!c.session) return { companyId: null, profile: guest, guest: !!guest };
   const st = await membershipState(c.db, c.session.user.id);
   if (st.status !== "verified" || !st.companyId) return { companyId: null, profile: guest, guest: !!guest };
-  return { companyId: st.companyId, profile: await getCompanyProfile(c.db, c.session.user.id, st.companyId), guest: false };
+  const company = await getCompanyProfile(c.db, c.session.user.id, st.companyId);
+  return { companyId: st.companyId, profile: { ...company, checks: await loadCompanyChecks(c.db, st.companyId) }, guest: false };
 }
 
 export const handlers: Record<string, (req: Request, ...a: any[]) => Promise<Response>> = {
@@ -77,7 +80,7 @@ export const handlers: Record<string, (req: Request, ...a: any[]) => Promise<Res
     const v = await viewerCompany(c, req);
     let match = null;
     let bookmarked = false;
-    if (v.profile) match = evaluateMatch((await loadRules(c.db, [a.id])).get(a.id) ?? [], v.profile, seoulToday());
+    if (v.profile) match = evaluateMatch((await loadRules(c.db, [a.id])).get(a.id) ?? [], v.profile, seoulToday(), a.id);
     if (v.companyId && c.session) {
       await recordView(c.db, c.session.user.id, v.companyId, a.id);
       bookmarked = (await bookmarkedIds(c.db, c.session.user.id, v.companyId)).has(a.id);
@@ -119,6 +122,7 @@ export const handlers: Record<string, (req: Request, ...a: any[]) => Promise<Res
     const b = await readJson<Record<string, unknown>>(req);
     return { company: await patchCompanyProfile(c.db, c.session!.user.id, b) };
   }),
+  "POST /api/checks": route({ auth: "user" }, async (req, c) => saveCompanyCheck(c.db, c.session!.user.id, await readJson(req))),
   "DELETE /api/company": route({ auth: "user" }, async (_req, c) => {
     await deleteCompanyData(c.db, c.session!.user.id);
     return { ok: true };

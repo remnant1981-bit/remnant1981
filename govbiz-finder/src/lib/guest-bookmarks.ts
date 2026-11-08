@@ -31,3 +31,13 @@ export function subscribeGuestMarks(cb: () => void) {
   return () => { window.removeEventListener(EVT, cb); window.removeEventListener("storage", cb); };
 }
 export const serverGuestMarks = () => EMPTY;
+
+/** 서울 기준 오늘(YYYY-MM-DD) */
+export function seoulTodayClient(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
+/** 마감까지 남은 일수(마감일 없거나 형식 오류면 null) */
+export function daysLeft(end: string | null, today = seoulTodayClient()): number | null {
+  if (!end || !/^\d{4}-\d{2}-\d{2}$/.test(end)) return null;
+  return Math.round((Date.parse(end + "T00:00:00Z") - Date.parse(today + "T00:00:00Z")) / 86400000);
+}

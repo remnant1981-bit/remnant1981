@@ -6,7 +6,8 @@ import { getAnnouncement, getAnnouncementExtras } from "@/domain/search";
 import { getViewer } from "@/server/viewer";
 import { loadRules } from "@/server/recommend";
 import { bookmarkedIds, recordView } from "@/server/userdata";
-import { evaluateMatch, OVERALL_LABEL } from "@/domain/matching";
+import { evaluateMatch, OVERALL_LABEL, checkableConditions } from "@/domain/matching";
+import { ConditionCheck } from "@/components/ConditionCheck";
 import { categoryName } from "@/domain/taxonomy";
 import { CategoryTags, FitChip, AccuracyChip, Notice, Provenance, RuleChip, StatusChip, TestBadge, BackLink } from "@/components/ui";
 import { BookmarkButton } from "@/components/BookmarkButton";
@@ -49,7 +50,7 @@ export default async function Detail({ params }: Props) {
   const [extras, v] = await Promise.all([getAnnouncementExtras(db, a.id), getViewer()]);
   let match = null;
   let bookmarked = false;
-  if (v.profile) match = evaluateMatch((await loadRules(db, [a.id])).get(a.id) ?? [], v.profile, seoulToday());
+  if (v.profile) match = evaluateMatch((await loadRules(db, [a.id])).get(a.id) ?? [], v.profile, seoulToday(), a.id);
   if (v.company && v.session) {
     await recordView(db, v.session.user.id, v.company.id, a.id);
     bookmarked = (await bookmarkedIds(db, v.session.user.id, v.company.id)).has(a.id);
@@ -105,6 +106,7 @@ export default async function Detail({ params }: Props) {
         ) : (
           <>
             <p className="mb-2 text-sm">종합: <strong>{OVERALL_LABEL[match.overall]}</strong>{match.score !== null && ` · 참고 점수 ${match.score}점`}{match.accuracy !== null && ` · 판정 정확도 ${match.accuracy}%`}{match.missingLabels.length > 0 && ` · 미입력: ${match.missingLabels.join(", ")}`} <span className="text-[var(--muted)]">(자격 확정 판정이 아닙니다)</span></p>
+            <ConditionCheck announcementId={a.id} member={!!v.company} items={checkableConditions(match)} />
             {match.results.length === 0 ? <p className="text-sm text-[var(--muted)]">자동 판정 가능한 조건이 구조화되지 않았습니다. 원문을 확인하세요.</p> : (
               <ul className="grid gap-2">{match.results.map((r, i) => (
                 <li key={i} className="rounded-lg border border-[var(--line)] p-3 text-sm">

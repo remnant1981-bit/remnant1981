@@ -28,6 +28,14 @@
 | 6 | UptimeRobot 무료 가입 → HTTP 모니터 `https://도메인/api/health` | 알림 받을 이메일·앱 설정 |
 | 7 | (승인 후) 애드센스 코드 값을 서버 `.env`의 `NEXT_PUBLIC_ADSENSE_*`에 입력 → `FORCE=1` 배포 | 광고 표시 시작 |
 
+### 배포 진행 현황(2026-11-08 기준, 이어서 진행할 때 참고)
+- Oracle Cloud: 가입 화면에 한국 리전(서울·춘천) 없음 → **중단**(해외 리전은 기업마당 수집 불가 가능성)
+- AWS Lightsail 서울(3개월 무료만 사용) 진행 중: **계정 플랜 선택 화면에서 일시 중단**
+  - 결정: **Free 플랜(6개월, 크레딧 최대 $200, 크레딧 초과 과금 없음)** 선택 예정
+  - 확인 필요: Free 플랜에서 Lightsail 생성 가능 여부(막히면 대안 검토), 화면에 Lightsail '3개월 무료' 표시 여부
+  - 다음 순서: Choose free plan(직접 클릭) → 인증·카드(직접) → 콘솔 진입 → Budgets 알림 → Lightsail 서울 인스턴스(스냅샷 끔·1대) → 고정 IP·방화벽 → setup-server.sh
+  - Free 플랜은 6개월 후 또는 크레딧 소진 시 유료 전환을 선택하지 않으면 계정이 자동 종료됨 → 종료 전 DB 백업 다운로드 필요
+
 ### Oracle Cloud 무료 서버(Always Free)로 시작하는 경우
 - Home Region 서울/춘천, Ampere A1(OCPU 2·메모리 12GB), Ubuntu 24.04, 공인 IP 할당
 - 콘솔 Security List 에 TCP 80·443 Ingress 추가(OS 방화벽은 setup-server.sh 가 자동 개방)

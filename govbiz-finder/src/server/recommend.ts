@@ -136,7 +136,7 @@ const RANK = { likely_met: 0, needs_check: 1, likely_not_met: 2 } as const;
 export async function attachMatches(db: Db, rows: AnnouncementRow[], company: CompanyProfile | null, today = seoulToday()): Promise<RowWithMatch[]> {
   if (!company) return rows.map((r) => ({ ...r, match: null, local: false }));
   const rules = await loadRules(db, rows.map((r) => r.id));
-  return rows.map((r) => ({ ...r, match: evaluateMatch(rules.get(r.id) ?? [], company, today), local: isLocal(r, company) }));
+  return rows.map((r) => ({ ...r, match: evaluateMatch(rules.get(r.id) ?? [], company, today, r.id), local: isLocal(r, company) }));
 }
 
 /** 적합성 평가 대상 상한. 전체 공고를 빠짐없이 평가하기 위해 충분히 크게 둔다(초과 시 truncated 표시). */

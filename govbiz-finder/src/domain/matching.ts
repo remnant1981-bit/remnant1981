@@ -23,6 +23,8 @@ export interface CompanyProfile {
   has_patent?: string | null;
   interest_categories?: string | null;
   industry_group?: string | null;
+  /** 공고ID → 조건키 → 이용자가 원문 확인한 결과 */
+  checks?: Record<string, Record<string, "yes" | "no">>;
 }
 export interface Rule {
   field_key: string;
@@ -41,6 +43,8 @@ export interface RuleResult {
   missing?: boolean;
   /** 규칙 신뢰도(0~1). 공고명·대상 문구에서 추정한 규칙은 낮음 */
   confidence?: number;
+  /** 이용자가 공고 원문을 보고 직접 확인한 결과(이 공고에만 적용) */
+  userChecked?: "yes" | "no";
 }
 export interface MatchResult {
   overall: Overall;
@@ -205,8 +209,15 @@ export function evaluateRule(rule: Rule, c: CompanyProfile, today: string): Rule
  * - 규칙이 없으면 needs_check(자동 판정할 조건 없음)
  * 점수: MET 비율 기반이며 UNKNOWN 은 중립(0.5)로 취급해 미입력으로 과도하게 낮아지지 않음.
  */
-export function evaluateMatch(rules: Rule[], c: CompanyProfile | null, today: string): MatchResult {
-  const results = rules.map((r) => evaluateRule(r, c ?? {}, today));
+export function evaluateMatch(rules: Rule[], c: CompanyProfile | null, today: string, announcementId?: string): MatchResult {
+  const checks = announcementId ? c?.checks?.[announcementId] : undefined;
+  const results = rules.map((r) => {
+    const res = evaluateRule(r, c ?? {}, today);
+    const v = checks?.[r.field_key];
+    if (!v) return res;
+    return { ...res, state: v === "yes" ? "MET" : "NOT_MET", confidence: 1, missing: undefined, userChecked: v,
+      reason: v === "yes" ? `공고 원문 확인 결과 해당함(직접 확인)` : `공고 원문 확인 결과 해당하지 않음(직접 확인)` } as RuleResult;
+  });
   const unknownCount = results.filter((r) => r.state === "UNKNOWN").length;
   const notMet = results.some((r) => r.state === "NOT_MET");
   let overall: Overall;
@@ -231,3 +242,15 @@ export const OVERALL_LABEL: Record<Overall, string> = {
   likely_not_met: "미충족 가능성 높음",
 };
 export const STATE_LABEL: Record<RuleState, string> = { MET: "충족", NOT_MET: "미충족", UNKNOWN: "확인 필요" };
+
+/** 공고별로 직접 확인해 정확도를 높일 수 있는 조건(미입력 기업정보는 제외: 기업정보 입력으로 해결) */
+export function checkableConditions(m: MatchResult): { fieldKey: string; label: string; excerpt: string | null; userChecked?: "yes" | "no" }[] {
+  const seen = new Map<string, { fieldKey: string; label: string; excerpt: string | null; userChecked?: "yes" | "no" }>();
+  for (const r of m.results) {
+    if (r.missing) continue;
+    if (r.userChecked || r.state === "UNKNOWN" || (r.confidence ?? 1) < 1) {
+      if (!seen.has(r.fieldKey)) seen.set(r.fieldKey, { fieldKey: r.fieldKey, label: r.label, excerpt: r.excerpt, userChecked: r.userChecked });
+    }
+  }
+  return [...seen.values()];
+}
