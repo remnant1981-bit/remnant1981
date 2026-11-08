@@ -1,5 +1,5 @@
 // 판정 규칙 항목(fieldKey) → 기업정보 입력 필드 정의. 맞춤 정확도 높이기·카드 내 바로 입력에서 공용.
-import { REVENUE_BANDS, EMPLOYEE_BANDS, SIDO, ENTERPRISE_SIZES, CERTIFICATIONS } from "@/domain/taxonomy";
+import { REVENUE_BANDS, EMPLOYEE_BANDS, SIDO, ENTERPRISE_SIZES, CERTIFICATIONS, INDUSTRY_GROUPS } from "@/domain/taxonomy";
 
 export type Spec =
   | { key: string; kind: "select"; opts: [string, string][] }
@@ -14,6 +14,7 @@ const opts = (a: readonly string[]): [string, string][] => a.map((x) => [x, x]);
 export const SPECS: Record<string, Spec> = {
   region_sido: { key: "region_sido", kind: "select", opts: opts(SIDO) },
   region_sigungu: { key: "region_sigungu", kind: "text", placeholder: "예: 시흥시" },
+  industry_group: { key: "industry_group", kind: "select", opts: opts(INDUSTRY_GROUPS) },
   industry: { key: "industry_name", kind: "text", placeholder: "예: 금속가공 제조업" },
   business_age_years: { key: "established_at", kind: "date" },
   enterprise_size: { key: "enterprise_size", kind: "select", opts: opts(ENTERPRISE_SIZES) },

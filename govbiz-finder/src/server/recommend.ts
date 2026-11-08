@@ -53,6 +53,22 @@ export function titleSigungu(title: string | null | undefined): string[] {
   return names.length === m[1].split(/\s*[ㆍ·,]\s*/).length ? names : []; // 하나라도 지명이 아니면 판정하지 않음
 }
 
+/** [업종 분야, 신뢰도]. 0.7 이상은 불일치 시 '해당 안 됨', 그 미만은 '확인 필요' */
+const INDUSTRY_PATTERNS: [RegExp, string, number][] = [
+  [/농가|농업인|농업경영체|농어업인|농산물|축산농가|축산물|어업인|어가|수산물|임업인|친환경농|귀농/, "농림축수산업", 0.7],
+  [/관광사업체|관광기업|관광업체|숙박업|숙박시설|음식점|외식업/, "관광·숙박·음식점", 0.7],
+  [/건설업체|건설기업|전문건설|건설사업자/, "건설업", 0.7],
+  [/의료기관|약국|한의원/, "보건·의료", 0.6],
+  [/콘텐츠\s*(?:기업|업체|사업자|제작사)|게임\s*(?:기업|업체|개발사)|출판사/, "콘텐츠·미디어", 0.5],
+  [/(?:SW|소프트웨어|ICT)\s*(?:기업|업체)/i, "정보통신·SW", 0.5],
+];
+export function industryTargets(text: string): [string, number][] {
+  if (/가공|제조|스마트팜\s*기업|유통업체/.test(text)) return [];
+  const hit = INDUSTRY_PATTERNS.filter(([re]) => re.test(text));
+  // 서로 다른 업종이 여러 개 걸리면 범용 공고일 수 있어 신뢰도를 낮춤
+  return hit.map(([, g, c]) => [g, hit.length > 1 ? Math.min(c, 0.5) : c]);
+}
+
 export function textRulesFor(row: { title?: string | null; target_summary?: string | null; eligibility_text?: string | null; original_text?: string | null; region_scope?: string | null }): Rule[] {
   const rules: Rule[] = [];
   // 시/군/구 한정 공고(공고명 기준). 시/도 단위 공고에서만 적용, 기업 시/군/구가 다르면 '미충족 가능성 높음'
@@ -80,6 +96,9 @@ export function textRulesFor(row: { title?: string | null; target_summary?: stri
   }
   // 특정 인증 대상(제목·대상에 명시된 경우)
   const head = `${row.title ?? ""} ${row.target_summary ?? ""}`;
+  // 업종 한정 공고(공고명·지원대상에 수혜 업종이 명시된 경우). 가공·제조를 함께 언급하면 제외(식품가공 등 혼재)
+  const groups = industryTargets(head);
+  if (groups.length) rules.push({ field_key: "industry_group", operator: "in", expected_value: JSON.stringify(groups.map((g) => g[0])), source_excerpt: `공고명/대상: ${head.trim().slice(0, 80)}`, confidence: Math.min(...groups.map((g) => g[1])) });
   const certs = CERT_PATTERNS.filter(([re]) => re.test(head)).map(([, c]) => c);
   if (certs.length) rules.push({ field_key: "certification", operator: "in", expected_value: JSON.stringify(certs), source_excerpt: `공고명/대상: ${head.trim().slice(0, 80)}`, confidence: 0.5 });
   return rules;
