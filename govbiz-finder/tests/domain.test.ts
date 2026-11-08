@@ -359,3 +359,38 @@ describe("본문 기반 규칙(AI 미사용)과 확장 프로필", () => {
     expect(met.total).toBeGreaterThan(0);
   });
 });
+
+import { titleSigungu } from "@/server/recommend";
+describe("공고명 기반 시/군/구 판정", () => {
+  const T = "2026-06-01";
+  it("공고명 앞의 시/군/구를 추출하고 지명이 아닌 단어는 제외", () => {
+    expect(titleSigungu("[경기] 안성시 2026년 도시재생 창업지원사업 참여자 추가모집 공고")).toEqual(["안성시"]);
+    expect(titleSigungu("[경기] 수원시ㆍ용인시ㆍ화성시 2026년 청년일자리도약장려금(수도권형)")).toEqual(["수원시", "용인시", "화성시"]);
+    expect(titleSigungu("[인천] 서구 2026년 제품인증획득 지원사업")).toEqual(["서구"]);
+    expect(titleSigungu("[서울] 강남구 2026년 청년일자리도약장려금")).toEqual(["강남구"]);
+    expect(titleSigungu("[경기] 연구개발 지원사업")).toEqual([]);
+    expect(titleSigungu("[경기] 2026년 중소기업 육성자금")).toEqual([]);
+    expect(titleSigungu("[충북] 2026년 청년일자리도약장려금 사업")).toEqual([]);
+    expect(titleSigungu("2026년 가상 지원사업")).toEqual([]);
+  });
+  it("시흥시 기업에게 안성시·파주시 공고는 조건 충족이 아니고, 시흥시 공고는 충족", () => {
+    const company = { region_sido: "경기도", region_sigungu: "시흥시" };
+    const ev = (title: string) => {
+      const rules = [...regionRulesFor("경기도"), ...textRulesFor({ title, region_scope: "경기도" })];
+      return evaluateMatch(rules, company, T).overall;
+    };
+    expect(ev("[경기] 안성시 2026년 도시재생 창업지원사업")).toBe("likely_not_met");
+    expect(ev("[경기] 파주시 2026년 파주청년창업지원센터 청년창업 멘토링")).toBe("likely_not_met");
+    expect(ev("[경기] 시흥시 2026년 중소기업 판로 지원")).toBe("likely_met");
+    expect(ev("[경기] 2026년 경기도 중소기업 정책자금")).toBe("likely_met");
+    // 기업이 시/군/구를 입력하지 않았으면 확인 필요(숨기지 않음)
+    expect(evaluateMatch([...regionRulesFor("경기도"), ...textRulesFor({ title: "[경기] 안성시 공고", region_scope: "경기도" })], { region_sido: "경기도" }, T).overall).toBe("needs_check");
+  });
+});
+describe("시/도 줄임말은 시/군/구로 보지 않음", () => {
+  it("[서울] 서울시 … / [부산] 부산시 … 는 시/군/구 규칙을 만들지 않는다", () => {
+    expect(textRulesFor({ title: "[서울] 서울시 소상공인 마케팅 지원", region_scope: "서울특별시" }).filter((r) => r.field_key === "region_sigungu")).toEqual([]);
+    expect(textRulesFor({ title: "[부산] 부산시 창업 지원", region_scope: "부산광역시" }).filter((r) => r.field_key === "region_sigungu")).toEqual([]);
+    expect(textRulesFor({ title: "[경기] 광주시 기업 지원", region_scope: "경기도" }).map((r) => r.field_key)).toContain("region_sigungu"); // 경기도 광주시는 실제 시
+  });
+});

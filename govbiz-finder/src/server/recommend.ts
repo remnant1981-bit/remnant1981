@@ -39,8 +39,30 @@ function excerptAround(text: string, index: number, len: number): string {
  * 공고의 구조화 필드·본문 문장에서 판정 규칙을 정규식으로 만든다(AI 미사용).
  * 본문 기반 규칙은 신뢰도를 낮게(0.5) 두어 '충족' 신호만 주고, 불일치는 미충족으로 단정하지 않는다(우대 조건 오인 방지).
  */
-export function textRulesFor(row: { title?: string | null; target_summary?: string | null; eligibility_text?: string | null; original_text?: string | null }): Rule[] {
+/** 시/군/구로 끝나지만 지명이 아닌 단어(오인 방지) */
+const NOT_PLACE = new Set(["연구", "지구", "요구", "탐구", "도구", "기구", "출구", "입구", "가구", "완구", "전시", "도시", "동시", "수시", "상시", "즉시", "개시", "공시", "게시", "표시", "감시", "제시", "적시", "평시", "역군", "장군"]);
+
+/**
+ * 공고명 앞의 시/군/구 추출: '[경기] 안성시 2026년 …', '[경기] 수원시ㆍ용인시ㆍ화성시 …', '[인천] 서구 …'.
+ * 기업마당은 시/군 공고에도 지역 태그를 도 단위로만 달기 때문에 공고명에서 보완한다.
+ */
+export function titleSigungu(title: string | null | undefined): string[] {
+  const m = (title ?? "").match(/^\s*\[[^\]]+\]\s*([가-힣]{1,5}(?:시|군|구)(?:\s*[ㆍ·,]\s*[가-힣]{1,5}(?:시|군|구))*)(?=\s|\(|$)/);
+  if (!m) return [];
+  const names = m[1].split(/\s*[ㆍ·,]\s*/).map((x) => x.trim()).filter((x) => x.length >= 2 && !NOT_PLACE.has(x));
+  return names.length === m[1].split(/\s*[ㆍ·,]\s*/).length ? names : []; // 하나라도 지명이 아니면 판정하지 않음
+}
+
+export function textRulesFor(row: { title?: string | null; target_summary?: string | null; eligibility_text?: string | null; original_text?: string | null; region_scope?: string | null }): Rule[] {
   const rules: Rule[] = [];
+  // 시/군/구 한정 공고(공고명 기준). 시/도 단위 공고에서만 적용, 기업 시/군/구가 다르면 '미충족 가능성 높음'
+  const scope = row.region_scope ?? "";
+  if (scope && scope !== "전국" && !scope.includes("·") && !scope.includes(" ")) {
+    // '서울시'·'부산시'처럼 시/도 자체를 줄여 쓴 표기는 시/군/구가 아님
+    const short = scope.replace(/(특별시|광역시|특별자치시|특별자치도|도)$/, "");
+    const cities = titleSigungu(row.title).filter((c) => c !== `${short}시`);
+    if (cities.length) rules.push({ field_key: "region_sigungu", operator: "in", expected_value: JSON.stringify(cities), source_excerpt: `공고명: ${(row.title ?? "").slice(0, 60)}`, confidence: 0.7 });
+  }
   const body = [row.eligibility_text, row.original_text].filter(Boolean).join("\n");
   // 지원 대상 규모(기업마당 '지원대상' 필드). 본문에 중견기업이 함께 언급되면 포함
   const tokens = (row.target_summary ?? "").split(/[,/·ㆍ\s]+/).map((t) => t.trim()).filter(Boolean);
