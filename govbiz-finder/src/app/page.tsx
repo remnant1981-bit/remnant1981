@@ -52,7 +52,7 @@ export default async function Home() {
         const base = parseSearchParams({ sort: "fit", size: "1", status: "open,upcoming,always,unknown", eligible: "1" });
         const all = await searchWithMatches(db, base, company);
         const soon = await searchWithMatches(db, { ...base, soon: true, metOnly: true }, company);
-        const c = all.counts ?? { likely_met: 0, needs_check: 0, likely_not_met: 0 };
+        const c = all.counts ?? { likely_met: 0, needs_check: 0, likely_not_met: 0, insufficient: 0, possible_mismatch: 0 };
         return (
           <section aria-labelledby="mine" className="card mt-5 p-5">
             <h2 id="mine" className="font-bold">{v.company?.company_name ?? "우리 기업"} 맞춤 현황{!v.company && <span className="ml-2 text-xs font-normal text-[var(--muted)]">(이 브라우저에 저장한 정보 기준)</span>}</h2>

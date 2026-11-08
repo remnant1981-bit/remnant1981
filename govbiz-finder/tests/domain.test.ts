@@ -417,13 +417,14 @@ describe("업종 분야 판정", () => {
     const r = textRulesFor({ title: "[경기] 시흥시 친환경농산물 인증확대사업", target_summary: "중소기업", region_scope: "경기도" });
     expect(r.find((x) => x.field_key === "industry_group")).toMatchObject({ expected_value: JSON.stringify(["농림축수산업"]), confidence: 0.7 });
   });
-  it("기업 업종 분야가 다르면 미충족, 미입력이면 확인 필요(업종명에서 추정 가능하면 사용)", async () => {
+  it("기업 업종 분야가 다르면 미충족, 미입력이면 확인 필요(업종명 추정은 불일치로 판정하지 않음)", async () => {
     const { inferIndustryGroup } = await import("@/domain/matching");
     const rule: Rule = { field_key: "industry_group", operator: "in", expected_value: JSON.stringify(["농림축수산업"]), confidence: 0.7 };
     expect(evaluateRule(rule, { industry_group: "제조업" }, TODAY).state).toBe("NOT_MET");
     expect(evaluateRule(rule, { industry_group: "농림축수산업" }, TODAY).state).toBe("MET");
     expect(evaluateRule(rule, {}, TODAY)).toMatchObject({ state: "UNKNOWN", missing: true });
-    expect(evaluateRule(rule, { industry_name: "금속가공 제조업" }, TODAY).state).toBe("NOT_MET");
+    expect(evaluateRule(rule, { industry_name: "금속가공 제조업" }, TODAY)).toMatchObject({ state: "UNKNOWN", missing: true });
+    expect(evaluateRule(rule, { industry_name: "축산 농가" }, TODAY)).toMatchObject({ state: "MET", confidence: 0.5 });
     expect(inferIndustryGroup("경영 컨설팅")).toBeNull();
     expect(evaluateRule({ ...rule, confidence: 0.5 }, { industry_group: "제조업" }, TODAY).state).toBe("UNKNOWN");
   });
@@ -461,7 +462,9 @@ describe("기술 분야 판정", () => {
     const r = textRulesFor({ title: "6G 서비스 시나리오 공모전 - 6G 시연 기획 Track 공고", target_summary: "중소기업", region_scope: "전국" }).find((x) => x.field_key === "tech_field")!;
     expect(r).toMatchObject({ expected_value: JSON.stringify(["통신·네트워크(5G/6G)"]), confidence: 0.6 });
     const smg = { tech_keywords: "액체수소, 극저온 펌프", industry_name: "기계 제조업" };
-    expect(evaluateRule(r, smg, TODAY).state).toBe("NOT_MET");
+    // 기술 분야를 직접 선택하지 않으면 문구 추정으로 제외하지 않음(확인 필요 + 선택 유도)
+    expect(evaluateRule(r, smg, TODAY)).toMatchObject({ state: "UNKNOWN", missing: true });
+    expect(evaluateRule(r, { ...smg, tech_fields: "수소·에너지" }, TODAY).state).toBe("NOT_MET");
     expect(evaluateRule(r, { tech_fields: "통신·네트워크(5G/6G)" }, TODAY).state).toBe("MET");
     expect(evaluateRule(r, {}, TODAY)).toMatchObject({ state: "UNKNOWN", missing: true });
     const h2 = textRulesFor({ title: "액화수소 화물창 핵심기술 개발 과제 공고", region_scope: "전국" }).find((x) => x.field_key === "tech_field")!;
@@ -477,5 +480,24 @@ describe("업종 분야 복수 선택", () => {
     const rule: Rule = { field_key: "industry_group", operator: "in", expected_value: JSON.stringify(["농림축수산업"]), confidence: 0.7 };
     expect(evaluateRule(rule, { industry_group: "제조업,농림축수산업" }, TODAY).state).toBe("MET");
     expect(evaluateRule(rule, { industry_group: "제조업,정보통신·SW" }, TODAY).state).toBe("NOT_MET");
+  });
+});
+
+describe("표시 단계(인계 기준)", () => {
+  const T = TODAY;
+  it("적합/추가 확인/정보 부족/불일치 가능성/조건 불일치를 구분하고 미입력은 부적격이 아님", async () => {
+    const { displayOf } = await import("@/domain/matching");
+    const region: Rule = { field_key: "region_sido", operator: "in", expected_value: JSON.stringify(["경기도"]), confidence: 1 };
+    const city: Rule = { field_key: "region_sigungu", operator: "in", expected_value: JSON.stringify(["안성시"]), confidence: 0.7 };
+    const venture: Rule = { field_key: "venture", operator: "eq", expected_value: JSON.stringify("yes") };
+    expect(evaluateMatch([region], { region_sido: "경기도" }, T).display).toBe("met");
+    expect(evaluateMatch([region, venture], { region_sido: "경기도" }, T).display).toBe("check");
+    expect(evaluateMatch([region, venture], {}, T).display).toBe("insufficient"); // 미입력만 → 정보 부족(부적격 아님)
+    expect(evaluateMatch([], {}, T).display).toBe("insufficient");
+    expect(evaluateMatch([region, city], { region_sido: "경기도", region_sigungu: "시흥시" }, T).display).toBe("possible_mismatch"); // 공고명 추정 조건만 불일치
+    expect(evaluateMatch([region, city], { region_sido: "서울특별시", region_sigungu: "강남구" }, T).display).toBe("not_met"); // 명시 지역 충돌
+    // 추정 불일치는 '해당함' 직접 확인으로 되살림
+    expect(evaluateMatch([region, city], { region_sido: "경기도", region_sigungu: "시흥시", checks: { A: { region_sigungu: "yes" } } }, T, "A").display).toBe("met");
+    expect(displayOf("likely_met", [])).toBe("met");
   });
 });
