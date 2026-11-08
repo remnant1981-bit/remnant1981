@@ -21,7 +21,7 @@ export function SearchForm({ p, orgs, compact }: { p: Partial<SearchParams>; org
         <div className="sm:self-end"><button className="btn w-full sm:w-auto">검색</button></div>
       </div>
       {!compact && (
-        <details className="mt-3" open={!!(p.category?.length || p.status?.length || p.org || p.from || p.to || p.soon)}>
+        <details className="mt-3" open={!!(p.category?.length || p.status?.length || p.org || p.from || p.to || p.soon || p.eligible)}>
           <summary className="cursor-pointer text-sm font-semibold">상세 조건</summary>
           <div className="mt-3 grid gap-4 sm:grid-cols-2">
             <fieldset>
@@ -44,6 +44,7 @@ export function SearchForm({ p, orgs, compact }: { p: Partial<SearchParams>; org
                 ))}
               </div>
               <label className="mt-2 inline-flex items-center gap-1 text-sm"><input type="checkbox" name="soon" value="1" defaultChecked={p.soon} /> 마감 임박(7일 이내)만</label>
+              <label className="mt-1 flex items-start gap-1 text-sm"><input type="checkbox" name="eligible" value="1" defaultChecked={p.eligible} className="mt-1" /> <span>내 기업에 해당 가능한 공고만 <span className="block text-xs text-[var(--muted)]">‘미충족 가능성 높음’ 제외, ‘확인 필요’는 유지 · 기업 관계 확인 후 적용</span></span></label>
             </fieldset>
             <div>
               <label htmlFor="org" className="label">지원기관</label>

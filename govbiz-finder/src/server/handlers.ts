@@ -138,7 +138,7 @@ export const handlers: Record<string, (req: Request, ...a: any[]) => Promise<Res
     const v = await viewerCompany(c); // 기업별 정보는 인증된 해당 기업 사용자에게만 포함
     const limit = 2000;
     let rows;
-    if (v.profile && p.sort === "fit") rows = (await searchWithMatches(c.db, { ...p, page: 1, pageSize: 500 }, v.profile)).rows;
+    if (v.profile && (p.sort === "fit" || p.eligible)) rows = (await searchWithMatches(c.db, { ...p, page: 1, pageSize: 500 }, v.profile)).rows;
     else rows = await attachMatches(c.db, await searchAllForExport(c.db, p, limit), v.profile);
     const withMatch = !!v.profile;
     const records = toExportRecords(rows, withMatch);

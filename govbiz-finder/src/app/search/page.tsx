@@ -29,6 +29,8 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       <PageTitle sub={`검색 결과 ${res.total.toLocaleString()}건`}>공고 검색</PageTitle>
       <SearchForm p={p} orgs={facets.organizations} />
       {p.sort === "fit" && !v.company && <div className="mt-3"><Notice tone="warn">기업 적합도순은 기업 관계 확인이 완료된 회원의 기업정보가 있을 때만 적용됩니다. 최신순으로 표시합니다. <Link href="/recommend" className="underline">기업정보 없이 맞춤 추천 체험하기</Link></Notice></div>}
+      {p.eligible && !v.company && <div className="mt-3"><Notice tone="warn">‘해당 가능한 공고만’은 기업 관계 확인이 완료된 회원의 기업정보가 있을 때만 적용됩니다. 지금은 전체 공고를 표시합니다.</Notice></div>}
+      {p.eligible && v.company && <div className="mt-3"><Notice>‘미충족 가능성 높음’ 공고를 제외했습니다. 입력하지 않은 항목이 있는 공고는 ‘확인 필요’로 남아 있으니 원문을 확인하세요.</Notice></div>}
       {v.company && p.region === "" && v.company.region_sido && <div className="mt-3"><Notice>기업 소재지({v.company.region_sido})의 지역 공고에는 ‘내 지역’ 표시가 붙으며, 전국 공고도 함께 표시됩니다.</Notice></div>}
       <div className="no-print mt-4 flex flex-wrap items-center gap-2 text-sm">
         <span>현재 조건으로 내보내기:</span>

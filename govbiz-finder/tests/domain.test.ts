@@ -6,7 +6,7 @@ import { encryptText, decryptText, isValidBizNoChecksum, maskBizNo, normalizeBiz
 import { MockNtsAdapter, DataGoKrNtsAdapter, NtsError } from "@/server/nts";
 import { runSource } from "@/collector/runner";
 import { MockAdapter } from "@/collector/mock-adapter";
-import { parseSearchParams, searchAnnouncements } from "@/domain/search";
+import { parseSearchParams, searchAnnouncements, toQueryString } from "@/domain/search";
 import { freshDb, TODAY } from "./helpers";
 
 describe("접수 상태 계산", () => {
@@ -258,5 +258,46 @@ describe("본문 포맷", () => {
     expect(shortSummary("짧은 문장 하나뿐입니다.")).toBe("짧은 문장 하나뿐입니다.");
     expect(shortSummary("가".repeat(300)).length).toBeLessThanOrEqual(111);
     expect(shortSummary("")).toBe("");
+  });
+});
+
+import { regionRulesFor, loadRules, searchWithMatches } from "@/server/recommend";
+describe("지역 자동 판정과 해당 가능 필터", () => {
+  it("공고 지역 표기에서 규칙 생성(복수 지역·전국은 생성하지 않음)", () => {
+    expect(regionRulesFor("전국")).toEqual([]);
+    expect(regionRulesFor("경기도 외 1곳")).toEqual([]);
+    expect(regionRulesFor("전남광주")).toEqual([]);
+    expect(regionRulesFor("경기도").map((r) => r.field_key)).toEqual(["region_sido"]);
+    const r = regionRulesFor("경기도 시흥시");
+    expect(r.map((x) => x.field_key)).toEqual(["region_sido", "region_sigungu"]);
+    expect(r[1].confidence).toBeLessThan(0.6); // 시군구 불일치는 미충족으로 단정하지 않음
+  });
+  it("다른 시도 공고는 미충족, 같은 시도는 충족, 시군구 표기 차이는 허용", () => {
+    const T = "2026-06-01";
+    const rules = regionRulesFor("경기도 시흥시");
+    expect(evaluateMatch(rules, { region_sido: "서울특별시", region_sigungu: "강남구" }, T).overall).toBe("likely_not_met");
+    expect(evaluateMatch(rules, { region_sido: "경기도", region_sigungu: "시흥" }, T).overall).toBe("likely_met");
+    expect(evaluateMatch(rules, { region_sido: "경기도", region_sigungu: "수원시" }, T).overall).toBe("needs_check");
+    expect(evaluateMatch(rules, { region_sido: "경기도" }, T).overall).toBe("needs_check");
+  });
+  it("eligible 필터: 미충족 제외, 확인 필요·충족은 유지, 기업정보 없으면 무시", async () => {
+    const db = await freshDb();
+    const base = parseSearchParams({});
+    const all = await searchWithMatches(db, base, { region_sido: "서울특별시" }, TODAY);
+    const only = await searchWithMatches(db, { ...base, eligible: true }, { region_sido: "서울특별시" }, TODAY);
+    expect(only.total).toBeLessThan(all.total);
+    expect(only.rows.every((r) => r.match!.overall !== "likely_not_met")).toBe(true);
+    expect(all.rows.some((r) => r.match!.overall === "likely_not_met")).toBe(true);
+    expect(only.rows.some((r) => r.match!.overall === "needs_check")).toBe(true); // 확인 필요는 숨기지 않음
+    const noCompany = await searchWithMatches(db, { ...base, eligible: true }, null, TODAY);
+    expect(noCompany.total).toBe(all.total);
+    expect(parseSearchParams({ eligible: "1" }).eligible).toBe(true);
+    expect(toQueryString({ eligible: true })).toBe("eligible=1");
+  });
+  it("loadRules: 공고에 지역 조건이 이미 있으면 중복 생성하지 않는다", async () => {
+    const db = await freshDb();
+    const row = (await db.get<{ id: string }>("SELECT id FROM announcements WHERE title LIKE '%경기도 중소기업 정책자금%'"))!;
+    const rules = (await loadRules(db, [row.id])).get(row.id)!;
+    expect(rules.filter((x) => x.field_key === "region_sido")).toHaveLength(1);
   });
 });
