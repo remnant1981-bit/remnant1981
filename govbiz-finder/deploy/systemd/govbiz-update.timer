@@ -1,0 +1,9 @@
+[Unit]
+Description=자동 배포 확인(15분마다)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+
+[Install]
+WantedBy=timers.target

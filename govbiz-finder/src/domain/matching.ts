@@ -17,6 +17,11 @@ export interface CompanyProfile {
   export_status?: string | null;
   tech_keywords?: string | null;
   business_status?: string | null;
+  enterprise_size?: string | null;
+  certifications?: string | null;
+  youth_ceo?: string | null;
+  has_patent?: string | null;
+  interest_categories?: string | null;
 }
 export interface Rule {
   field_key: string;
@@ -43,6 +48,7 @@ const LABELS: Record<string, string> = {
   region_sido: "소재지(시/도)", region_sigungu: "소재지(시/군/구)", industry: "업종", business_age_years: "업력",
   revenue_band: "매출 규모", employee_band: "종업원 수", research_institute: "기업부설연구소/전담부서", venture: "벤처기업 여부",
   export: "수출 여부", tech_keywords: "기술 분야", business_status: "사업자 상태",
+  enterprise_size: "기업 규모", certification: "보유 인증",
 };
 const YN = (v: string) => (v === "yes" ? "예" : "아니오");
 
@@ -136,6 +142,19 @@ export function evaluateRule(rule: Rule, c: CompanyProfile, today: string): Rule
       const val = rule.field_key === "research_institute" ? c.research_institute_status : rule.field_key === "venture" ? c.venture_status : c.export_status;
       if (!present(val)) return unknown();
       return val === expected ? mk("MET", `${label}: ${YN(val)} (요건 ${YN(String(expected))})`) : notMet(`${label}: ${YN(val)} (요건 ${YN(String(expected))})`);
+    }
+    case "enterprise_size": {
+      if (!present(c.enterprise_size)) return unknown();
+      const allowed = (Array.isArray(expected) ? expected : [expected]).map(String);
+      return allowed.includes(c.enterprise_size) ? mk("MET", `기업 규모(${c.enterprise_size})가 지원 대상(${allowed.join(", ")})에 해당합니다.`)
+        : notMet(`기업 규모(${c.enterprise_size})가 지원 대상(${allowed.join(", ")})에 해당하지 않습니다.`);
+    }
+    case "certification": {
+      if (!present(c.certifications)) return unknown("보유 인증 정보가 입력되지 않아 확인이 필요합니다.");
+      const have = c.certifications.split(",");
+      const need = (Array.isArray(expected) ? expected : [expected]).map(String);
+      return need.some((x) => have.includes(x)) ? mk("MET", `보유 인증(${need.filter((x) => have.includes(x)).join(", ")})이 요건과 일치합니다.`)
+        : notMet(`요건 인증(${need.join(", ")})을 보유하지 않은 것으로 입력되었습니다.`);
     }
     case "business_status": {
       if (!present(c.business_status)) return unknown();

@@ -195,7 +195,11 @@ describe("알림", () => {
     await c.call("POST", "/api/bookmarks", { announcementId: a.id });
     await new Promise((r) => setTimeout(r, 5));
     await runSource(db, { sourceId: "mock", fetch: async () => [{ sourceNoticeId: (await db.get<any>("SELECT source_notice_id s FROM announcements WHERE id=?", [a.id])).s, url: a.canonical_url, title: a.title, organization: a.organization, categories: ["rnd"], supportSummary: "내용 변경됨", applicationStart: a.application_start, applicationEnd: a.application_end }] });
-    expect(await generateNotifications(db, TODAY)).toBe(1);
+    await generateNotifications(db, TODAY);
+    const changed = ((await c.call("GET", "/api/notifications")).body.items as any[]).filter((i) => i.type === "bookmark_changed");
+    expect(changed).toHaveLength(1);
+    await generateNotifications(db, TODAY);
+    expect(((await c.call("GET", "/api/notifications")).body.items as any[]).filter((i) => i.type === "bookmark_changed")).toHaveLength(1); // 중복 없음
   });
 });
 
@@ -225,5 +229,65 @@ describe("관리자", () => {
     expect((await admin.call("PUT", "/api/admin/sources/mss", { enabled: true })).status).toBe(400);
     expect((await admin.call("POST", "/api/admin/collect", { sourceId: "bizinfo" })).status).toBe(400); // 키 미설정
     expect((await admin.call("POST", "/api/admin/collect", { sourceId: "mock" })).status).toBe(200);
+  });
+});
+
+describe("기업정보 유지·알림 기본값", () => {
+  it("확장 기업정보는 재로그인 후에도 그대로 유지되고, 승인 시 맞춤 알림이 기본으로 켜진다", async () => {
+    const c = await member("keep@example.test");
+    const saved = await c.call("PUT", "/api/company", { region_sido: "경기도", region_sigungu: "시흥시", enterprise_size: "중소기업", certifications: "이노비즈,뿌리기업", interest_categories: "rnd", youth_ceo: "no" });
+    expect(saved.status).toBe(200);
+    const settings = (await c.call("GET", "/api/notifications/settings")).body.settings as any[];
+    expect(settings.find((s) => s.type === "new_announcement").enabled).toBe(true);
+    expect(settings.find((s) => s.type === "deadline_soon").enabled).toBe(true);
+    await c.call("POST", "/api/auth/logout");
+    const again = await client(handlers);
+    await again.call("POST", "/api/auth/login", { email: "keep@example.test", password: PW });
+    await again.call("GET", "/api/auth/me");
+    const co = (await again.call("GET", "/api/company")).body.company;
+    expect(co).toMatchObject({ region_sigungu: "시흥시", enterprise_size: "중소기업", certifications: "이노비즈,뿌리기업", interest_categories: "rnd" });
+  });
+  it("조건 충족 공고의 마감 임박은 관심 공고가 아니어도 알림된다", async () => {
+    const c = await member("dl@example.test");
+    await c.call("PUT", "/api/company", { region_sido: "경기도" });
+    expect(await generateNotifications(db, TODAY)).toBeGreaterThan(0);
+    const items = (await c.call("GET", "/api/notifications")).body.items as any[];
+    expect(items.some((i) => i.type === "deadline_soon" && String(i.payload.title).includes("경기도 중소기업 정책자금"))).toBe(true);
+  });
+});
+
+import { encodeGuestProfile, decodeGuestProfile } from "@/lib/guest-profile";
+describe("로그인 없이 맞춤 기능", () => {
+  it("브라우저 쿠키의 기업정보로 조건 충족 공고만 받고, 식별 정보는 쿠키에 담기지 않는다", async () => {
+    const raw = encodeGuestProfile({ region_sido: "서울특별시", company_name: "비밀회사", representative_name: "홍길동", business_number: "1234567891" });
+    expect(decodeURIComponent(raw)).not.toMatch(/비밀회사|홍길동|1234567891/);
+    const c = await client(handlers);
+    const r = await c.call("GET", "/api/announcements?met=1&size=50", undefined, { cookie: `gbf_guest_profile=${raw}` });
+    expect(r.status).toBe(200);
+    expect(r.body.guestProfile).toBe(true);
+    expect(r.body.rows.length).toBeGreaterThan(0);
+    expect(r.body.rows.every((x: any) => x.match.overall === "likely_met")).toBe(true);
+    expect(r.body.rows.some((x: any) => x.title.includes("서울시"))).toBe(true);
+    expect(await db.get("SELECT 1 x FROM companies")).toBeUndefined(); // 서버에 저장되지 않음
+  });
+  it("잘못된 쿠키 값은 무시된다(허용 목록 밖 값·깨진 값)", async () => {
+    expect(decodeGuestProfile("%%%")).toBeNull();
+    const c = await client(handlers);
+    const bad = encodeURIComponent(JSON.stringify({ region_sido: "없는도" }));
+    const r = await c.call("GET", "/api/announcements?met=1", undefined, { cookie: `gbf_guest_profile=${bad}` });
+    expect(r.body.guestProfile).toBe(false);
+  });
+});
+
+describe("운영 상태 점검(/api/health)", () => {
+  it("연동 원천이 하루 넘게 수집되지 않으면 503(degraded)", async () => {
+    const c = await client(handlers);
+    expect((await c.call("GET", "/api/health")).status).toBe(200);
+    await db.run("UPDATE data_sources SET enabled=1, integration_status='live', last_success_at=NULL WHERE id='bizinfo'");
+    const bad = await c.call("GET", "/api/health");
+    expect(bad.status).toBe(503);
+    expect(bad.body.staleSources).toEqual(["bizinfo"]);
+    await db.run("UPDATE data_sources SET last_success_at=? WHERE id='bizinfo'", [new Date().toISOString()]);
+    expect((await c.call("GET", "/api/health")).status).toBe(200);
   });
 });

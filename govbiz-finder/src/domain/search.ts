@@ -16,6 +16,7 @@ export interface SearchParams {
   to: string;
   soon: boolean;        // 마감 임박(7일)
   eligible: boolean;    // 기업정보가 있을 때 미충족 가능성 높은 공고 제외
+  metOnly: boolean;     // 확인된 조건을 모두 충족한 공고만(충족 가능성 높음)
   sort: Sort;
   page: number;
   pageSize: number;
@@ -40,6 +41,7 @@ export function parseSearchParams(sp: Record<string, string | string[] | undefin
     to: isValidYmd(one("to")) ? one("to") : "",
     soon: one("soon") === "1",
     eligible: one("eligible") === "1",
+    metOnly: one("met") === "1",
     sort,
     page,
     pageSize,
@@ -57,6 +59,7 @@ export function toQueryString(p: Partial<SearchParams>): string {
   if (p.to) u.set("to", p.to);
   if (p.soon) u.set("soon", "1");
   if (p.eligible) u.set("eligible", "1");
+  if (p.metOnly) u.set("met", "1");
   if (p.sort && p.sort !== "latest") u.set("sort", p.sort);
   if (p.page && p.page > 1) u.set("page", String(p.page));
   return u.toString();

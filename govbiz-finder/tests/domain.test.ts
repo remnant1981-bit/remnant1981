@@ -319,3 +319,43 @@ describe("지역 자동 판정과 해당 가능 필터", () => {
     expect(rules.filter((x) => x.field_key === "region_sido")).toHaveLength(1);
   });
 });
+
+import { textRulesFor } from "@/server/recommend";
+import { validateProfile } from "@/server/company";
+describe("본문 기반 규칙(AI 미사용)과 확장 프로필", () => {
+  const T = "2026-06-01";
+  it("지원대상 규모·업력·인증을 정규식으로 추출하고 신뢰도는 낮게(불일치=확인 필요)", () => {
+    const r = textRulesFor({ title: "[경기] 여성기업 판로 지원", target_summary: "중소기업", original_text: "☞ 창업 7년 이내 중소·중견기업\n※ 자세한 내용 공고문 참조" });
+    const keys = r.map((x) => x.field_key);
+    expect(keys).toEqual(["enterprise_size", "business_age_years", "certification"]);
+    expect(JSON.parse(r[0].expected_value)).toEqual(expect.arrayContaining(["중소기업", "소상공인", "중견기업"]));
+    expect(r[1].source_excerpt).toContain("창업 7년 이내");
+    expect(r.every((x) => (x.confidence ?? 1) < 0.6)).toBe(true);
+    // 충족이면 MET, 불일치는 미충족으로 단정하지 않음
+    expect(evaluateMatch(r, { enterprise_size: "중소기업", established_at: "2022-01-01", certifications: "여성기업" }, T).overall).toBe("likely_met");
+    expect(evaluateMatch(r, { enterprise_size: "대기업", established_at: "2000-01-01", certifications: "" }, T).overall).toBe("needs_check");
+  });
+  it("판정할 수 없는 대상 표기는 규칙을 만들지 않는다", () => {
+    expect(textRulesFor({ target_summary: "창업벤처", original_text: "" })).toEqual([]);
+    expect(textRulesFor({ target_summary: null, original_text: "업력 무관" })).toEqual([]);
+  });
+  it("확장 프로필 검증: 복수 선택은 허용 목록만, 쉼표 문자열로 저장", () => {
+    const p = validateProfile({ enterprise_size: "중소기업", certifications: ["이노비즈", "여성기업"], interest_categories: "rnd,export", youth_ceo: "yes", has_patent: "no" });
+    expect(p).toMatchObject({ enterprise_size: "중소기업", certifications: "이노비즈,여성기업", interest_categories: "rnd,export", youth_ceo: "yes", has_patent: "no" });
+    expect(validateProfile({ certifications: "" }).certifications).toBeNull();
+    expect(() => validateProfile({ certifications: ["가짜인증"] })).toThrow();
+    expect(() => validateProfile({ interest_categories: "nope" })).toThrow();
+    expect(() => validateProfile({ enterprise_size: "거대기업" })).toThrow();
+  });
+  it("조건 충족만(metOnly)·전체 평가(상한 없이)·집계", async () => {
+    const db = await freshDb();
+    const c = { region_sido: "경기도", research_institute_status: "yes", business_status: "계속사업자" };
+    const all = await searchWithMatches(db, parseSearchParams({ size: "2", sort: "fit" }), c, TODAY);
+    const met = await searchWithMatches(db, parseSearchParams({ met: "1", size: "50" }), c, TODAY);
+    expect(all.counts!.likely_met + all.counts!.needs_check + all.counts!.likely_not_met).toBe(10); // 전체 평가
+    expect(all.pages).toBe(5);
+    expect(met.total).toBe(all.counts!.likely_met);
+    expect(met.rows.every((r) => r.match!.overall === "likely_met")).toBe(true);
+    expect(met.total).toBeGreaterThan(0);
+  });
+});

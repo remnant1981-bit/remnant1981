@@ -8,6 +8,8 @@ import { AnnouncementCard } from "@/components/AnnouncementCard";
 import { SearchForm } from "@/components/SearchForm";
 import { Empty, Notice } from "@/components/ui";
 import { formatSeoul } from "@/lib/time";
+import { searchWithMatches } from "@/server/recommend";
+import { AdSlot } from "@/components/AdSlot";
 
 export default async function Home() {
   const db = await getDb();
@@ -23,7 +25,7 @@ export default async function Home() {
        (SELECT COUNT(*) FROM data_sources WHERE enabled=1 AND integration_status='mock') AS mock`),
   ]);
   const section = async (title: string, id: string, res: typeof open, more: string) => {
-    const rows = await attachMatches(db, res.rows, v.company);
+    const rows = await attachMatches(db, res.rows, v.profile);
     return (
       <section aria-labelledby={id} className="mt-8">
         <div className="mb-2 flex items-baseline justify-between"><h2 id={id} className="text-lg font-bold">{title}</h2><Link href={more} className="text-sm underline">더 보기</Link></div>
@@ -33,12 +35,36 @@ export default async function Home() {
   };
   return (
     <>
-      <section className="rounded-2xl bg-[var(--brand)] px-6 py-10 text-white">
+      <section className="rounded-3xl bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-600 px-6 py-10 text-white shadow-lg sm:px-10 sm:py-12">
         <p className="text-sm opacity-90">몰라서 놓치는 지원사업이 없도록</p>
         <h1 className="mt-1 text-3xl font-extrabold leading-tight">기업지원사업, 한 번에 찾고<br className="sm:hidden" /> 공식 원문으로 확인하세요</h1>
         <p className="mt-3 text-sm opacity-90">회원가입 없이 검색할 수 있습니다. 기업정보 입력은 선택사항입니다.</p>
       </section>
       <div className="-mt-6 px-2"><SearchForm p={{}} compact /></div>
+
+      {v.profile && await (async (company) => {
+        const base = parseSearchParams({ sort: "fit", size: "1", status: "open,upcoming,always,unknown", eligible: "1" });
+        const all = await searchWithMatches(db, base, company);
+        const soon = await searchWithMatches(db, { ...base, soon: true, metOnly: true }, company);
+        const c = all.counts ?? { likely_met: 0, needs_check: 0, likely_not_met: 0 };
+        return (
+          <section aria-labelledby="mine" className="card mt-5 p-5">
+            <h2 id="mine" className="font-bold">{v.company?.company_name ?? "우리 기업"} 맞춤 현황{!v.company && <span className="ml-2 text-xs font-normal text-[var(--muted)]">(이 브라우저에 저장한 정보 기준)</span>}</h2>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <Link href="/recommend?tab=met" className="rounded-lg border border-green-200 bg-green-50 p-3 hover:underline"><span className="block text-xs text-green-900">조건 충족 공고</span><span className="text-xl font-bold text-green-900">{c.likely_met}건</span></Link>
+              <Link href="/recommend?tab=all" className="rounded-lg border border-amber-200 bg-amber-50 p-3 hover:underline"><span className="block text-xs text-amber-900">확인 필요(검토 권장)</span><span className="text-xl font-bold text-amber-900">{c.needs_check}건</span></Link>
+              <Link href="/search?soon=1&met=1&sort=deadline" className="rounded-lg border border-red-200 bg-red-50 p-3 hover:underline"><span className="block text-xs text-red-900">조건 충족 중 마감 7일 이내</span><span className="text-xl font-bold text-red-900">{soon.total}건</span></Link>
+            </div>
+          </section>
+        );
+      })(v.profile)}
+
+      {!v.profile && (
+        <section className="card mt-5 flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div><h2 className="font-bold">1분이면 우리 기업에 맞는 공고만 골라 드립니다</h2><p className="text-sm text-[var(--muted)]">로그인 없이 소재지·규모 등 아는 것만 입력하세요. 정보는 이 브라우저에만 저장됩니다.</p></div>
+          <Link href="/recommend" className="btn shrink-0">우리 기업 맞춤 공고 보기</Link>
+        </section>
+      )}
 
       <nav aria-label="분야 바로가기" className="mt-5 flex flex-wrap gap-2">
         {CATEGORIES.map((c) => <Link key={c.id} href={`/search?category=${c.id}`} className="btn btn-ghost">{c.name}</Link>)}
@@ -55,6 +81,7 @@ export default async function Home() {
       {await section("접수 중 공고", "open", open, "/search?status=open")}
       {await section("마감 임박 (7일 이내)", "soon", soon, "/search?soon=1&sort=deadline")}
       {await section("신규 등록 공고", "new", fresh, "/search?sort=latest")}
+      <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_HOME} className="mt-8" />
       <p className="sr-only">{facets.organizations.length}개 기관</p>
     </>
   );

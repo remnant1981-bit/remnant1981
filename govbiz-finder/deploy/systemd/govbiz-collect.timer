@@ -1,0 +1,12 @@
+[Unit]
+Description=공고 수집(매일 08:30, 13:30, 18:30 KST)
+
+[Timer]
+OnCalendar=*-*-* 08:30:00 Asia/Seoul
+OnCalendar=*-*-* 13:30:00 Asia/Seoul
+OnCalendar=*-*-* 18:30:00 Asia/Seoul
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

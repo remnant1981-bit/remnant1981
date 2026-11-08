@@ -1,0 +1,6 @@
+# 자동 HTTPS(Let's Encrypt 인증서 자동 발급·갱신)
+__DOMAIN__ {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3000
+	header -Server
+}

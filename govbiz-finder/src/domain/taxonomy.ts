@@ -30,3 +30,13 @@ export const STATUS_LABEL: Record<string, string> = {
   unknown: "상태 확인 필요",
 };
 export const APP_STATUSES = Object.keys(STATUS_LABEL);
+
+export const ENTERPRISE_SIZES = ["소상공인", "중소기업", "중견기업", "대기업"] as const;
+export const CERTIFICATIONS = ["벤처기업", "이노비즈", "메인비즈", "여성기업", "장애인기업", "사회적기업", "뿌리기업", "소부장 전문기업", "강소기업", "ISO 인증"] as const;
+
+/** 기업정보 입력 항목(정확도 안내용 완성도 계산). */
+export const PROFILE_KEYS = ["company_name", "representative_name", "region_sido", "region_sigungu", "industry_name", "established_at", "enterprise_size", "revenue_band", "employee_count_band", "export_status", "research_institute_status", "venture_status", "has_patent", "youth_ceo", "certifications", "tech_keywords", "interest_categories"] as const;
+export function profileCompleteness(c: Record<string, unknown> | null | undefined): { filled: number; total: number } {
+  const filled = PROFILE_KEYS.filter((k) => { const v = c?.[k]; return typeof v === "string" && v.trim() !== ""; }).length;
+  return { filled, total: PROFILE_KEYS.length };
+}

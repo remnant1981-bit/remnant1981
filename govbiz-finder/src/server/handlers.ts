@@ -1,4 +1,7 @@
 import { route, json, readJson, type Ctx } from "./api";
+import { guestProfileFromCookie } from "./viewer";
+import type { CompanyView } from "./company";
+import type { CompanyProfile } from "@/domain/matching";
 import {
   ApiError, clearCookie, destroySession, login, register, sessionCookie,
 } from "./auth";
@@ -27,11 +30,12 @@ import { redactString } from "@/lib/log";
 type RouteCtx = { params: Promise<{ id?: string; format?: string }> };
 const searchOf = (req: Request) => parseSearchParams(Object.fromEntries(new URL(req.url).searchParams.entries()));
 
-async function viewerCompany(c: Ctx) {
-  if (!c.session) return { companyId: null as string | null, profile: null };
+async function viewerCompany(c: Ctx, req?: Request): Promise<{ companyId: string | null; profile: CompanyView | CompanyProfile | null; guest: boolean }> {
+  const guest = req ? guestProfileFromCookie(req.headers.get("cookie")) : null;
+  if (!c.session) return { companyId: null, profile: guest, guest: !!guest };
   const st = await membershipState(c.db, c.session.user.id);
-  if (st.status !== "verified" || !st.companyId) return { companyId: null, profile: null };
-  return { companyId: st.companyId, profile: await getCompanyProfile(c.db, c.session.user.id, st.companyId) };
+  if (st.status !== "verified" || !st.companyId) return { companyId: null, profile: guest, guest: !!guest };
+  return { companyId: st.companyId, profile: await getCompanyProfile(c.db, c.session.user.id, st.companyId), guest: false };
 }
 
 export const handlers: Record<string, (req: Request, ...a: any[]) => Promise<Response>> = {
@@ -59,23 +63,22 @@ export const handlers: Record<string, (req: Request, ...a: any[]) => Promise<Res
   // ---------- 공개 검색/상세 ----------
   "GET /api/announcements": route({ auth: "none" }, async (req, c) => {
     const p = searchOf(req);
-    const v = await viewerCompany(c);
+    const v = await viewerCompany(c, req);
     const result = await searchWithMatches(c.db, p, v.profile);
     if (v.companyId && c.session) await recordSearch(c.db, c.session.user.id, v.companyId, JSON.parse(JSON.stringify({ ...p, page: undefined, pageSize: undefined })));
     const marks = v.companyId && c.session ? await bookmarkedIds(c.db, c.session.user.id, v.companyId) : new Set<string>();
-    return { ...result, rows: result.rows.map((r) => ({ ...r, bookmarked: marks.has(r.id) })), query: toQueryString(p), hasCompany: !!v.companyId };
+    return { ...result, rows: result.rows.map((r) => ({ ...r, bookmarked: marks.has(r.id) })), query: toQueryString(p), hasCompany: !!v.companyId, guestProfile: v.guest };
   }),
-  "GET /api/announcements/:id": route({ auth: "none" }, async (_req, c, rc: RouteCtx) => {
+  "GET /api/announcements/:id": route({ auth: "none" }, async (req, c, rc: RouteCtx) => {
     const { id } = await rc.params;
     const a = await getAnnouncement(c.db, id ?? "");
     if (!a) throw new ApiError(404, "not_found", "찾을 수 없습니다.");
     const extras = await getAnnouncementExtras(c.db, a.id);
-    const v = await viewerCompany(c);
+    const v = await viewerCompany(c, req);
     let match = null;
     let bookmarked = false;
+    if (v.profile) match = evaluateMatch((await loadRules(c.db, [a.id])).get(a.id) ?? [], v.profile, seoulToday());
     if (v.companyId && c.session) {
-      const rules = await loadRules(c.db, [a.id]);
-      match = evaluateMatch(rules.get(a.id) ?? [], v.profile, seoulToday());
       await recordView(c.db, c.session.user.id, v.companyId, a.id);
       bookmarked = (await bookmarkedIds(c.db, c.session.user.id, v.companyId)).has(a.id);
     }
@@ -94,11 +97,10 @@ export const handlers: Record<string, (req: Request, ...a: any[]) => Promise<Res
     const b = await readJson<{ profile?: Record<string, unknown>; query?: Record<string, string> }>(req);
     await (await import("./auth")).rateLimit(c.db, `preview:${c.ip}`, 60, 600);
     const profile = validateProfile(b.profile ?? {});
-    const p = parseSearchParams({ ...(b.query ?? {}), sort: "fit", size: "50" });
+    const p = parseSearchParams({ ...(b.query ?? {}), sort: "fit", size: "100", status: "open,upcoming,always,unknown" });
     const company = { ...profile, business_status: null };
-    const all = await searchWithMatches(c.db, p, company);
     const result = await searchWithMatches(c.db, { ...p, eligible: true }, company); // 미충족 가능성 높음 제외
-    return { ...result, excluded: all.total - result.total, stored: false };
+    return { ...result, excluded: result.counts?.likely_not_met ?? 0, stored: false };
   }),
   "POST /api/company/claim": route({ auth: "user" }, async (req, c) => {
     const b = await readJson<{ bizNo?: unknown }>(req);
@@ -137,10 +139,10 @@ export const handlers: Record<string, (req: Request, ...a: any[]) => Promise<Res
     const { format } = await rc.params;
     if (format !== "csv" && format !== "xlsx" && format !== "pdf") throw new ApiError(404, "not_found", "찾을 수 없습니다.");
     const p = searchOf(req);
-    const v = await viewerCompany(c); // 기업별 정보는 인증된 해당 기업 사용자에게만 포함
+    const v = await viewerCompany(c, req); // 회원 기업정보 또는 비회원 본인 브라우저 정보로만 적합성 포함
     const limit = 2000;
     let rows;
-    if (v.profile && (p.sort === "fit" || p.eligible)) rows = (await searchWithMatches(c.db, { ...p, page: 1, pageSize: 500 }, v.profile)).rows;
+    if (v.profile && (p.sort === "fit" || p.eligible || p.metOnly)) rows = (await searchWithMatches(c.db, { ...p, page: 1, pageSize: limit }, v.profile)).rows;
     else rows = await attachMatches(c.db, await searchAllForExport(c.db, p, limit), v.profile);
     const withMatch = !!v.profile;
     const records = toExportRecords(rows, withMatch);
@@ -149,7 +151,7 @@ export const handlers: Record<string, (req: Request, ...a: any[]) => Promise<Res
       new Response(body, { headers: { "Content-Type": type, "Content-Disposition": `attachment; filename="govbiz-${stamp}.${ext}"`, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
     if (format === "csv") return dl(buildCsv(records, withMatch), "text/csv; charset=utf-8", "csv");
     if (format === "xlsx") return dl(new Uint8Array(await buildXlsx(records, withMatch, conditionLines(p))), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx");
-    return dl(new Uint8Array(await buildPdf({ records, rows, company: v.profile, conditionLines: conditionLines(p), truncated: rows.length >= limit })), "application/pdf", "pdf");
+    return dl(new Uint8Array(await buildPdf({ records, rows, company: v.guest ? null : (v.profile as CompanyView | null), conditionLines: conditionLines(p), truncated: rows.length >= limit })), "application/pdf", "pdf");
   }),
 
   // ---------- 관심/이력/알림 ----------
@@ -176,6 +178,18 @@ export const handlers: Record<string, (req: Request, ...a: any[]) => Promise<Res
   "PUT /api/notifications/settings": route({ auth: "user" }, async (req, c) => {
     await setNotificationSetting(c.db, c.session!.user.id, await readJson(req));
     return { settings: await getNotificationSettings(c.db, c.session!.user.id) };
+  }),
+
+  // ---------- 운영 상태 점검(외부 모니터링용, 민감정보 없음) ----------
+  "GET /api/health": route({ auth: "none" }, async (_req, c) => {
+    const staleHours = Number(process.env.HEALTH_STALE_HOURS || 26);
+    const sources = await c.db.all<{ id: string; last_success_at: string | null }>(
+      "SELECT id, last_success_at FROM data_sources WHERE enabled=1 AND integration_status IN ('live','pending_key')");
+    const now = Date.now();
+    const stale = sources.filter((s) => !s.last_success_at || now - Date.parse(s.last_success_at) > staleHours * 3600_000).map((s) => s.id);
+    const total = (await c.db.get<{ n: number }>("SELECT COUNT(*) AS n FROM announcements WHERE is_active=1"))?.n ?? 0;
+    const ok = stale.length === 0 && total > 0;
+    return json({ status: ok ? "ok" : "degraded", announcements: total, staleSources: stale, checkedAt: new Date().toISOString() }, { status: ok ? 200 : 503 });
   }),
 
   // ---------- 관리자 ----------
