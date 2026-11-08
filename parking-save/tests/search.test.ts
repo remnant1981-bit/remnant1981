@@ -165,3 +165,26 @@ describe("추천 사유 통합", () => {
     expect(byName(r, "시청앞").explanation.highlights.join()).toContain("가장 가까움");
   });
 });
+
+describe("동일 시설 후보 묶음 표시", () => {
+  it("승인/고득점 쌍은 묶고, 저득점·거절은 묶지 않으며, 레코드는 보존", async () => {
+    const base = await run({ limit: "50" });
+    expect(base.items.length).toBeGreaterThanOrEqual(4);
+    const [a, b, c, d] = base.items.map((i) => i.id).slice(0, 4).sort((x, y) => x - y);
+    const now = NOW.toISOString();
+    const ins = (x: number, y: number, score: number, status: string) =>
+      db.run("INSERT INTO duplicate_candidates(lot_a_id, lot_b_id, score, reason, status, created_at) VALUES (?,?,?,?,?,?)", [x, y, score, "t", status, now]);
+    await ins(a, b, 1.0, "PENDING");   // 묶음
+    await ins(a, c, 0.8, "PENDING");   // 점수 부족 → 묶지 않음
+    await ins(b, d, 1.0, "REJECTED");  // 거절 → 묶지 않음
+    const r = await run({ limit: "50" });
+    const ids = r.items.map((i) => i.id);
+    const headId = base.items.find((i) => i.id === a || i.id === b)!.id; // 정렬상 먼저 나온 쪽이 대표
+    const otherId = headId === a ? b : a;
+    expect(ids).toContain(headId);
+    expect(ids).not.toContain(otherId);
+    expect(r.items.find((i) => i.id === headId)!.similar.map((s) => s.id)).toEqual([otherId]);
+    expect(ids).toContain(c); expect(ids).toContain(d);
+    expect((await db.get<{ c: number }>("SELECT COUNT(*) AS c FROM parking_lots WHERE id=?", [otherId]))!.c).toBe(1); // 삭제 아님
+  });
+});

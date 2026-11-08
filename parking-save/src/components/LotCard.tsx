@@ -28,6 +28,16 @@ export function LotCard({ item, query }: { item: LotItem; query: string }) {
         <div><dt className="text-gray-600">전체 주차면수</dt><dd>{item.totalSpaces != null ? `${item.totalSpaces}면` : "정보 없음"}</dd></div>
         <div><dt className="text-gray-600">실시간 잔여면수</dt><dd>{occ.main}{occ.sub && <span className="block text-xs text-gray-600">{occ.sub}</span>}</dd></div>
       </dl>
+      {item.similar.length > 0 && (
+        <details className="mt-3 text-xs text-gray-700">
+          <summary className="cursor-pointer underline">같은 시설일 가능성이 있는 다른 기록 {item.similar.length}건</summary>
+          <ul className="mt-1 list-disc pl-5">
+            {item.similar.map((s) => (
+              <li key={s.id}><Link href={`/lots/${s.id}?${query}`} className="underline">{s.name}</Link> · {distLabel(s.distanceMeters)} · {s.status === "MERGED" ? "동일 시설로 승인됨" : "동일 시설 후보(미확정)"}</li>
+            ))}
+          </ul>
+        </details>
+      )}
       <p className="mt-3 text-xs text-gray-600">
         출처: {sourceLabel(item.source.name)} · 기준일 {formatKst(item.source.updatedAt ?? item.source.collectedAt)}
         {item.source.freshness === "STALE" && <strong className="ml-1 text-amber-800">· 오래된 데이터</strong>}

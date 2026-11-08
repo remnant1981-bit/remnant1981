@@ -105,6 +105,8 @@ export interface LotItem {
   source: { name: string; url: string | null; updatedAt: string | null; collectedAt: string; freshness: "FRESH" | "STALE" };
   isMock: boolean; qualityFlags: string[];
   explanation: Explanation;
+  /** 같은 시설일 가능성이 높아 이 항목 아래로 묶인 다른 레코드(삭제·병합 아님, 상세에서 개별 확인 가능) */
+  similar: Array<{ id: number; name: string; distanceMeters: number; status: "MERGED" | "PENDING"; source: string }>;
 }
 
 /**
@@ -164,13 +166,14 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
       fee: ev.fee, operating: ev.operating, operatingAssumed: ev.operatingAssumed, occupancy: ev.occupancy,
       source: { name: lot.source_name, url: lot.source_url, updatedAt: lot.source_updated_at, collectedAt: lot.collected_at, freshness: ev.freshness },
       isMock: NON_PRODUCTION_SOURCES.includes(lot.source_name), qualityFlags: lot.quality_flags ? JSON.parse(lot.quality_flags) : [],
-      explanation: { highlights: [], cautions: [] },
+      explanation: { highlights: [], cautions: [] }, similar: [],
     });
   }
   const candidates = items.length;
   if (p.freeOnly) items = items.filter((i) => i.fee.status === "OK" && i.fee.isFree);
   if (p.realtimeOnly) items = items.filter((i) => i.occupancy.status === "AVAILABLE");
   items.sort(comparator(p.sort));
+  items = await groupSimilar(db, items);
   items = items.slice(0, p.limit);
   const why = explainAll(items); // 표시되는 시설 집합 기준 설명(정렬에는 영향 없음)
   for (const i of items) i.explanation = why.get(i.id)!;
@@ -193,6 +196,35 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
     },
     warnings,
   };
+}
+
+/** 같은 시설 후보로 묶는 최소 점수(PENDING). 승인(MERGED)된 쌍은 점수와 무관하게 묶는다. 거절(REJECTED)은 절대 묶지 않는다. */
+export const GROUP_MIN_SCORE = 1.0;
+
+/**
+ * 정렬된 결과에서 '동일 시설 확정/거의 확실' 쌍을 먼저 나온 항목 아래로 묶는다. 레코드는 삭제·병합하지 않고 `similar`로 남겨 사용자가 확인할 수 있게 한다.
+ * 자동 병합 금지 원칙 유지: 묶음은 표시 방식일 뿐 DB는 바뀌지 않는다.
+ */
+async function groupSimilar(db: Db, sorted: LotItem[]): Promise<LotItem[]> {
+  if (sorted.length < 2) return sorted;
+  const ids = sorted.map((i) => i.id);
+  const ph = ids.map(() => "?").join(",");
+  const links = await db.all<{ lot_a_id: number; lot_b_id: number; status: "MERGED" | "PENDING"; score: number | null }>(
+    `SELECT lot_a_id, lot_b_id, status, score FROM duplicate_candidates WHERE status <> 'REJECTED' AND lot_a_id IN (${ph}) AND lot_b_id IN (${ph})`, [...ids, ...ids]);
+  const linked = new Map<number, Map<number, "MERGED" | "PENDING">>();
+  const add = (a: number, b: number, st: "MERGED" | "PENDING") => { if (!linked.has(a)) linked.set(a, new Map()); linked.get(a)!.set(b, st); };
+  for (const l of links) {
+    if (l.status === "PENDING" && (l.score ?? 0) < GROUP_MIN_SCORE) continue;
+    add(l.lot_a_id, l.lot_b_id, l.status); add(l.lot_b_id, l.lot_a_id, l.status);
+  }
+  if (linked.size === 0) return sorted;
+  const kept: LotItem[] = [];
+  for (const it of sorted) {
+    const head = kept.find((k) => linked.get(k.id)?.has(it.id));
+    if (head) head.similar.push({ id: it.id, name: it.name, distanceMeters: it.distanceMeters, status: linked.get(head.id)!.get(it.id)!, source: it.source.name });
+    else kept.push(it);
+  }
+  return kept;
 }
 
 // 정렬: 요금 계산 불가 시설은 가격 순위에 포함하지 않고 뒤로 보낸다. 잔여면수 없음은 감점이 아니라 단지 뒤(거리순).
