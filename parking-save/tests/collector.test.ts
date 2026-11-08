@@ -6,6 +6,7 @@ import { FixtureAdapter } from "@/collector/fixture-adapter";
 import { runSync } from "@/collector/runner";
 import { normalizeStandardRow } from "@/collector/standard-parking";
 import { findCandidates } from "@/collector/dedupe";
+import { buildQualityReport } from "@/server/quality";
 import { parseSearchParams, searchLots } from "@/server/search";
 import type { RawRow, SourceAdapter } from "@/collector/types";
 
@@ -53,6 +54,28 @@ describe("정규화", () => {
   it("무료인데 요금 기재 → 충돌, 혼합 → 요금 미확인", () => {
     expect(ok("SYN-8").feeRules).toEqual([]); expect(ok("SYN-8").qualityFlags).toContain("FEE_CONFLICT");
     expect(ok("SYN-9").feeRules).toEqual([]); expect(ok("SYN-9").qualityFlags).toContain("FEE_KIND_UNSUPPORTED");
+  });
+});
+
+describe("원천 키 충돌·후보 오탐", () => {
+  it("한 번의 수집에서 같은 관리번호가 반복되면 플래그와 건수를 기록(나중 행 반영)", async () => {
+    const db = await createSqliteDb(":memory:"); await migrate(db);
+    const a = { ...byId("SYN-1"), 주차장관리번호: "K-1", 주차장명: "관고사거리", 주차구획수: "22" };
+    const b = { ...byId("SYN-1"), 주차장관리번호: "K-1", 주차장명: "5-2 관고사거리", 주차구획수: "18" };
+    const r = await runSync(db, { sourceName: "T", async *fetch() { yield a; yield b; } });
+    expect(r.keyCollisions).toBe(1);
+    const lot = await db.get<{ name: string; total_spaces: number; quality_flags: string }>("SELECT * FROM parking_lots WHERE source_record_id='K-1'");
+    expect(lot).toMatchObject({ name: "5-2 관고사거리", total_spaces: 18 });
+    expect(lot!.quality_flags).toContain("SOURCE_KEY_COLLISION");
+    expect((await buildQualityReport(db, new Date())).alerts.map((x) => x.code)).toContain("SOURCE_KEY_COLLISION");
+  });
+  it("후보 오탐 방지: 번호가 다른 이웃 시설·이름이 무관한 같은 주소는 후보 아님, 번호 접두어만 다른 같은 시설은 후보", () => {
+    const base = { roadAddress: "경상북도 구미시 금오산로 347", latitude: 36.1, longitude: 128.3 };
+    expect(findCandidates({ id: 1, name: "금오산제2주차장", ...base }, { id: 2, name: "금오산제3주차장", ...base })).toBeNull();
+    expect(findCandidates({ id: 1, name: "공항1공영주차장", ...base }, { id: 2, name: "공항2공영주차장", ...base })).toBeNull();
+    expect(findCandidates({ id: 1, name: "맘스터치앞 공영주차장", ...base }, { id: 2, name: "대관령교회 앞 공영주차장", ...base })).toBeNull();
+    expect(findCandidates({ id: 1, name: "관고사거리(구.세무서)", ...base }, { id: 2, name: "5-2 관고사거리(구.세무서)", ...base })).not.toBeNull();
+    expect(findCandidates({ id: 1, name: "중흥2동주민센터", ...base }, { id: 2, name: "중흥2동주민센터", ...base, roadAddress: "다른 표기" })).not.toBeNull();
   });
 });
 

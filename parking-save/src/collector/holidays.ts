@@ -4,6 +4,7 @@
 //   API 키로 실응답을 확인하기 전에는 운영 사용 금지. 테스트는 명세 기반 합성 응답을 사용한다.
 import type { Db } from "@/server/db";
 import { kstYmd } from "@/lib/time";
+import { normalizeServiceKey } from "./service-key";
 
 export const HOLIDAY_SOURCE = "KASI_SPCDE";
 export const KASI_BASE_URL = "https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService";
@@ -11,6 +12,10 @@ export const KASI_BASE_URL = "https://apis.data.go.kr/B090041/openapi/service/Sp
 export const HOLIDAY_COVERAGE_MAX_AGE_DAYS = 7;
 
 export interface HolidayEntry { date: string; seq: number; name: string; dateKind: string }
+const netCode = (e: unknown): string => {
+  const c = (e as { cause?: { code?: unknown }; name?: unknown })?.cause?.code ?? (e as { name?: unknown })?.name;
+  return typeof c === "string" && /^[A-Za-z0-9_]{1,40}$/.test(c) ? c : "UNKNOWN";
+};
 export class HolidayApiError extends Error { constructor(readonly code: string, msg: string) { super(msg); } }
 
 const validYmd = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && new Date(s + "T00:00:00Z").toISOString().slice(0, 10) === s;
@@ -62,15 +67,15 @@ export function kasiMonthFetcher(opts: { serviceKey: string; fetchImpl?: typeof 
   const f = opts.fetchImpl ?? fetch;
   return async (year, month) => {
     const u = new URL(`${opts.baseUrl ?? KASI_BASE_URL}/getRestDeInfo`);
-    u.searchParams.set("serviceKey", opts.serviceKey);
+    u.searchParams.set("serviceKey", normalizeServiceKey(opts.serviceKey));
     u.searchParams.set("solYear", String(year));
     u.searchParams.set("solMonth", String(month).padStart(2, "0"));
     u.searchParams.set("numOfRows", "100");
     u.searchParams.set("pageNo", "1");
     u.searchParams.set("_type", "json");
     let res: Response;
-    try { res = await f(u, { signal: AbortSignal.timeout(opts.timeoutMs ?? 10000) }); }
-    catch { throw new HolidayApiError("NETWORK", "원천 연결 실패"); }
+    try { res = await f(u.toString(), { signal: AbortSignal.timeout(opts.timeoutMs ?? 10000) }); } // URL 객체 대신 문자열(tsx 등에서 연결 실패 확인)
+    catch (e) { throw new HolidayApiError("NETWORK", `원천 연결 실패(${netCode(e)})`); }
     if (!res.ok) throw new HolidayApiError(`HTTP_${res.status}`, "원천 HTTP 오류");
     return res.text();
   };

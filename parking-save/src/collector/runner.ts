@@ -4,7 +4,7 @@ import type { SourceAdapter, RawRow } from "./types";
 import { normalizeStandardRow } from "./standard-parking";
 import { findCandidates } from "./dedupe";
 
-export interface SyncSummary { status: "SUCCESS" | "PARTIAL" | "FAILED"; received: number; inserted: number; updated: number; unchanged: number; excluded: number; invalid: number; errors: number; duplicateCandidates: number }
+export interface SyncSummary { status: "SUCCESS" | "PARTIAL" | "FAILED"; keyCollisions: number; received: number; inserted: number; updated: number; unchanged: number; excluded: number; invalid: number; errors: number; duplicateCandidates: number }
 
 const stable = (row: RawRow) => JSON.stringify(Object.keys(row).sort().map((k) => [k, row[k] ?? null]));
 const sha = (x: string) => createHash("sha256").update(x).digest("hex");
@@ -15,11 +15,12 @@ const sha = (x: string) => createHash("sha256").update(x).digest("hex");
  */
 export async function runSync(db: Db, adapter: SourceAdapter, now = new Date()): Promise<SyncSummary> {
   const startedAt = now.toISOString();
-  const sum: SyncSummary = { status: "SUCCESS", received: 0, inserted: 0, updated: 0, unchanged: 0, excluded: 0, invalid: 0, errors: 0, duplicateCandidates: 0 };
+  const sum: SyncSummary = { status: "SUCCESS", keyCollisions: 0, received: 0, inserted: 0, updated: 0, unchanged: 0, excluded: 0, invalid: 0, errors: 0, duplicateCandidates: 0 };
   const log = await db.run("INSERT INTO source_sync_logs(source_name, started_at, status) VALUES (?,?, 'RUNNING')", [adapter.sourceName, startedAt]);
   void log;
   const logId = (await db.get<{ id: number }>("SELECT MAX(id) AS id FROM source_sync_logs"))!.id;
   const touched: number[] = [];
+  const seenKeys = new Set<string>(); // 한 번의 수집 안에서 같은 관리번호가 반복되는지(원천 데이터 중복·번호 공유) 감지
   let fatal: string | null = null;
   let newestBase: string | null = null;
   try {
@@ -35,6 +36,8 @@ export async function runSync(db: Db, adapter: SourceAdapter, now = new Date()):
           continue;
         }
         const lot = res.lot;
+        // 같은 관리번호가 한 번의 수집에서 다시 나오면 나중 행이 앞 행을 덮어쓴다. 실데이터에서 같은 시설의 이중 등록으로 확인(약 2%) → 발생 사실을 기록한다
+        if (seenKeys.has(key)) { sum.keyCollisions++; lot.qualityFlags.push("SOURCE_KEY_COLLISION"); } else seenKeys.add(key);
         const hash = sha(stable(row));
         if (lot.sourceUpdatedAt && (!newestBase || lot.sourceUpdatedAt > newestBase)) newestBase = lot.sourceUpdatedAt;
         await db.run("INSERT OR IGNORE INTO source_raw_records(source_name, source_record_id, payload_json, payload_hash, source_updated_at, collected_at) VALUES (?,?,?,?,?,?)",

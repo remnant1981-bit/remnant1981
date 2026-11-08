@@ -111,6 +111,7 @@ export async function buildQualityReport(db: Db, now = new Date()): Promise<Qual
     if (badCoord / prodTotal > QUALITY_THRESHOLDS.badCoordRatio) alerts.push({ code: "COORD_QUALITY", level: "WARN", message: `좌표 없음/불량 ${badCoord}/${prodTotal}곳 (${((badCoord / prodTotal) * 100).toFixed(1)}%)` });
     if (calculableRatio != null && 1 - calculableRatio > QUALITY_THRESHOLDS.feeUnknownRatio) alerts.push({ code: "FEE_UNKNOWN_HIGH", level: "INFO", message: `기준 기간 요금 계산 불가 시설 비율 ${((1 - calculableRatio) * 100).toFixed(0)}%` });
   }
+  if ((flags.SOURCE_KEY_COLLISION ?? 0) > 0) alerts.push({ code: "SOURCE_KEY_COLLISION", level: "INFO", message: `원천 관리번호가 한 번의 수집에서 반복된 시설 ${flags.SOURCE_KEY_COLLISION}곳 — 같은 시설의 이중 등록일 가능성(나중 행이 반영됨)` });
   const pending = await one("SELECT COUNT(*) c FROM duplicate_candidates WHERE status='PENDING'");
   if (pending > 0) alerts.push({ code: "DUPLICATES_PENDING", level: "INFO", message: `중복 후보 ${pending}건 검토 대기(자동 병합 없음)` });
 

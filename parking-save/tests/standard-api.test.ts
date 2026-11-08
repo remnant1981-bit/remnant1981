@@ -36,6 +36,21 @@ describe("키 매핑", () => {
 });
 
 describe("응답 파싱", () => {
+  it("실제 응답(실호출 픽스처): 최상위 {header, body}, items.item 배열, 총건수", () => {
+    const real = fs.readFileSync(path.resolve(import.meta.dirname, "fixtures/standard-api.real-sample.json"), "utf8");
+    const r = parseStandardResponse(real);
+    expect(r.totalCount).toBe(18994);
+    expect(r.items).toHaveLength(2);
+    const row = mapStandardItem(r.items[0]);
+    expect(row["주차장관리번호"]).toBe("236-2-000066");
+    const n = normalizeStandardRow(row);
+    expect(n.kind).toBe("ok");
+    if (n.kind === "ok") {
+      expect(n.lot).toMatchObject({ ownershipType: "PUBLIC", parkingType: "OFF_STREET", totalSpaces: 18, latitude: 37.836159253 });
+      expect(n.lot.feeRules.map((x) => x.ruleType)).toEqual(["FREE"]);   // 요금정보 "무료" + 기본시간 30(요금 빈 값) → 무료 규칙
+      expect(n.lot.schedules.map((s) => s.dayType)).toEqual(["WEEKDAY", "SATURDAY", "HOLIDAY", "SUNDAY"]);
+    }
+  });
   const item = toApiItem(fileRows[0]);
   it("items 배열 / items.item 배열 / 단건 객체 / 빈 값", () => {
     expect(parseStandardResponse(envelope([item], 1)).items).toHaveLength(1);
@@ -109,6 +124,13 @@ describe("HTTP 클라이언트", () => {
     expect(seen).toContain("api.data.go.kr/openapi/tn_pubr_prkplce_info_api?"); expect(seen).toContain("pageNo=3"); expect(seen).toContain("numOfRows=50");
     const bad = standardPageFetcher({ serviceKey: "SECRET-DK", fetchImpl: (async () => { throw new Error("fail https://x/?serviceKey=SECRET-DK"); }) as never });
     await expect(bad(1, 10)).rejects.toSatisfy((e: Error) => !e.message.includes("SECRET") && (e as StandardApiError).code === "NETWORK");
+    // 원인 코드(비민감)는 메시지에 남기되 URL/키는 남기지 않음
+    const dns = standardPageFetcher({ serviceKey: "SECRET-DK", fetchImpl: (async () => { throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND", message: "getaddrinfo https://x/?serviceKey=SECRET-DK" } }); }) as never });
+    await expect(dns(1, 10)).rejects.toSatisfy((e: Error) => e.message.includes("ENOTFOUND") && !e.message.includes("SECRET") && !e.message.includes("http"));
+    // fetch에는 URL 객체가 아닌 문자열이 전달됨
+    let arg: unknown;
+    await standardPageFetcher({ serviceKey: "k", fetchImpl: (async (u: unknown) => { arg = u; return new Response(envelope([], 0)); }) as never })(1, 10);
+    expect(typeof arg).toBe("string");
     await expect(standardPageFetcher({ serviceKey: "k", fetchImpl: (async () => new Response("x", { status: 502 })) as never })(1, 10)).rejects.toMatchObject({ code: "HTTP_502" });
   });
 });
@@ -129,5 +151,24 @@ describe("관리자 job standard-parking", () => {
     expect(JSON.stringify(j)).not.toContain("SECRET-DK");
     vi.stubGlobal("fetch", async () => new Response("err", { status: 500 }));
     expect((await post("10.1.0.3")).status).toBe(502);
+  });
+});
+
+describe("서비스키 정규화", () => {
+  it("Encoding 형태(%3D%3D)와 Decoding 형태 모두 같은 요청 값으로", async () => {
+    const urls: string[] = [];
+    const mk = (key: string) => standardPageFetcher({ serviceKey: key, fetchImpl: (async (u: string) => { urls.push(u); return new Response(envelope([], 0)); }) as never });
+    await mk("AbC+/dEf==")(1, 10);              // Decoding(원본)
+    await mk("AbC%2B%2FdEf%3D%3D")(1, 10);      // Encoding
+    await mk("  AbC%2B%2FdEf%3D%3D \n")(1, 10); // 공백 포함
+    const keys = urls.map((u) => new URL(u).searchParams.get("serviceKey"));
+    expect(keys).toEqual(["AbC+/dEf==", "AbC+/dEf==", "AbC+/dEf=="]);
+    expect(urls[0]).toContain("serviceKey=AbC%2B%2FdEf%3D%3D"); // 전송 시에는 한 번만 인코딩
+  });
+  it("실제 형태: 끝이 %3D%3D인 키는 == 로 정규화(값 자체는 테스트에 쓰지 않음)", async () => {
+    const { normalizeServiceKey } = await import("@/collector/service-key");
+    expect(normalizeServiceKey("x%3D%3D")).toBe("x==");
+    expect(normalizeServiceKey("x==")).toBe("x==");
+    expect(normalizeServiceKey("%E0%A4%A")).toBe("%E0%A4%A"); // 잘못된 인코딩은 그대로(예외 없음)
   });
 });

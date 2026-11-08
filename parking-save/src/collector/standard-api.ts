@@ -3,7 +3,10 @@
 //  - 응답 JSON 봉투(items 위치/형태), 페이지 크기 상한, 값 분포는 키로 실응답을 확인해야 한다.
 //  - 따라서 봉투는 data.go.kr에서 흔한 두 형태(items가 배열 / items.item)를 모두 수용한다.
 // 응답 키는 영문 camelCase(일부 오탈자 포함, 공식 표기 그대로) → 기존 정규화기가 받는 한글 컬럼명으로 매핑한다.
+// 실호출로 확인(2026-11-08): 봉투 {header, body{items{item[]}, numOfRows, pageNo, totalCount}}, totalCount 18,994, 항목 키 34개
+//  (공식 표 32개 + insttCode, insttNm — 문서의 `instt_code`와 표기 다름, 매핑 대상 아님).
 import type { RawRow, SourceAdapter } from "./types";
+import { normalizeServiceKey } from "./service-key";
 
 export const STANDARD_API_URL = "https://api.data.go.kr/openapi/tn_pubr_prkplce_info_api";
 export const STANDARD_SOURCE = "DATA_GO_KR_15012896";
@@ -20,6 +23,12 @@ export const STANDARD_KEY_MAP: Record<string, string> = {
   dayCmmtktAdjTime: "1일주차권요금적용시간", dayCmmtkt: "1일주차권요금", monthCmmtkt: "월정기권요금",
   metpay: "결제방법", spcmnt: "특기사항", institutionNm: "관리기관명", phoneNumber: "전화번호",
   latitude: "위도", longitude: "경도", pwdbsPpkZoneYn: "장애인전용주차구역보유여부", referenceDate: "데이터기준일자",
+};
+
+/** 연결 오류의 비민감 코드(예: ENOTFOUND, UND_ERR_CONNECT_TIMEOUT). 메시지 본문은 URL/키를 담을 수 있어 사용하지 않는다 */
+const netCode = (e: unknown): string => {
+  const c = (e as { cause?: { code?: unknown }; name?: unknown })?.cause?.code ?? (e as { name?: unknown })?.name;
+  return typeof c === "string" && /^[A-Za-z0-9_]{1,40}$/.test(c) ? c : "UNKNOWN";
 };
 
 export class StandardApiError extends Error { constructor(readonly code: string, msg: string) { super(msg); } }
@@ -41,13 +50,15 @@ export function parseStandardResponse(body: string): { items: Array<Record<strin
     try { j = JSON.parse(t); } catch { throw new StandardApiError("BAD_RESPONSE", "응답 파싱 실패"); }
     const gw = j.cmmMsgHeader ?? j.OpenAPI_ServiceResponse?.cmmMsgHeader;
     if (gw) throw new StandardApiError(String(gw.returnReasonCode ?? "BAD_RESPONSE"), "게이트웨이 오류 응답");
-    const header = j.response?.header;
+    // 실제 응답(2026-11-08 실호출 확인)은 `response` 래퍼 없이 {header, body}가 최상위. 래퍼가 있는 형태도 수용한다.
+    const header = j.header ?? j.response?.header;
+    const bodyObj = j.body ?? j.response?.body;
     if (!header) throw new StandardApiError("BAD_RESPONSE", "응답 봉투 형식 불명");
     const code = String(header.resultCode ?? "");
     if (code !== "00") throw new StandardApiError(code || "BAD_RESPONSE", "원천 오류 응답");
-    const items = j.response.body?.items;
+    const items = bodyObj?.items;
     const arr = Array.isArray(items) ? items : Array.isArray(items?.item) ? items.item : items?.item ? [items.item] : [];
-    return { items: arr, totalCount: Number(j.response.body?.totalCount ?? arr.length) };
+    return { items: arr, totalCount: Number(bodyObj?.totalCount ?? arr.length) };
   }
   if (t.startsWith("<")) {
     const gw = /<returnReasonCode>(\w+)<\/returnReasonCode>/.exec(t);
@@ -68,13 +79,14 @@ export function standardPageFetcher(opts: { serviceKey: string; baseUrl?: string
   const f = opts.fetchImpl ?? fetch;
   return async (pageNo, numOfRows) => {
     const u = new URL(opts.baseUrl ?? STANDARD_API_URL);
-    u.searchParams.set("serviceKey", opts.serviceKey);
+    u.searchParams.set("serviceKey", normalizeServiceKey(opts.serviceKey));
     u.searchParams.set("pageNo", String(pageNo));
     u.searchParams.set("numOfRows", String(numOfRows));
     u.searchParams.set("type", "json");
     let res: Response;
-    try { res = await f(u, { signal: AbortSignal.timeout(opts.timeoutMs ?? 20000) }); }
-    catch { throw new StandardApiError("NETWORK", "원천 연결 실패"); }
+    // URL 객체 대신 문자열로 전달: tsx 등 일부 실행 환경에서 URL 객체 전달 시 연결 실패를 확인함(2026-11-08)
+    try { res = await f(u.toString(), { signal: AbortSignal.timeout(opts.timeoutMs ?? 20000) }); }
+    catch (e) { throw new StandardApiError("NETWORK", `원천 연결 실패(${netCode(e)})`); } // 키·주소는 포함하지 않고 오류 코드만
     if (!res.ok) throw new StandardApiError(`HTTP_${res.status}`, "원천 HTTP 오류");
     return res.text();
   };
