@@ -1,6 +1,6 @@
 // 정기 수집용 스크립트: 활성화된 원천을 각각 독립 실행하고 알림을 생성한다.
 // 종료 코드: 0=모두 성공, 1=일부/전체 실패(스케줄러에서 실패 감지용). 키·URL은 출력하지 않는다.
-// 실행 환경 변수: DATABASE_PATH, BIZINFO_API_KEY (기업마당은 해외 IP 차단 → 국내 IP 환경에서 실행)
+// 실행 환경 변수: DATABASE_PATH, BIZINFO_API_KEY, DATA_GO_KR_API_KEY(K-Startup) (기업마당은 해외 IP 차단 → 국내 IP 환경에서 실행)
 import { createSqliteDb, migrate } from "../src/server/db";
 import { runAll } from "../src/collector/runner";
 import { configuredAdapters } from "../src/collector/registry";
