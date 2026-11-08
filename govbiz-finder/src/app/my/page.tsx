@@ -3,7 +3,15 @@ import Link from "next/link";
 import { getViewer } from "@/server/viewer";
 import { getDb } from "@/server/db";
 import { getNotificationSettings, listBookmarks, listHistory, listNotifications } from "@/server/userdata";
-import { Notice, PageTitle, Empty } from "@/components/ui";
+import { Notice, PageTitle, Empty, DeadlineChip } from "@/components/ui";
+import { deadlineDays } from "@/domain/status";
+import { seoulToday } from "@/lib/time";
+
+/** 접수 중이고 마감이 가까운 순 → 마감일 미정 → 마감된 공고 */
+function sortByDeadline<T extends { application_end: string | null; application_status: string }>(xs: T[]): T[] {
+  const rank = (x: T) => (x.application_status === "closed" ? 2 : x.application_end ? 0 : 1);
+  return [...xs].sort((a, b) => rank(a) - rank(b) || String(a.application_end ?? "").localeCompare(String(b.application_end ?? "")));
+}
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { MyActions } from "@/components/MyActions";
 import { GuestMarks } from "@/components/GuestMarks";
@@ -27,6 +35,7 @@ export default async function Page() {
   );
   const db = await getDb();
   const uid = v.session.user.id;
+  const today = seoulToday();
   const [marks, hist, notifs, settings] = await Promise.all([listBookmarks(db, uid) as Promise<any[]>, listHistory(db, uid), listNotifications(db, uid), getNotificationSettings(db, uid)]);
   return (
     <div className="grid gap-8">
@@ -42,8 +51,15 @@ export default async function Page() {
       <section aria-labelledby="s"><h2 id="s" className="mb-2 font-bold">알림 설정</h2><NotificationSettings initial={settings} emailAvailable={!!process.env.EMAIL_PROVIDER} /></section>
       <section aria-labelledby="b"><h2 id="b" className="mb-2 font-bold">관심 공고</h2>
         <div className="mb-2"><GuestMarks member /></div>
-        {marks.length === 0 ? <Empty title="저장한 관심 공고가 없습니다." /> : <ul className="grid gap-2">{marks.map((m) => (
-          <li key={m.id} className="card p-3 text-sm"><Link className="font-semibold underline" href={`/announcements/${m.id}`}>{m.title}</Link> · {m.organization} · 마감 {m.application_end ?? "확인 필요"}</li>))}</ul>}
+        {marks.length === 0 ? <Empty title="저장한 관심 공고가 없습니다." /> : <ul className="grid gap-2">{sortByDeadline(marks).map((m) => {
+          const d = m.application_status === "open" ? deadlineDays(m.application_end, today) : null;
+          const hot = d !== null && d >= 0 && d <= 7;
+          return (
+          <li key={m.id} className={`card flex flex-wrap items-center gap-2 p-3 text-sm`} style={hot ? { background: d! <= 3 ? "#fef2f2" : "#fff7ed", borderColor: d! <= 3 ? "#f87171" : "#fdba74" } : undefined}>
+            <DeadlineChip d={hot ? d : null} />
+            <Link className="font-semibold underline" href={`/announcements/${m.id}`}>{m.title}</Link><span>· {m.organization} · 마감 {m.application_end ?? "확인 필요"}</span>
+            {m.application_status === "closed" && <span className="chip bg-gray-100 text-gray-600">마감됨</span>}
+          </li>); })}</ul>}
       </section>
       <section aria-labelledby="h"><div className="mb-2 flex items-center justify-between"><h2 id="h" className="font-bold">검색·열람 이력</h2><MyActions kind="clear" /></div>
         <div className="grid gap-4 sm:grid-cols-2">

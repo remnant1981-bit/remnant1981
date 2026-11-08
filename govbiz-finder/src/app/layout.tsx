@@ -5,6 +5,19 @@ import Script from "next/script";
 import { getViewer } from "@/server/viewer";
 import { LogoutButton } from "@/components/LogoutButton";
 import { NavLinks } from "@/components/NavLinks";
+import { getDb } from "@/server/db";
+import { seoulToday } from "@/lib/time";
+
+/** 접수 중이며 마감 7일 이내인 관심 공고 수(상단 메뉴 배지) */
+async function soonBookmarkCount(userId: string, companyId: string): Promise<number> {
+  const db = await getDb();
+  const today = seoulToday();
+  const until = new Date(Date.parse(today + "T00:00:00Z") + 7 * 86400000).toISOString().slice(0, 10);
+  const r = await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM bookmarks b JOIN announcements a ON a.id=b.announcement_id
+     WHERE b.user_id=? AND b.company_id=? AND a.application_status='open' AND a.application_end BETWEEN ? AND ?`, [userId, companyId, today, until]);
+  return Number(r?.n ?? 0);
+}
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.SITE_URL || "http://localhost:3000"),
@@ -34,7 +47,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <NavLinks items={[
                 { href: "/search", label: "공고 검색" },
                 ...(v.profile ? [{ href: "/recommend", label: "우리 기업 공고", strong: true }] : [{ href: "/recommend", label: "우리 기업 맞춤 공고", strong: true }]),
-                ...(v.session ? [{ href: "/my", label: "내 공고·알림" }, { href: "/company", label: "기업정보" }] : [{ href: "/my", label: "관심 공고" }]),
+                ...(v.session ? [{ href: "/my", label: "내 공고·알림", ...(v.company ? { badge: await soonBookmarkCount(v.session.user.id, v.company.id) } : { guestDeadlineBadge: true }) }, { href: "/company", label: "기업정보" }] : [{ href: "/my", label: "관심 공고", guestDeadlineBadge: true }]),
                 ...(v.session?.user.role === "admin" ? [{ href: "/admin", label: "관리자" }] : []),
               ]} />
             </nav>

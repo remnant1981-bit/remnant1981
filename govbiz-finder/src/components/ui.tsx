@@ -74,3 +74,10 @@ export function PageTitle({ children, sub }: { children: React.ReactNode; sub?: 
 export function BackLink({ href, children }: { href: string; children: React.ReactNode }) {
   return <Link href={href} className="text-sm text-[var(--brand)] underline">{children}</Link>;
 }
+
+/** 마감 임박 강조: 3일 이내 빨강(굵게), 7일 이내 주황 */
+export function DeadlineChip({ d }: { d: number | null }) {
+  if (d === null || d < 0 || d > 7) return null;
+  const urgent = d <= 3;
+  return <span className={`chip font-bold ${urgent ? "bg-red-600 text-white" : "bg-orange-100 text-orange-900 border border-orange-300"}`}>⏰ {d === 0 ? "오늘 마감" : `마감 D-${d}`}</span>;
+}

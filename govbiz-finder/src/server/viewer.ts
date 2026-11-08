@@ -5,6 +5,7 @@ import { getCompanyProfile, membershipState, validateProfile, type CompanyView }
 import type { CompanyProfile } from "@/domain/matching";
 import { decodeGuestProfile, GUEST_COOKIE } from "@/lib/guest-profile";
 import { parseCookies } from "./auth";
+import { guestChecksFromCookie, loadCompanyChecks } from "./checks";
 
 export interface Viewer {
   session: SessionCtx | null;
@@ -36,9 +37,11 @@ export async function getViewer(): Promise<Viewer> {
   const cookie = h.get("cookie");
   const session = await getSession(db, cookie);
   const guest = guestProfileFromCookie(cookie);
-  if (!session) return { session: null, membership: "none", company: null, profile: guest, guestProfile: guest };
+  const gProfile = guest ? { ...guest, checks: guestChecksFromCookie(cookie) } : null;
+  if (!session) return { session: null, membership: "none", company: null, profile: gProfile, guestProfile: guest };
   const st = await membershipState(db, session.user.id);
   const membership = st.status as Viewer["membership"];
   const company = st.status === "verified" ? await getCompanyProfile(db, session.user.id, st.companyId) : null;
-  return { session, membership, company, profile: company ?? guest, guestProfile: company ? null : guest };
+  const profile = company ? { ...company, checks: await loadCompanyChecks(db, company.id) } : gProfile;
+  return { session, membership, company, profile, guestProfile: company ? null : guest };
 }

@@ -134,6 +134,25 @@ describe("사용자 시나리오 (TEST_PLAN §4)", () => {
     expect((await anon.call("PATCH", "/api/company", { venture_status: "yes" })).status).toBe(401);
   });
 
+  it("공고별 조건 직접 확인: 해당 공고 판정에만 반영, 취소 가능, 검증·권한 적용", async () => {
+    const c = await member();
+    await c.call("PUT", "/api/company", { region_sido: "경기도" });
+    const a = (await c.call("GET", "/api/announcements")).body.rows[0];
+    const before = (await c.call("GET", `/api/announcements/${a.id}`)).body;
+    expect((await c.call("POST", "/api/checks", { announcementId: a.id, fieldKey: "venture", verdict: "yes" })).status).toBe(200);
+    const after = (await c.call("GET", `/api/announcements/${a.id}`)).body;
+    const r = (after.match?.results ?? []) as any[];
+    if (r.some((x) => x.fieldKey === "venture")) expect(r.find((x) => x.fieldKey === "venture")).toMatchObject({ state: "MET", userChecked: "yes" });
+    expect(before).toBeTruthy();
+    expect((await db.get<any>("SELECT COUNT(*) n FROM announcement_checks")).n).toBe(1);
+    expect((await c.call("POST", "/api/checks", { announcementId: a.id, fieldKey: "venture", verdict: "" })).status).toBe(200);
+    expect((await db.get<any>("SELECT COUNT(*) n FROM announcement_checks")).n).toBe(0);
+    expect((await c.call("POST", "/api/checks", { announcementId: a.id, fieldKey: "Bad Key!", verdict: "yes" })).status).toBe(400);
+    expect((await c.call("POST", "/api/checks", { announcementId: "nope", fieldKey: "venture", verdict: "yes" })).status).toBe(404);
+    const anon = await client(handlers);
+    expect((await anon.call("POST", "/api/checks", { announcementId: a.id, fieldKey: "venture", verdict: "yes" })).status).toBe(401);
+  });
+
   it("현재 검색 조건으로 CSV/XLSX/PDF 내보내기", async () => {
     const c = await member();
     await c.call("PUT", "/api/company", { region_sido: "경기도", established_at: "2024-01-01" });

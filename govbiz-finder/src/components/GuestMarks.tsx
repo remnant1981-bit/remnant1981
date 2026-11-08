@@ -3,7 +3,8 @@ import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/client";
-import { clearGuestMarks, readGuestMarks, serverGuestMarks, subscribeGuestMarks, toggleGuestMark } from "@/lib/guest-bookmarks";
+import { clearGuestMarks, daysLeft, readGuestMarks, serverGuestMarks, subscribeGuestMarks, toggleGuestMark } from "@/lib/guest-bookmarks";
+import { DeadlineChip } from "./ui";
 
 /** 게스트 관심 공고 목록. member=true면 계정으로 옮기기 버튼만 표시(옮길 것이 있을 때). */
 export function GuestMarks({ member = false }: { member?: boolean }) {
@@ -34,12 +35,14 @@ export function GuestMarks({ member = false }: { member?: boolean }) {
   if (!marks.length) return <p className="card p-4 text-sm text-[var(--muted)]">저장한 관심 공고가 없습니다. 공고 카드의 ‘☆ 관심 공고 저장’을 누르면 여기에 모입니다.</p>;
   return (
     <ul className="grid gap-2">
-      {marks.map((m) => (
-        <li key={m.id} className="card flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
-          <span><Link className="font-semibold underline" href={`/announcements/${m.id}`}>{m.title || "공고"}</Link>{m.organization && ` · ${m.organization}`} · 마감 {m.end ?? "확인 필요"}</span>
+      {[...marks].sort((a, b) => (daysLeft(a.end) ?? 9999) - (daysLeft(b.end) ?? 9999)).map((m) => {
+        const d = daysLeft(m.end);
+        const hot = d !== null && d >= 0 && d <= 7;
+        return (
+        <li key={m.id} className={`card flex flex-wrap items-center justify-between gap-2 p-3 text-sm`} style={hot ? { background: d! <= 3 ? "#fef2f2" : "#fff7ed", borderColor: d! <= 3 ? "#f87171" : "#fdba74" } : undefined}>
+          <span><DeadlineChip d={hot ? d : null} /> {d !== null && d < 0 && <span className="chip bg-gray-100 text-gray-600">마감됨</span>} <Link className="font-semibold underline" href={`/announcements/${m.id}`}>{m.title || "공고"}</Link>{m.organization && ` · ${m.organization}`} · 마감 {m.end ?? "확인 필요"}</span>
           <button type="button" className="btn btn-ghost !py-1 text-xs" onClick={() => toggleGuestMark(m)}>삭제</button>
-        </li>
-      ))}
+        </li>); })}
     </ul>
   );
 }
