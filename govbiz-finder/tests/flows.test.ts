@@ -122,6 +122,18 @@ describe("사용자 시나리오 (TEST_PLAN §4)", () => {
     expect((await db.get<any>("SELECT COUNT(*) n FROM bookmarks")).n).toBe(0);
   });
 
+  it("기업정보 부분 저장(PATCH): 보낸 항목만 바뀌고 나머지는 유지, 검증·CSRF 적용", async () => {
+    const c = await member();
+    await c.call("PUT", "/api/company", { company_name: "테스트기업", region_sido: "경기도", region_sigungu: "시흥시" });
+    const r = await c.call("PATCH", "/api/company", { enterprise_size: "중소기업" });
+    expect(r.status).toBe(200);
+    expect(r.body.company).toMatchObject({ company_name: "테스트기업", region_sido: "경기도", region_sigungu: "시흥시", enterprise_size: "중소기업" });
+    expect((await c.call("PATCH", "/api/company", { enterprise_size: "없는규모" })).status).toBe(400);
+    expect((await c.call("PATCH", "/api/company", { venture_status: "yes" }, { "x-csrf-token": "bad" })).status).toBe(403);
+    const anon = await client(handlers);
+    expect((await anon.call("PATCH", "/api/company", { venture_status: "yes" })).status).toBe(401);
+  });
+
   it("현재 검색 조건으로 CSV/XLSX/PDF 내보내기", async () => {
     const c = await member();
     await c.call("PUT", "/api/company", { region_sido: "경기도", established_at: "2024-01-01" });

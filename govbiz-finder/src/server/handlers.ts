@@ -6,7 +6,7 @@ import {
   ApiError, clearCookie, destroySession, login, register, sessionCookie,
 } from "./auth";
 import {
-  applyNtsStatus, deleteCompanyData, getCompanyProfile, membershipState, ntsStatusLookup, requestCompanyClaim, saveCompanyProfile,
+  applyNtsStatus, deleteCompanyData, getCompanyProfile, membershipState, ntsStatusLookup, requestCompanyClaim, saveCompanyProfile, patchCompanyProfile,
   validateProfile, approveClaim, rejectClaim, requireCompanyAccess,
 } from "./company";
 import { getAnnouncement, getAnnouncementExtras, listFacets, parseSearchParams, searchAllForExport, toQueryString } from "@/domain/search";
@@ -114,6 +114,10 @@ export const handlers: Record<string, (req: Request, ...a: any[]) => Promise<Res
   "PUT /api/company": route({ auth: "user" }, async (req, c) => {
     const b = await readJson(req);
     return { company: await saveCompanyProfile(c.db, c.session!.user.id, b) };
+  }),
+  "PATCH /api/company": route({ auth: "user" }, async (req, c) => {
+    const b = await readJson<Record<string, unknown>>(req);
+    return { company: await patchCompanyProfile(c.db, c.session!.user.id, b) };
   }),
   "DELETE /api/company": route({ auth: "user" }, async (_req, c) => {
     await deleteCompanyData(c.db, c.session!.user.id);

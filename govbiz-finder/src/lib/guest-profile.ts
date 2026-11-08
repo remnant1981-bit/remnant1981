@@ -30,3 +30,10 @@ export function writeGuestCookie(p: Record<string, unknown>): void {
   const secure = location.protocol === "https:" ? "; Secure" : "";
   document.cookie = `${GUEST_COOKIE}=${encodeGuestProfile(p)}; Path=/; Max-Age=${180 * 86400}; SameSite=Lax${secure}`;
 }
+
+/** 브라우저에서만 호출: 현재 쿠키의 비회원 정보에 일부 항목을 덧붙여 저장. */
+export function patchGuestCookie(patch: Record<string, string>): void {
+  const m = document.cookie.split("; ").find((x) => x.startsWith(`${GUEST_COOKIE}=`));
+  const cur = decodeGuestProfile(m ? m.slice(GUEST_COOKIE.length + 1) : null) ?? {};
+  writeGuestCookie({ ...cur, ...patch });
+}

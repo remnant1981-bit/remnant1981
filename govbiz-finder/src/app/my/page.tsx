@@ -1,20 +1,30 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { getViewer } from "@/server/viewer";
 import { getDb } from "@/server/db";
 import { getNotificationSettings, listBookmarks, listHistory, listNotifications } from "@/server/userdata";
 import { Notice, PageTitle, Empty } from "@/components/ui";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { MyActions } from "@/components/MyActions";
+import { GuestMarks } from "@/components/GuestMarks";
 import { formatSeoul } from "@/lib/time";
 
 export const metadata: Metadata = { title: "내 공고·알림", robots: { index: false, follow: false } };
 
 export default async function Page() {
   const v = await getViewer();
-  if (!v.session) redirect("/login");
-  if (!v.company) return (<><PageTitle>내 공고·알림</PageTitle><Notice tone="warn">관심 공고·이력·알림은 기업 관계 확인이 완료된 후 이용할 수 있습니다. <Link className="underline" href="/company">기업정보로 이동</Link></Notice></>);
+  if (!v.session || !v.company) return (
+    <div className="grid gap-6">
+      <PageTitle sub="로그인 없이 사용 중 · 정보는 이 브라우저에만 저장됩니다">내 관심 공고 <span className="chip ml-2 align-middle bg-gray-100 text-gray-800">게스트 모드</span></PageTitle>
+      {v.session
+        ? <Notice tone="warn">기업 관계 확인이 완료되면 관심 공고·이력·알림이 계정에 저장됩니다. 그 전까지는 게스트 모드로 이 브라우저에 저장됩니다. <Link className="underline" href="/company">기업정보로 이동</Link></Notice>
+        : <Notice>게스트 모드에서도 검색·맞춤 공고·정확도 높이기·관심 공고 저장을 모두 쓸 수 있습니다. <strong>다른 기기에서 보기, 검색·열람 이력, 새 공고·마감 알림</strong>이 필요하면 <Link className="underline" href="/register">회원가입</Link>하세요(저장한 내용은 가입 후 옮길 수 있음).</Notice>}
+      <section aria-labelledby="gb"><h2 id="gb" className="mb-2 font-bold">관심 공고</h2><GuestMarks /></section>
+      <section aria-labelledby="gp"><h2 id="gp" className="mb-2 font-bold">맞춤 정보</h2>
+        <p className="card p-4 text-sm">{v.guestProfile ? <>이 브라우저에 기업정보 {Object.keys(v.guestProfile).length}개 항목이 저장되어 있습니다. <Link className="underline" href="/recommend">우리 기업 공고 보기</Link></> : <>아직 입력한 기업정보가 없습니다. <Link className="underline" href="/recommend">맞춤 공고 시작하기</Link></>}</p>
+      </section>
+    </div>
+  );
   const db = await getDb();
   const uid = v.session.user.id;
   const [marks, hist, notifs, settings] = await Promise.all([listBookmarks(db, uid) as Promise<any[]>, listHistory(db, uid), listNotifications(db, uid), getNotificationSettings(db, uid)]);
@@ -31,6 +41,7 @@ export default async function Page() {
       </section>
       <section aria-labelledby="s"><h2 id="s" className="mb-2 font-bold">알림 설정</h2><NotificationSettings initial={settings} emailAvailable={!!process.env.EMAIL_PROVIDER} /></section>
       <section aria-labelledby="b"><h2 id="b" className="mb-2 font-bold">관심 공고</h2>
+        <div className="mb-2"><GuestMarks member /></div>
         {marks.length === 0 ? <Empty title="저장한 관심 공고가 없습니다." /> : <ul className="grid gap-2">{marks.map((m) => (
           <li key={m.id} className="card p-3 text-sm"><Link className="font-semibold underline" href={`/announcements/${m.id}`}>{m.title}</Link> · {m.organization} · 마감 {m.application_end ?? "확인 필요"}</li>))}</ul>}
       </section>
