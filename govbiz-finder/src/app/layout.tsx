@@ -43,7 +43,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <Link href="/" className="flex items-center gap-2 text-lg font-extrabold tracking-tight text-[var(--brand)]">
               <span aria-hidden className="grid h-7 w-7 place-items-center rounded-lg bg-[var(--brand)] text-sm text-white">G</span>GovBiz Finder
             </Link>
-            <nav aria-label="주 메뉴" className="flex flex-wrap items-center gap-1 text-sm">
+            <nav aria-label="주 메뉴" className="order-3 -mx-1 flex w-full items-center gap-1 overflow-x-auto whitespace-nowrap px-1 text-sm sm:order-none sm:mx-0 sm:w-auto sm:px-0">
               <NavLinks items={[
                 { href: "/search", label: "공고 검색" },
                 ...(v.profile ? [{ href: "/recommend", label: "우리 기업 공고", strong: true }] : [{ href: "/recommend", label: "우리 기업 맞춤 공고", strong: true }]),
@@ -51,9 +51,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 ...(v.session?.user.role === "admin" ? [{ href: "/admin", label: "관리자" }] : []),
               ]} />
             </nav>
-            <div className="ml-auto flex items-center gap-3 text-sm">
+            <div className="order-2 ml-auto flex items-center gap-3 text-sm sm:order-none">
               {v.session ? (<><span className="hidden text-[var(--muted)] sm:inline" aria-label="로그인 계정">{v.session.user.email}</span><LogoutButton /></>) : (
-                <><span className="chip bg-gray-100 text-gray-700" title="로그인 없이 사용 중. 입력한 정보·관심 공고는 이 브라우저에만 저장됩니다.">게스트 모드</span><Link href="/login" className="hover:underline">로그인</Link><Link href="/register" className="btn">회원가입</Link></>
+                <><span className="hidden sm:inline"><span className="chip bg-gray-100 text-gray-700" title="로그인 없이 사용 중. 입력한 정보·관심 공고는 이 브라우저에만 저장됩니다.">게스트 모드</span></span><Link href="/login" className="hover:underline">로그인</Link><Link href="/register" className="btn">회원가입</Link></>
               )}
             </div>
           </div>

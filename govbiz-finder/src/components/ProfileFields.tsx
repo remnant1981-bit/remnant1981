@@ -47,35 +47,46 @@ function RegionSelect({ sido, sigungu }: { sido?: string | null; sigungu?: strin
 }
 
 /** 모든 항목 선택 입력. 비워두면 '확인 필요'로 처리되며 불이익은 없다. */
+const DETAIL_KEYS = ["company_name", "representative_name", "industry_name", "revenue_band", "employee_count_band", "export_status", "research_institute_status", "venture_status", "has_patent", "youth_ceo", "certifications", "tech_keywords", "interest_categories"];
+
+/** 모든 항목 선택 입력. 핵심 5개만 먼저 보이고 나머지는 접어 둔다(입력값이 있으면 펼침). 비워두면 '확인 필요'로 처리되며 불이익은 없다. */
 export function ProfileFields({ v = {} }: { v?: V }) {
+  const hasDetail = DETAIL_KEYS.some((k) => typeof v[k] === "string" && v[k]!.trim() !== "");
   return (
     <div className="grid gap-4">
-      <Group title="기본 정보">
-        <Txt id="company_name" label="기업명" v={v.company_name} />
-        <Txt id="representative_name" label="대표자명" v={v.representative_name} max={50} />
+      <Group title="핵심 정보 — 이것만 입력해도 맞춤 추천이 됩니다">
         <RegionSelect sido={v.region_sido} sigungu={v.region_sigungu} />
-        <MultiDrop name="industry_group" label="업종 분야(복수 선택)" items={INDUSTRY_GROUPS.map((c) => [c, c] as const)} v={v.industry_group} hint="농가·관광업체 등 업종 한정 공고를 걸러냅니다." />
-        <Txt id="industry_name" label="업종/주요 제품(선택, 상세)" v={v.industry_name} placeholder="예: 금속가공 제조업" />
+        <MultiDrop name="industry_group" label="업종 분야(복수 선택)" items={INDUSTRY_GROUPS.map((c) => [c, c] as const)} v={v.industry_group} hint="농가·관광업체 등 업종 한정 공고를 구분합니다." />
+        <MultiDrop name="tech_fields" label="주력 기술 분야(복수 선택)" items={TECH_FIELDS.map((c) => [c, c] as const)} v={v.tech_fields} hint="6G·반도체 등 기술 분야 한정 공고를 구분합니다. 비우면 판정을 보류(확인 필요)합니다." />
+        <Sel id="enterprise_size" label="기업 규모" v={v.enterprise_size} opts={opt(ENTERPRISE_SIZES)} />
         <Txt id="established_at" label="설립일" type="date" v={v.established_at} max={10} hint="업력(창업 N년 이내 등) 판정에 사용" />
       </Group>
-      <Group title="규모·실적">
-        <Sel id="enterprise_size" label="기업 규모" v={v.enterprise_size} opts={opt(ENTERPRISE_SIZES)} />
-        <Sel id="revenue_band" label="매출 규모 구간" v={v.revenue_band} opts={opt(REVENUE_BANDS)} />
-        <Sel id="employee_count_band" label="종업원 수 구간" v={v.employee_count_band} opts={opt(EMPLOYEE_BANDS)} />
-        <Sel id="export_status" label="수출 실적" v={v.export_status} opts={YN} />
-      </Group>
-      <Group title="인증·역량">
-        <Sel id="research_institute_status" label="기업부설연구소/전담부서" v={v.research_institute_status} opts={YN} />
-        <Sel id="venture_status" label="벤처기업 확인" v={v.venture_status} opts={YN} />
-        <Sel id="has_patent" label="특허 보유" v={v.has_patent} opts={YN} />
-        <Sel id="youth_ceo" label="청년 대표자(만 39세 이하)" v={v.youth_ceo} opts={YN} hint="생년월일은 받지 않습니다." />
-        <MultiDrop name="certifications" label="보유 인증(복수 선택)" items={CERTIFICATIONS.map((c) => [c, c] as const)} v={v.certifications} />
-        <MultiDrop name="tech_fields" label="주력 기술 분야(복수 선택)" items={TECH_FIELDS.map((c) => [c, c] as const)} v={v.tech_fields} hint="6G·반도체 등 특정 기술 분야 공고 중 우리와 다른 분야를 걸러냅니다. 비우면 아래 보유 기술 문구로 추정합니다." />
-        <Txt id="tech_keywords" label="보유 기술 키워드(선택, 상세·쉼표 구분)" v={v.tech_keywords} max={200} placeholder="예: 극저온, 수소, 스마트공장" />
-      </Group>
-      <Group title="관심 분야">
-        <MultiDrop name="interest_categories" label="관심 있는 지원 분야(복수 선택)" items={CATEGORIES.map((c) => [c.id, c.name] as const)} v={v.interest_categories} hint="추천 순서에서 관심 분야 공고를 앞에 보여 줍니다(다른 공고를 숨기지 않음)." />
-      </Group>
+      <details className="rounded-lg border border-[var(--line)] p-4" open={hasDetail}>
+        <summary className="cursor-pointer text-sm font-bold">더 자세히 입력(선택) — 매출·인원·인증·연구소·관심 분야 등</summary>
+        <div className="mt-4 grid gap-4">
+          <Group title="기본 정보">
+            <Txt id="company_name" label="기업명" v={v.company_name} />
+            <Txt id="representative_name" label="대표자명" v={v.representative_name} max={50} />
+            <Txt id="industry_name" label="업종/주요 제품(상세)" v={v.industry_name} placeholder="예: 금속가공 제조업" />
+            <Txt id="tech_keywords" label="보유 기술 키워드(상세·쉼표 구분)" v={v.tech_keywords} max={200} placeholder="예: 극저온, 수소, 스마트공장" />
+          </Group>
+          <Group title="규모·실적">
+            <Sel id="revenue_band" label="매출 규모 구간" v={v.revenue_band} opts={opt(REVENUE_BANDS)} />
+            <Sel id="employee_count_band" label="종업원 수 구간" v={v.employee_count_band} opts={opt(EMPLOYEE_BANDS)} />
+            <Sel id="export_status" label="수출 실적" v={v.export_status} opts={YN} />
+          </Group>
+          <Group title="인증·역량">
+            <Sel id="research_institute_status" label="기업부설연구소/전담부서" v={v.research_institute_status} opts={YN} />
+            <Sel id="venture_status" label="벤처기업 확인" v={v.venture_status} opts={YN} />
+            <Sel id="has_patent" label="특허 보유" v={v.has_patent} opts={YN} />
+            <Sel id="youth_ceo" label="청년 대표자(만 39세 이하)" v={v.youth_ceo} opts={YN} hint="생년월일은 받지 않습니다." />
+            <MultiDrop name="certifications" label="보유 인증(복수 선택)" items={CERTIFICATIONS.map((c) => [c, c] as const)} v={v.certifications} />
+          </Group>
+          <Group title="관심 분야">
+            <MultiDrop name="interest_categories" label="관심 있는 지원 분야(복수 선택)" items={CATEGORIES.map((c) => [c.id, c.name] as const)} v={v.interest_categories} hint="추천 순서에서 관심 분야 공고를 앞에 보여 줍니다(다른 공고를 숨기지 않음)." />
+          </Group>
+        </div>
+      </details>
     </div>
   );
 }

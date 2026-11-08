@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { STATUS_LABEL, categoryName } from "@/domain/taxonomy";
-import { OVERALL_LABEL, STATE_LABEL, type MatchResult, type RuleState } from "@/domain/matching";
+import { DISPLAY_LABEL, STATE_LABEL, type MatchResult, type RuleState } from "@/domain/matching";
 import { formatSeoul } from "@/lib/time";
 
 export function StatusChip({ status, basis }: { status: string; basis?: string }) {
@@ -13,8 +13,9 @@ export function StatusChip({ status, basis }: { status: string; basis?: string }
 }
 
 export function FitChip({ match }: { match: MatchResult }) {
-  const cls = match.overall === "likely_met" ? "chip-met" : match.overall === "likely_not_met" ? "chip-notmet" : "chip-check";
-  return <span className={`chip ${cls}`}>{OVERALL_LABEL[match.overall]}</span>;
+  const d = match.display;
+  const cls = d === "met" ? "chip-met" : d === "not_met" ? "chip-notmet" : d === "possible_mismatch" ? "bg-rose-50 text-rose-900 border border-rose-200" : d === "insufficient" ? "bg-gray-100 text-gray-800 border border-gray-300" : "chip-check";
+  return <span className={`chip ${cls}`}>{DISPLAY_LABEL[d]}</span>;
 }
 /** 판정 정확도: 확정 판정된 조건 비율 × 규칙 신뢰도 */
 export function AccuracyChip({ match }: { match: MatchResult }) {

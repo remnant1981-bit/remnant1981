@@ -137,7 +137,6 @@ export function isLocal(row: AnnouncementRow, c: CompanyProfile): boolean {
 
 export type RowWithMatch = AnnouncementRow & { match: MatchResult | null; local: boolean };
 
-const RANK = { likely_met: 0, needs_check: 1, likely_not_met: 2 } as const;
 
 export async function attachMatches(db: Db, rows: AnnouncementRow[], company: CompanyProfile | null, today = seoulToday()): Promise<RowWithMatch[]> {
   if (!company) return rows.map((r) => ({ ...r, match: null, local: false }));
@@ -148,7 +147,14 @@ export async function attachMatches(db: Db, rows: AnnouncementRow[], company: Co
 /** 적합성 평가 대상 상한. 전체 공고를 빠짐없이 평가하기 위해 충분히 크게 둔다(초과 시 truncated 표시). */
 export const MATCH_CANDIDATE_LIMIT = 20000;
 
-export interface MatchCounts { likely_met: number; needs_check: number; likely_not_met: number }
+export interface MatchCounts {
+  likely_met: number; needs_check: number; likely_not_met: number;
+  /** needs_check 중 확인된 조건이 없는 공고(정보 부족) */
+  insufficient: number;
+  /** likely_not_met 중 공고 문구 추정 조건만 불일치(별도 탭에서 확인) */
+  possible_mismatch: number;
+}
+const DRANK = { met: 0, check: 1, insufficient: 2, possible_mismatch: 3, not_met: 4 } as const;
 /** 미입력 기업정보 항목별로 판정을 막고 있는 공고 수(정확도 높이기 안내용) */
 export interface MissingStat { fieldKey: string; label: string; count: number }
 
@@ -176,18 +182,23 @@ function interestHit(row: AnnouncementRow, c: CompanyProfile): boolean {
 }
 
 /** 검색 + (기업정보가 있으면) 적합성 부착. 적합도순/해당 가능 필터는 조건에 맞는 전체 공고를 평가한다. */
-export async function searchWithMatches(db: Db, p: SearchParams, company: CompanyProfile | null, today = seoulToday()) {
-  if (company && (p.sort === "fit" || p.eligible || p.metOnly)) {
+export async function searchWithMatches(db: Db, p: SearchParams, company: CompanyProfile | null, today = seoulToday(), opts: { mismatchOnly?: boolean } = {}) {
+  if (company && (p.sort === "fit" || p.eligible || p.metOnly || opts.mismatchOnly)) {
     const candidates = await searchAllForExport(db, p, MATCH_CANDIDATE_LIMIT, today);
     let all = await attachMatches(db, candidates, company, today);
-    const counts: MatchCounts = { likely_met: 0, needs_check: 0, likely_not_met: 0 };
-    for (const r of all) counts[r.match!.overall]++;
+    const counts: MatchCounts = { likely_met: 0, needs_check: 0, likely_not_met: 0, insufficient: 0, possible_mismatch: 0 };
+    for (const r of all) {
+      counts[r.match!.overall]++;
+      if (r.match!.display === "insufficient") counts.insufficient++;
+      if (r.match!.display === "possible_mismatch") counts.possible_mismatch++;
+    }
     const stats = missingStatsOf(all);
-    if (p.metOnly) all = all.filter((r) => r.match!.overall === "likely_met"); // 확인된 조건을 모두 충족한 공고만
+    if (opts.mismatchOnly) all = all.filter((r) => r.match!.display === "possible_mismatch"); // 추정 조건 불일치(숨기지 않고 별도 확인)
+    else if (p.metOnly) all = all.filter((r) => r.match!.overall === "likely_met"); // 확인된 조건을 모두 충족한 공고만
     else if (p.eligible) all = all.filter((r) => r.match!.overall !== "likely_not_met"); // 미충족 가능성 높음 제외(확인 필요는 유지)
     if (p.sort === "fit") {
       all.sort((a, b) =>
-        RANK[a.match!.overall] - RANK[b.match!.overall] || Number(b.local) - Number(a.local) ||
+        DRANK[a.match!.display] - DRANK[b.match!.display] || Number(b.local) - Number(a.local) ||
         Number(interestHit(b, company)) - Number(interestHit(a, company)) || (b.match!.score ?? 0) - (a.match!.score ?? 0));
     }
     const start = (p.page - 1) * p.pageSize;

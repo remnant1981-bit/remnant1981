@@ -6,7 +6,7 @@ import { formatSeoul } from "@/lib/time";
 import type { ExportRecord } from "./records";
 import type { CompanyView } from "@/server/company";
 import type { RowWithMatch } from "@/server/recommend";
-import { OVERALL_LABEL, STATE_LABEL } from "@/domain/matching";
+import { DISPLAY_LABEL, STATE_LABEL } from "@/domain/matching";
 import { categoryName } from "@/domain/taxonomy";
 
 // 폰트는 의존성(@expo-google-fonts/noto-sans-kr, OFL)에서 런타임에 읽는다(번들러 추적 제외).
@@ -111,7 +111,7 @@ export async function buildPdf(input: PdfInput): Promise<Uint8Array> {
     w.text(`접수: ${rec.start || "?"} ~ ${rec.end || "?"} / 상태: ${rec.status}`, { indent: 8 });
     w.text(`신청 방법: ${r.application_method ?? "원문 확인 필요"}`, { indent: 8 });
     if (r.match) {
-      w.text(`기업 적합성(참고): ${OVERALL_LABEL[r.match.overall]}`, { indent: 8, bold: true });
+      w.text(`기업 적합성(참고): ${DISPLAY_LABEL[r.match.display]}`, { indent: 8, bold: true });
       for (const x of r.match.results) w.text(`- [${STATE_LABEL[x.state]}] ${x.label}: ${x.reason}${x.excerpt ? ` (근거: "${x.excerpt}")` : ""}`, { indent: 16, size: 8.5 });
     }
     w.text(`공식 원문: ${rec.url}`, { indent: 8, size: 8.5, color: [0.1, 0.25, 0.6] });

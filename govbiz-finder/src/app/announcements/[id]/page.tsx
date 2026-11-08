@@ -6,7 +6,7 @@ import { getAnnouncement, getAnnouncementExtras } from "@/domain/search";
 import { getViewer } from "@/server/viewer";
 import { loadRules } from "@/server/recommend";
 import { bookmarkedIds, recordView } from "@/server/userdata";
-import { evaluateMatch, OVERALL_LABEL, checkableConditions } from "@/domain/matching";
+import { evaluateMatch, DISPLAY_LABEL, checkableConditions } from "@/domain/matching";
 import { ConditionCheck } from "@/components/ConditionCheck";
 import { categoryName } from "@/domain/taxonomy";
 import { CategoryTags, FitChip, AccuracyChip, Notice, Provenance, RuleChip, StatusChip, TestBadge, BackLink } from "@/components/ui";
@@ -105,7 +105,7 @@ export default async function Detail({ params }: Props) {
           <p className="text-sm">우리 기업 정보를 입력하면 이 공고의 조건별 충족 여부를 보여 드립니다. 로그인은 필요 없습니다. <Link href="/recommend" className="underline">기업정보 입력하기</Link></p>
         ) : (
           <>
-            <p className="mb-2 text-sm">종합: <strong>{OVERALL_LABEL[match.overall]}</strong>{match.score !== null && ` · 참고 점수 ${match.score}점`}{match.accuracy !== null && ` · 판정 정확도 ${match.accuracy}%`}{match.missingLabels.length > 0 && ` · 미입력: ${match.missingLabels.join(", ")}`} <span className="text-[var(--muted)]">(자격 확정 판정이 아닙니다)</span></p>
+            <p className="mb-2 text-sm">종합: <strong>{DISPLAY_LABEL[match.display]}</strong>{match.score !== null && ` · 참고 점수 ${match.score}점`}{match.accuracy !== null && ` · 판정 정확도 ${match.accuracy}%`}{match.missingLabels.length > 0 && ` · 미입력: ${match.missingLabels.join(", ")}`} <span className="text-[var(--muted)]">(자격 확정 판정이 아닙니다)</span></p>
             <ConditionCheck announcementId={a.id} member={!!v.company} items={checkableConditions(match)} />
             {match.results.length === 0 ? <p className="text-sm text-[var(--muted)]">자동 판정 가능한 조건이 구조화되지 않았습니다. 원문을 확인하세요.</p> : (
               <ul className="grid gap-2">{match.results.map((r, i) => (

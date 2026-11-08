@@ -1,5 +1,5 @@
 import { categoryName, STATUS_LABEL } from "@/domain/taxonomy";
-import { OVERALL_LABEL, STATE_LABEL } from "@/domain/matching";
+import { DISPLAY_LABEL, STATE_LABEL } from "@/domain/matching";
 import type { RowWithMatch } from "@/server/recommend";
 import { formatSeoul } from "@/lib/time";
 
@@ -27,7 +27,7 @@ export function toExportRecords(rows: RowWithMatch[], withMatch: boolean): Expor
       start: r.application_start ?? "",
       end: r.application_end ?? "",
       status: statusLabel,
-      fit: m ? OVERALL_LABEL[m.overall] : "",
+      fit: m ? DISPLAY_LABEL[m.display] : "",
       checks,
       url: r.canonical_url,
       lastChecked: formatSeoul(r.last_checked_at),

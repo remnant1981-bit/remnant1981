@@ -56,6 +56,26 @@ export interface MatchResult {
   accuracy: number | null;
   /** 입력하면 자동 판정되는 미입력 기업정보 항목 라벨 */
   missingLabels: string[];
+  /** 화면 표시 단계(저장 상태 overall 은 3단계 유지) */
+  display: Display;
+}
+
+/**
+ * 표시 단계(인계 기준 4단계 + 추정 불일치 구분)
+ * - met: 적합 가능성 높음 / check: 추가 확인 필요 / insufficient: 정보 부족(확인된 조건 없음)
+ * - possible_mismatch: 공고 문구에서 추정한 조건만 불일치(숨기지 않고 별도 탭)
+ * - not_met: 공고에 명시된 조건(지역 등)과 입력 정보가 충돌
+ */
+export type Display = "met" | "check" | "insufficient" | "possible_mismatch" | "not_met";
+export const DISPLAY_LABEL: Record<Display, string> = {
+  met: "적합 가능성 높음", check: "추가 확인 필요", insufficient: "정보 부족", possible_mismatch: "조건 불일치 가능성", not_met: "조건 불일치 확인",
+};
+/** 명시 조건으로 보는 신뢰도 하한(공고 지역·DB 등록 규칙=1). 그 미만은 공고 문구 추정 */
+export const EXPLICIT_CONFIDENCE = 0.9;
+export function displayOf(overall: Overall, results: RuleResult[]): Display {
+  if (overall === "likely_met") return "met";
+  if (overall === "needs_check") return results.some((r) => r.state === "MET") ? "check" : "insufficient";
+  return results.some((r) => r.state === "NOT_MET" && (r.confidence ?? 1) >= EXPLICIT_CONFIDENCE) ? "not_met" : "possible_mismatch";
 }
 
 const LABELS: Record<string, string> = {
@@ -178,8 +198,12 @@ export function evaluateRule(rule: Rule, c: CompanyProfile, today: string): Rule
       const allowed = (Array.isArray(expected) ? expected : [expected]).map(String);
       const src = present(c.industry_group) ? "" : " (업종명에서 추정)";
       const g = gs.find((x) => allowed.includes(x)) ?? gs.join(", ");
-      return gs.some((x) => allowed.includes(x)) ? mk("MET", `업종 분야(${g}${src})가 지원 대상(${allowed.join(", ")})에 해당합니다.`)
-        : notMet(`업종 분야(${g}${src})가 지원 대상(${allowed.join(", ")})에 해당하지 않습니다.`);
+      const ok = gs.some((x) => allowed.includes(x));
+      // 업종 분야를 직접 고르지 않고 업종명에서 추정한 경우: 불일치로 판정하지 않고 '확인 필요'(직접 선택 유도)
+      if (!present(c.industry_group)) return ok ? { ...mk("MET", `업종 분야(${g}${src})가 지원 대상에 해당합니다.`), confidence: Math.min(confidence, 0.5) }
+        : mk("UNKNOWN", `업종명으로 추정한 분야(${g})가 지원 대상(${allowed.join(", ")})과 다를 수 있습니다. 업종 분야를 선택하면 판정합니다.`, true);
+      return ok ? mk("MET", `업종 분야(${g})가 지원 대상(${allowed.join(", ")})에 해당합니다.`)
+        : notMet(`업종 분야(${g})가 지원 대상(${allowed.join(", ")})에 해당하지 않습니다.`);
     }
     case "tech_field": {
       // 기업 주력 기술 분야(선택) → 없으면 보유 기술·업종명 문구에서 추정
@@ -188,6 +212,9 @@ export function evaluateRule(rule: Rule, c: CompanyProfile, today: string): Rule
       const need = (Array.isArray(expected) ? expected : [expected]).map(String);
       const hit = need.filter((x) => own.includes(x));
       const src = present(c.tech_fields) ? "" : " (보유 기술 문구에서 추정)";
+      // 기술 분야를 직접 고르지 않고 문구에서 추정한 경우: 불일치로 판정하지 않고 '확인 필요'(직접 선택 유도)
+      if (!present(c.tech_fields)) return hit.length ? { ...mk("MET", `기술 분야(${hit.join(", ")}${src})가 공고 분야와 일치합니다.`), confidence: Math.min(confidence, 0.5) }
+        : mk("UNKNOWN", `보유 기술로 추정한 분야(${own.join(", ")})가 공고 분야(${need.join(", ")})와 다를 수 있습니다. 주력 기술 분야를 선택하면 판정합니다.`, true);
       return hit.length ? mk("MET", `기술 분야(${hit.join(", ")}${src})가 공고 분야와 일치합니다.`)
         : notMet(`공고 기술 분야(${need.join(", ")})가 우리 기업 분야(${own.join(", ")}${src})와 다릅니다.`);
     }
@@ -245,7 +272,7 @@ export function evaluateMatch(rules: Rule[], c: CompanyProfile | null, today: st
   // 정확도: 확정(MET/NOT_MET)된 조건만 신뢰도만큼 반영. 미입력·원문 확인 조건은 0.
   const accuracy = results.length ? Math.round((results.reduce((s, r) => s + (r.state === "UNKNOWN" ? 0 : r.confidence ?? 1), 0) / results.length) * 100) : null;
   const missingLabels = [...new Set(results.filter((r) => r.missing).map((r) => r.label))];
-  return { overall, score, results, unknownCount, accuracy, missingLabels };
+  return { overall, score, results, unknownCount, accuracy, missingLabels, display: displayOf(overall, results) };
 }
 
 export const OVERALL_LABEL: Record<Overall, string> = {
