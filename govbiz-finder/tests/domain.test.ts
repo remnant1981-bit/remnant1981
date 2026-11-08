@@ -406,3 +406,25 @@ describe("시/도 줄임말은 시/군/구로 보지 않음", () => {
     expect(textRulesFor({ title: "[경기] 광주시 기업 지원", region_scope: "경기도" }).map((r) => r.field_key)).toContain("region_sigungu"); // 경기도 광주시는 실제 시
   });
 });
+
+describe("업종 분야 판정", () => {
+  it("공고명·대상의 수혜 업종을 찾고, 가공·제조 혼재·범용 문구는 제외/약화", async () => {
+    const { industryTargets, textRulesFor } = await import("@/server/recommend");
+    expect(industryTargets("[경기] 시흥시 2026년 친환경농산물 인증확대사업 신청 연장 공고")).toEqual([["농림축수산업", 0.7]]);
+    expect(industryTargets("[경기] 2026년 AI콘텐츠 제작 및 마케팅 활용 교육 참여업체 모집 공고")).toEqual([]);
+    expect(industryTargets("농산물 가공업체 판로 지원")).toEqual([]);
+    expect(industryTargets("관광사업체 및 농가 상생 지원")).toEqual([["농림축수산업", 0.5], ["관광·숙박·음식점", 0.5]]);
+    const r = textRulesFor({ title: "[경기] 시흥시 친환경농산물 인증확대사업", target_summary: "중소기업", region_scope: "경기도" });
+    expect(r.find((x) => x.field_key === "industry_group")).toMatchObject({ expected_value: JSON.stringify(["농림축수산업"]), confidence: 0.7 });
+  });
+  it("기업 업종 분야가 다르면 미충족, 미입력이면 확인 필요(업종명에서 추정 가능하면 사용)", async () => {
+    const { inferIndustryGroup } = await import("@/domain/matching");
+    const rule: Rule = { field_key: "industry_group", operator: "in", expected_value: JSON.stringify(["농림축수산업"]), confidence: 0.7 };
+    expect(evaluateRule(rule, { industry_group: "제조업" }, TODAY).state).toBe("NOT_MET");
+    expect(evaluateRule(rule, { industry_group: "농림축수산업" }, TODAY).state).toBe("MET");
+    expect(evaluateRule(rule, {}, TODAY)).toMatchObject({ state: "UNKNOWN", missing: true });
+    expect(evaluateRule(rule, { industry_name: "금속가공 제조업" }, TODAY).state).toBe("NOT_MET");
+    expect(inferIndustryGroup("경영 컨설팅")).toBeNull();
+    expect(evaluateRule({ ...rule, confidence: 0.5 }, { industry_group: "제조업" }, TODAY).state).toBe("UNKNOWN");
+  });
+});

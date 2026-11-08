@@ -2,7 +2,7 @@
 // 식별 정보(사업자번호·기업명·대표자명)는 넣지 않고, 적합성 판정에 쓰는 항목만 담는다.
 export const GUEST_COOKIE = "gbf_guest_profile";
 export const GUEST_KEYS = [
-  "region_sido", "region_sigungu", "industry_name", "established_at", "enterprise_size", "revenue_band", "employee_count_band",
+  "region_sido", "region_sigungu", "industry_group", "industry_name", "established_at", "enterprise_size", "revenue_band", "employee_count_band",
   "export_status", "research_institute_status", "venture_status", "has_patent", "youth_ceo", "certifications", "tech_keywords", "interest_categories",
 ] as const;
 

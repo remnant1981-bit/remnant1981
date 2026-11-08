@@ -32,6 +32,7 @@ export function AnnouncementCard({ r, canBookmark, bookmarked }: { r: RowWithMat
         <div><dt className="inline text-[var(--muted)]">접수 </dt><dd className="inline font-medium">{r.application_start || r.application_end ? `${r.application_start ?? "확인 필요"} ~ ${r.application_end ?? (r.application_status === "always" ? "상시" : "확인 필요")}` : r.application_status === "always" ? "상시 접수" : "기간 원문 확인"}</dd></div>
       </dl>
       {check && r.match && <CheckHighlight r={r} member={canBookmark} />}
+      {r.match?.overall === "likely_met" && r.match.accuracy !== null && r.match.accuracy < 100 && <AccuracyNote r={r} />}
       <p className="mt-2 line-clamp-2 text-sm text-[var(--muted)]">{r.support_amount_text || shortSummary(r.support_summary) || "지원내용은 상세 페이지에서 확인하세요."}</p>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <Provenance url={r.canonical_url} sourceName={r.source_name} sourceStatus={r.source_status} checkedAt={r.last_checked_at} />
@@ -56,5 +57,16 @@ function CheckHighlight({ r, member }: { r: RowWithMatch; member: boolean }) {
       </ul>
       <InlineFill member={member} fields={[...new Map(m.results.filter((x) => x.missing).map((x) => [x.fieldKey, { fieldKey: x.fieldKey, label: x.label }])).values()]} />
     </div>
+  );
+}
+
+/** 조건 충족 공고인데 정확도가 100% 미만인 이유(공고 문구에서 추정한 조건) */
+function AccuracyNote({ r }: { r: RowWithMatch }) {
+  const low = [...new Set(r.match!.results.filter((x) => x.state === "MET" && (x.confidence ?? 1) < 1).map((x) => x.label))];
+  if (!low.length) return null;
+  return (
+    <p className="mt-2 rounded-lg border border-[var(--line)] bg-gray-50 px-3 py-1.5 text-xs text-[var(--muted)]">
+      정확도 {r.match!.accuracy}%인 이유: <strong>{low.join(", ")}</strong> 조건을 공고 문구에서 추정했습니다. 공식 원문에서 한 번 더 확인하세요.
+    </p>
   );
 }

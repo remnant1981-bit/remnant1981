@@ -1,5 +1,5 @@
 "use client";
-import { REVENUE_BANDS, EMPLOYEE_BANDS, SIDO, ENTERPRISE_SIZES, CERTIFICATIONS, CATEGORIES } from "@/domain/taxonomy";
+import { REVENUE_BANDS, EMPLOYEE_BANDS, SIDO, ENTERPRISE_SIZES, CERTIFICATIONS, CATEGORIES, INDUSTRY_GROUPS } from "@/domain/taxonomy";
 
 type V = Record<string, string | null | undefined>;
 const YN: [string, string][] = [["", "미입력(확인 필요)"], ["yes", "예"], ["no", "아니오"]];
@@ -40,6 +40,7 @@ export function ProfileFields({ v = {} }: { v?: V }) {
         <Txt id="representative_name" label="대표자명" v={v.representative_name} max={50} />
         <Sel id="region_sido" label="소재지(시/도)" v={v.region_sido} opts={opt(SIDO)} hint="지역 한정 공고 판정에 가장 중요합니다." />
         <Txt id="region_sigungu" label="소재지(시/군/구)" v={v.region_sigungu} max={40} placeholder="예: 시흥시" />
+        <Sel id="industry_group" label="업종 분야" v={v.industry_group} opts={opt(INDUSTRY_GROUPS)} hint="농가·관광업체 등 업종 한정 공고를 걸러냅니다." />
         <Txt id="industry_name" label="업종/주요 제품" v={v.industry_name} placeholder="예: 금속가공 제조업" />
         <Txt id="established_at" label="설립일" type="date" v={v.established_at} max={10} hint="업력(창업 N년 이내 등) 판정에 사용" />
       </Group>

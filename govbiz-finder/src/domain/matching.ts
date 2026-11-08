@@ -22,6 +22,7 @@ export interface CompanyProfile {
   youth_ceo?: string | null;
   has_patent?: string | null;
   interest_categories?: string | null;
+  industry_group?: string | null;
 }
 export interface Rule {
   field_key: string;
@@ -56,7 +57,7 @@ const LABELS: Record<string, string> = {
   region_sido: "소재지(시/도)", region_sigungu: "소재지(시/군/구)", industry: "업종", business_age_years: "업력",
   revenue_band: "매출 규모", employee_band: "종업원 수", research_institute: "기업부설연구소/전담부서", venture: "벤처기업 여부",
   export: "수출 여부", tech_keywords: "기술 분야", business_status: "사업자 상태",
-  enterprise_size: "기업 규모", certification: "보유 인증",
+  enterprise_size: "기업 규모", certification: "보유 인증", industry_group: "업종 분야",
 };
 const YN = (v: string) => (v === "yes" ? "예" : "아니오");
 
@@ -83,6 +84,19 @@ export function anniversary(established: string, years: number): string {
     d = t.toISOString().slice(0, 10);
   }
   return d;
+}
+
+/** 업종명(자유 입력)에서 업종 분야 추정. 확실한 경우만, 아니면 null */
+export function inferIndustryGroup(name: string | null | undefined): string | null {
+  const n = (name ?? "").replace(/\s/g, "");
+  if (!n) return null;
+  if (/제조|가공|생산|금속|기계|부품|화학|전자|섬유/.test(n)) return "제조업";
+  if (/농업|농가|축산|어업|수산|임업|양식|원예|과수/.test(n)) return "농림축수산업";
+  if (/소프트웨어|SW|정보통신|ICT|플랫폼|IT서비스|앱개발/i.test(n)) return "정보통신·SW";
+  if (/숙박|호텔|펜션|음식점|외식|카페|관광|여행/.test(n)) return "관광·숙박·음식점";
+  if (/건설|토목|인테리어|설비공사/.test(n)) return "건설업";
+  if (/도매|소매|유통|무역|쇼핑몰|판매업/.test(n)) return "도소매·유통";
+  return null;
 }
 
 function present(v: string | null | undefined): v is string {
@@ -152,6 +166,14 @@ export function evaluateRule(rule: Rule, c: CompanyProfile, today: string): Rule
       const val = rule.field_key === "research_institute" ? c.research_institute_status : rule.field_key === "venture" ? c.venture_status : c.export_status;
       if (!present(val)) return unknown();
       return val === expected ? mk("MET", `${label}: ${YN(val)} (요건 ${YN(String(expected))})`) : notMet(`${label}: ${YN(val)} (요건 ${YN(String(expected))})`);
+    }
+    case "industry_group": {
+      const g = present(c.industry_group) ? c.industry_group : inferIndustryGroup(c.industry_name);
+      if (!g) return unknown();
+      const allowed = (Array.isArray(expected) ? expected : [expected]).map(String);
+      const src = present(c.industry_group) ? "" : " (업종명에서 추정)";
+      return allowed.includes(g) ? mk("MET", `업종 분야(${g}${src})가 지원 대상(${allowed.join(", ")})에 해당합니다.`)
+        : notMet(`업종 분야(${g}${src})가 지원 대상(${allowed.join(", ")})에 해당하지 않습니다.`);
     }
     case "enterprise_size": {
       if (!present(c.enterprise_size)) return unknown();
