@@ -16,10 +16,13 @@ import { QuickFill } from "@/components/QuickFill";
 export const metadata: Metadata = { title: "맞춤 추천", alternates: { canonical: "/recommend" } };
 
 const TABS = [
-  { id: "all", label: "맞춤 공고", desc: "적합 가능성 높은 공고를 먼저, 이어서 ‘추가 확인 필요’(노란 표시)와 ‘정보 부족’ 공고를 보여 줍니다. 미입력 정보는 부적격이 아니라 확인 대상이며, 신청 가능할 수 있으니 놓치지 마세요." },
+  { id: "priority", label: "우선 추천", desc: "자격 조건에 걸리는 것이 없고, 우리 기업과 관련 있다는 근거(기술·업종 일치, 관심 분야, 우리 시·군 공고 등)가 있는 공고입니다. 기술 분야·관심 분야를 선택할수록 정확해집니다." },
+  { id: "all", label: "검토 가능 전체", desc: "자격 조건에 걸리는 것이 없는 모든 공고(적합 가능성 높음 + 추가 확인 필요)입니다. 관련성 근거가 없을 뿐 신청 가능할 수 있습니다." },
   { id: "met", label: "조건 충족만", desc: "입력한 기업정보로 확인한 신청 조건을 모두 충족한 공고만 보여 줍니다." },
-  { id: "mismatch", label: "불일치 가능성", desc: "공고명·지원대상 문구에서 추정한 조건(시·군, 업종, 기술 분야 등)이 우리 기업과 달라 맞춤 공고에서 뺀 공고입니다. 추정이 틀렸으면 카드에서 ‘해당함’을 선택하면 맞춤 공고로 돌아갑니다. 공고에 명시된 조건(지역 등)과 충돌하는 공고는 포함하지 않습니다." },
+  { id: "insufficient", label: "정보 부족", desc: "자동으로 확인된 조건이 아직 없는 공고입니다. 부적격이 아니라 판단 보류이며, 기업정보를 더 입력하거나 원문에서 확인하세요." },
+  { id: "mismatch", label: "불일치 가능성", desc: "공고명·지원대상 등에서 읽은 조건(시·군, 업종, 기술 분야, 지원 대상 규모)이 우리 기업과 달라 보이는 공고입니다. 추정이 틀렸으면 카드에서 ‘해당함’을 선택하면 돌아갑니다. 공고에 명시된 지역과 충돌하는 공고는 포함하지 않습니다." },
 ] as const;
+type TabId = (typeof TABS)[number]["id"];
 
 export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
@@ -27,14 +30,15 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
   const profile = v.profile;
   if (profile) {
     const member = !!(v.company && v.session);
-    const tab = sp.tab === "met" ? "met" : sp.tab === "mismatch" ? "mismatch" : "all";
+    const tab: TabId = (TABS.find((t) => t.id === sp.tab)?.id ?? "priority") as TabId;
     const page = typeof sp.page === "string" ? sp.page : "1";
     const db = await getDb();
-    const p = parseSearchParams({ sort: "fit", size: "20", page, status: "open,upcoming,always,unknown", ...(tab === "met" ? { met: "1" } : tab === "all" ? { eligible: "1" } : {}) });
-    const res = await searchWithMatches(db, p, profile, undefined, { mismatchOnly: tab === "mismatch" });
+    const p = parseSearchParams({ sort: "fit", size: "20", page, status: "open,upcoming,always,unknown", });
+    const res = await searchWithMatches(db, p, profile, undefined, { view: tab });
     if (member) await saveMatches(db, v.company!.id, res.rows);
     const marks = member ? await bookmarkedIds(db, v.session!.user.id, v.company!.id) : new Set<string>();
-    const c = res.counts ?? { likely_met: 0, needs_check: 0, likely_not_met: 0, insufficient: 0, possible_mismatch: 0 };
+    const c = res.counts ?? { likely_met: 0, needs_check: 0, likely_not_met: 0, insufficient: 0, possible_mismatch: 0, priority: 0 };
+    const tabCount: Record<TabId, number> = { priority: c.priority, all: c.likely_met + c.needs_check - c.insufficient, met: c.likely_met, insufficient: c.insufficient, mismatch: c.possible_mismatch };
     const comp = profileCompleteness(profile as unknown as Record<string, unknown>);
     return (
       <>
@@ -49,12 +53,16 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
         <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
           <div className="card p-4" title="자동 판정한 조건 비율 × 규칙 신뢰도의 평균(참고 지표)"><p className="text-xs text-[var(--muted)]">맞춤 정확도</p><p className="text-2xl font-bold text-blue-800">{res.accuracy === null ? "-" : `${res.accuracy}%`}</p>
             <div className="mt-1 h-1.5 rounded bg-gray-200" aria-hidden><div className="h-1.5 rounded bg-blue-600" style={{ width: `${res.accuracy ?? 0}%` }} /></div></div>
-          <div className="card p-4"><p className="text-xs text-[var(--muted)]">적합 가능성 높음</p><p className="text-2xl font-bold text-green-800">{c.likely_met.toLocaleString()}건</p></div>
-          <div className="card p-4"><p className="text-xs text-[var(--muted)]">추가 확인 필요</p><p className="text-2xl font-bold text-amber-800">{(c.needs_check - c.insufficient).toLocaleString()}건</p>
-            <p className="text-xs text-[var(--muted)]">정보 부족 {c.insufficient.toLocaleString()}건 별도</p></div>
+          <Link href="/recommend?tab=priority" className="card block p-4 hover:underline"><p className="text-xs text-[var(--muted)]">우선 추천</p><p className="text-2xl font-bold text-green-800">{c.priority.toLocaleString()}건</p>
+            <p className="text-xs text-[var(--muted)]">관련성 근거 있음</p></Link>
+          <Link href="/recommend?tab=all" className="card block p-4 hover:underline"><p className="text-xs text-[var(--muted)]">검토 가능 전체</p><p className="text-2xl font-bold text-amber-800">{tabCount.all.toLocaleString()}건</p>
+            <p className="text-xs text-[var(--muted)]">정보 부족 {c.insufficient.toLocaleString()}건 별도</p></Link>
           <Link href="/recommend?tab=mismatch" className="card block p-4 hover:underline"><p className="text-xs text-[var(--muted)]">조건 불일치 가능성</p><p className="text-2xl font-bold text-rose-800">{c.possible_mismatch.toLocaleString()}건</p>
             <p className="text-xs text-[var(--muted)]">명시 조건 불일치 {(c.likely_not_met - c.possible_mismatch).toLocaleString()}건 제외</p></Link>
         </div>
+        {(!profile.tech_fields || !profile.interest_categories || !profile.industry_group) && (
+          <div className="mt-3"><Notice tone="warn"><strong>우선 추천을 정확하게:</strong> {[!profile.industry_group && "업종 분야", !profile.tech_fields && "주력 기술 분야", !profile.interest_categories && "관심 분야"].filter(Boolean).join(" · ")}를 선택하면 관련 공고만 골라 드립니다. <Link className="underline" href={member ? "/company" : "#edit-profile"}>기업정보에서 선택하기</Link></Notice></div>
+        )}
         <QuickFill items={res.missing} accuracy={res.accuracy} member={member} />
         {comp.filled < 8 && res.missing.length === 0 && (
           <div className="mt-3"><Notice tone="warn">기업정보 {comp.total}개 항목 중 {comp.filled}개만 입력되어 ‘확인 필요’ 공고가 많습니다. <Link className="underline" href={member ? "/company" : "/recommend"}>기업정보를 더 입력</Link>하면 조건 충족 공고를 더 정확하게 골라 드립니다(모두 선택 입력).</Notice></div>
@@ -63,7 +71,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
           {TABS.map((t) => (
             <Link key={t.id} role="tab" aria-selected={tab === t.id} href={`/recommend?tab=${t.id}`}
               className={`-mb-px shrink-0 rounded-t-lg border px-3 py-2 text-sm font-semibold sm:px-4 ${tab === t.id ? "border-[var(--line)] border-b-white bg-white text-[var(--brand)]" : "border-transparent text-[var(--muted)] hover:text-[var(--ink)]"}`}>
-              {t.label} <span className="ml-1 text-xs">({(t.id === "met" ? c.likely_met : t.id === "mismatch" ? c.possible_mismatch : c.likely_met + c.needs_check).toLocaleString()})</span>
+              {t.label} <span className="ml-1 text-xs">({tabCount[t.id].toLocaleString()})</span>
             </Link>
           ))}
         </div>
@@ -73,8 +81,9 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
         <div className="mt-4 grid gap-3">
           {res.rows.length ? res.rows.map((r) => <AnnouncementCard key={r.id} r={r} canBookmark={member} bookmarked={marks.has(r.id)} />)
             : tab === "mismatch" ? <Empty title="추정 조건 때문에 제외한 공고가 없습니다." />
+            : tab === "priority" ? <Empty title="관련성 근거가 있는 공고가 아직 없습니다.">기업정보에서 <strong>주력 기술 분야·업종 분야·관심 분야</strong>를 선택하면 우선 추천이 생깁니다. 자격에 걸리지 않는 공고는 <Link className="underline" href="/recommend?tab=all">검토 가능 전체</Link>에서 볼 수 있습니다.</Empty>
             : tab === "met"
-              ? <Empty title="확인된 조건을 모두 충족한 공고가 아직 없습니다.">기업정보를 더 입력하거나 <Link className="underline" href="/recommend?tab=all">맞춤 공고</Link> 탭에서 확인해 보세요.</Empty>
+              ? <Empty title="확인된 조건을 모두 충족한 공고가 아직 없습니다.">기업정보를 더 입력하거나 <Link className="underline" href="/recommend?tab=all">검토 가능 전체</Link> 탭에서 확인해 보세요.</Empty>
               : <Empty title="추천할 공고가 없습니다." />}
         </div>
         <Pager path="/recommend" base={`tab=${tab}`} page={res.page} pages={res.pages} />

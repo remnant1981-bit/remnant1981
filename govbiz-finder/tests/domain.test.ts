@@ -336,16 +336,18 @@ import { textRulesFor } from "@/server/recommend";
 import { validateProfile } from "@/server/company";
 describe("본문 기반 규칙(AI 미사용)과 확장 프로필", () => {
   const T = "2026-06-01";
-  it("지원대상 규모·업력·인증을 정규식으로 추출하고 신뢰도는 낮게(불일치=확인 필요)", () => {
+  it("지원대상 규모(구조화 필드 0.7)·업력·인증(문구 0.5) 추출, 규모 불일치는 '불일치 가능성'", () => {
     const r = textRulesFor({ title: "[경기] 여성기업 판로 지원", target_summary: "중소기업", original_text: "☞ 창업 7년 이내 중소·중견기업\n※ 자세한 내용 공고문 참조" });
     const keys = r.map((x) => x.field_key);
     expect(keys).toEqual(["enterprise_size", "business_age_years", "certification"]);
     expect(JSON.parse(r[0].expected_value)).toEqual(expect.arrayContaining(["중소기업", "소상공인", "중견기업"]));
     expect(r[1].source_excerpt).toContain("창업 7년 이내");
-    expect(r.every((x) => (x.confidence ?? 1) < 0.6)).toBe(true);
-    // 충족이면 MET, 불일치는 미충족으로 단정하지 않음
+    expect(r[0].confidence).toBe(0.7);
+    expect(r.slice(1).every((x) => (x.confidence ?? 1) < 0.6)).toBe(true);
     expect(evaluateMatch(r, { enterprise_size: "중소기업", established_at: "2022-01-01", certifications: "여성기업" }, T).overall).toBe("likely_met");
-    expect(evaluateMatch(r, { enterprise_size: "대기업", established_at: "2000-01-01", certifications: "" }, T).overall).toBe("needs_check");
+    // 직접 고른 규모가 지원대상과 다르면 '불일치 가능성'(숨기지 않고 별도 탭), 문구 추정 조건(업력·인증) 불일치는 확인 필요
+    expect(evaluateMatch(r, { enterprise_size: "대기업", established_at: "2000-01-01", certifications: "" }, T).display).toBe("possible_mismatch");
+    expect(evaluateMatch(r, { established_at: "2000-01-01", certifications: "" }, T).overall).toBe("needs_check");
   });
   it("판정할 수 없는 대상 표기는 규칙을 만들지 않는다", () => {
     expect(textRulesFor({ target_summary: "창업벤처", original_text: "" })).toEqual([]);
@@ -499,5 +501,33 @@ describe("표시 단계(인계 기준)", () => {
     // 추정 불일치는 '해당함' 직접 확인으로 되살림
     expect(evaluateMatch([region, city], { region_sido: "경기도", region_sigungu: "시흥시", checks: { A: { region_sigungu: "yes" } } }, T, "A").display).toBe("met");
     expect(displayOf("likely_met", [])).toBe("met");
+  });
+});
+
+describe("관련성(우선 추천)", () => {
+  it("기술·업종 일치·관심 분야·우리 시·군은 우선 추천 근거, 근거 없으면 0점(부적격 아님)", async () => {
+    const { relevanceOf, PRIORITY_THRESHOLD } = await import("@/server/recommend");
+    const row = { category_ids: "rnd,export", region_scope: "경기도" } as any;
+    const tech: Rule = { field_key: "tech_field", operator: "in", expected_value: JSON.stringify(["수소·에너지"]), confidence: 0.6 };
+    const c = { region_sido: "경기도", tech_fields: "수소·에너지", interest_categories: "rnd" };
+    const m = evaluateMatch([tech], c, TODAY);
+    const rel = relevanceOf(row, m, c, true);
+    expect(rel.reasons).toEqual(["기술 분야 일치", "관심 분야", "우리 시·도 공고"]);
+    expect(rel.score).toBeGreaterThanOrEqual(PRIORITY_THRESHOLD);
+    const none = relevanceOf({ category_ids: "hr", region_scope: "전국" } as any, evaluateMatch([], {}, TODAY), { region_sido: "경기도" }, false);
+    expect(none).toEqual({ score: 0, reasons: [] });
+    // 문구 추정으로만 일치(신뢰도 0.5)한 기술 분야는 우선 추천 근거로 쓰지 않음
+    const inferred = evaluateMatch([tech], { tech_keywords: "액체수소" }, TODAY);
+    expect(relevanceOf(row, inferred, { tech_keywords: "액체수소" }, false).reasons).not.toContain("기술 분야 일치");
+  });
+  it("우선 추천 보기와 집계", async () => {
+    const db = await freshDb();
+    const c = { region_sido: "경기도", interest_categories: "finance" };
+    const pr = await searchWithMatches(db, parseSearchParams({ size: "50", sort: "fit" }), c, TODAY, { view: "priority" });
+    expect(pr.counts!.priority).toBe(pr.total);
+    for (const r of pr.rows) expect(r.relevance!.score).toBeGreaterThanOrEqual(30);
+    const all = await searchWithMatches(db, parseSearchParams({ size: "50", sort: "fit" }), c, TODAY, { view: "all" });
+    expect(all.total).toBeGreaterThanOrEqual(pr.total);
+    for (const r of all.rows) expect(["met", "check"]).toContain(r.match!.display);
   });
 });

@@ -85,7 +85,8 @@ export function textRulesFor(row: { title?: string | null; target_summary?: stri
   if (tokens.length && tokens.every((t) => SIZE_TOKENS[t])) {
     const allowed = new Set(tokens.flatMap((t) => SIZE_TOKENS[t]));
     if (/중견/.test(body)) allowed.add("중견기업");
-    rules.push({ field_key: "enterprise_size", operator: "in", expected_value: JSON.stringify([...allowed]), source_excerpt: `지원 대상: ${row.target_summary}`, confidence: 0.5 });
+    // 기업마당 '지원대상'은 구조화 필드 → 기업이 규모를 직접 고른 경우 불일치는 '불일치 가능성'(복귀 가능)으로 분리
+    rules.push({ field_key: "enterprise_size", operator: "in", expected_value: JSON.stringify([...allowed]), source_excerpt: `지원 대상: ${row.target_summary}`, confidence: 0.7 });
   }
   // 업력/창업 N년 이내·이상
   const m = body.match(/(업력|창업(?:\s*후)?|설립(?:\s*후)?)\s*(\d{1,2})\s*년\s*(이내|미만|이하|이상|초과)/);
@@ -135,13 +136,38 @@ export function isLocal(row: AnnouncementRow, c: CompanyProfile): boolean {
   return row.region_scope.split("·").some((x) => x === c.region_sido || x.startsWith(c.region_sido + " "));
 }
 
-export type RowWithMatch = AnnouncementRow & { match: MatchResult | null; local: boolean };
+export type RowWithMatch = AnnouncementRow & { match: MatchResult | null; local: boolean; relevance?: Relevance };
+
+/**
+ * 관련성(적격성과 별개): 공고 내용이 우리 기업과 관련 있다는 '긍정 근거'.
+ * 근거가 없다고 부적격은 아니며, '우선 추천' 정렬·구분에만 사용한다.
+ */
+export interface Relevance { score: number; reasons: string[] }
+export const PRIORITY_THRESHOLD = 30;
+export function relevanceOf(row: AnnouncementRow, m: MatchResult, c: CompanyProfile, local: boolean): Relevance {
+  const reasons: string[] = [];
+  let score = 0;
+  const met = (k: string) => m.results.some((x) => x.fieldKey === k && x.state === "MET" && (x.confidence ?? 1) >= 0.6);
+  if (met("tech_field")) { score += 50; reasons.push("기술 분야 일치"); }
+  if (met("industry_group") || met("industry")) { score += 40; reasons.push("업종 일치"); }
+  if (met("certification")) { score += 30; reasons.push("보유 인증 대상"); }
+  if (interestHit(row, c)) { score += 30; reasons.push("관심 분야"); }
+  if (met("region_sigungu")) { score += 30; reasons.push("우리 시·군 공고"); }
+  else if (local) { score += 15; reasons.push("우리 시·도 공고"); }
+  if (met("business_age_years")) { score += 10; reasons.push("업력 조건 충족"); }
+  if (met("enterprise_size")) score += 5;
+  return { score, reasons };
+}
 
 
 export async function attachMatches(db: Db, rows: AnnouncementRow[], company: CompanyProfile | null, today = seoulToday()): Promise<RowWithMatch[]> {
   if (!company) return rows.map((r) => ({ ...r, match: null, local: false }));
   const rules = await loadRules(db, rows.map((r) => r.id));
-  return rows.map((r) => ({ ...r, match: evaluateMatch(rules.get(r.id) ?? [], company, today, r.id), local: isLocal(r, company) }));
+  return rows.map((r) => {
+    const match = evaluateMatch(rules.get(r.id) ?? [], company, today, r.id);
+    const local = isLocal(r, company);
+    return { ...r, match, local, relevance: relevanceOf(r, match, company, local) };
+  });
 }
 
 /** 적합성 평가 대상 상한. 전체 공고를 빠짐없이 평가하기 위해 충분히 크게 둔다(초과 시 truncated 표시). */
@@ -153,7 +179,12 @@ export interface MatchCounts {
   insufficient: number;
   /** likely_not_met 중 공고 문구 추정 조건만 불일치(별도 탭에서 확인) */
   possible_mismatch: number;
+  /** 적합/추가 확인 중 관련성 근거가 있는 '우선 추천' */
+  priority: number;
 }
+/** 맞춤 추천 화면 보기: 우선 추천 / 검토 가능 전체(적합+추가 확인) / 조건 충족만 / 정보 부족 / 불일치 가능성 */
+export type RecommendView = "priority" | "all" | "met" | "insufficient" | "mismatch";
+const isPriority = (r: RowWithMatch) => (r.match!.display === "met" || r.match!.display === "check") && (r.relevance?.score ?? 0) >= PRIORITY_THRESHOLD;
 const DRANK = { met: 0, check: 1, insufficient: 2, possible_mismatch: 3, not_met: 4 } as const;
 /** 미입력 기업정보 항목별로 판정을 막고 있는 공고 수(정확도 높이기 안내용) */
 export interface MissingStat { fieldKey: string; label: string; count: number }
@@ -182,23 +213,28 @@ function interestHit(row: AnnouncementRow, c: CompanyProfile): boolean {
 }
 
 /** 검색 + (기업정보가 있으면) 적합성 부착. 적합도순/해당 가능 필터는 조건에 맞는 전체 공고를 평가한다. */
-export async function searchWithMatches(db: Db, p: SearchParams, company: CompanyProfile | null, today = seoulToday(), opts: { mismatchOnly?: boolean } = {}) {
-  if (company && (p.sort === "fit" || p.eligible || p.metOnly || opts.mismatchOnly)) {
+export async function searchWithMatches(db: Db, p: SearchParams, company: CompanyProfile | null, today = seoulToday(), opts: { view?: RecommendView } = {}) {
+  if (company && (p.sort === "fit" || p.eligible || p.metOnly || opts.view)) {
     const candidates = await searchAllForExport(db, p, MATCH_CANDIDATE_LIMIT, today);
     let all = await attachMatches(db, candidates, company, today);
-    const counts: MatchCounts = { likely_met: 0, needs_check: 0, likely_not_met: 0, insufficient: 0, possible_mismatch: 0 };
+    const counts: MatchCounts = { likely_met: 0, needs_check: 0, likely_not_met: 0, insufficient: 0, possible_mismatch: 0, priority: 0 };
     for (const r of all) {
       counts[r.match!.overall]++;
       if (r.match!.display === "insufficient") counts.insufficient++;
       if (r.match!.display === "possible_mismatch") counts.possible_mismatch++;
+      if (isPriority(r)) counts.priority++;
     }
     const stats = missingStatsOf(all);
-    if (opts.mismatchOnly) all = all.filter((r) => r.match!.display === "possible_mismatch"); // 추정 조건 불일치(숨기지 않고 별도 확인)
-    else if (p.metOnly) all = all.filter((r) => r.match!.overall === "likely_met"); // 확인된 조건을 모두 충족한 공고만
+    const v = opts.view;
+    if (v === "mismatch") all = all.filter((r) => r.match!.display === "possible_mismatch"); // 추정 조건 불일치(숨기지 않고 별도 확인)
+    else if (v === "priority") all = all.filter(isPriority);
+    else if (v === "all") all = all.filter((r) => r.match!.display === "met" || r.match!.display === "check");
+    else if (v === "insufficient") all = all.filter((r) => r.match!.display === "insufficient");
+    else if (v === "met" || p.metOnly) all = all.filter((r) => r.match!.overall === "likely_met"); // 확인된 조건을 모두 충족한 공고만
     else if (p.eligible) all = all.filter((r) => r.match!.overall !== "likely_not_met"); // 미충족 가능성 높음 제외(확인 필요는 유지)
     if (p.sort === "fit") {
       all.sort((a, b) =>
-        DRANK[a.match!.display] - DRANK[b.match!.display] || Number(b.local) - Number(a.local) ||
+        DRANK[a.match!.display] - DRANK[b.match!.display] || (b.relevance?.score ?? 0) - (a.relevance?.score ?? 0) || Number(b.local) - Number(a.local) ||
         Number(interestHit(b, company)) - Number(interestHit(a, company)) || (b.match!.score ?? 0) - (a.match!.score ?? 0));
     }
     const start = (p.page - 1) * p.pageSize;
