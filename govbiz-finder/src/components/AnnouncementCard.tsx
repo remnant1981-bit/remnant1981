@@ -25,6 +25,7 @@ export function AnnouncementCard({ r, canBookmark, bookmarked }: { r: RowWithMat
         <TestBadge status={r.source_status} name={r.source_name} />
         {r.match && <FitChip match={r.match} />}
         {r.match && r.match.overall !== "likely_not_met" && <AccuracyChip match={r.match} />}
+        {r.match && r.match.overall !== "likely_not_met" && r.relevance?.reasons.filter((x) => x !== "우리 시·도 공고").map((x) => <span key={x} className="chip border border-indigo-200 bg-indigo-50 text-indigo-900">★ {x}</span>)}
       </div>
       {soon && bookmarked && (
         <p className="mt-2 rounded-lg bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-800">★ 관심 공고 · {d === 0 ? "오늘 마감입니다" : `마감까지 ${d}일 남았습니다`} — 신청 서류를 확인하세요</p>

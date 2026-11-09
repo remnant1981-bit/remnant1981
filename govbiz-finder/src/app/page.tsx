@@ -52,13 +52,13 @@ export default async function Home() {
         const base = parseSearchParams({ sort: "fit", size: "1", status: "open,upcoming,always,unknown", eligible: "1" });
         const all = await searchWithMatches(db, base, company);
         const soon = await searchWithMatches(db, { ...base, soon: true, metOnly: true }, company);
-        const c = all.counts ?? { likely_met: 0, needs_check: 0, likely_not_met: 0, insufficient: 0, possible_mismatch: 0 };
+        const c = all.counts ?? { likely_met: 0, needs_check: 0, likely_not_met: 0, insufficient: 0, possible_mismatch: 0, priority: 0 };
         return (
           <section aria-labelledby="mine" className="card mt-5 p-5">
             <h2 id="mine" className="font-bold">{v.company?.company_name ?? "우리 기업"} 맞춤 현황{!v.company && <span className="ml-2 text-xs font-normal text-[var(--muted)]">(이 브라우저에 저장한 정보 기준)</span>}</h2>
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
-              <Link href="/recommend?tab=met" className="rounded-lg border border-green-200 bg-green-50 p-3 hover:underline"><span className="block text-xs text-green-900">조건 충족 공고</span><span className="text-xl font-bold text-green-900">{c.likely_met}건</span></Link>
-              <Link href="/recommend?tab=all" className="rounded-lg border border-amber-200 bg-amber-50 p-3 hover:underline"><span className="block text-xs text-amber-900">확인 필요(검토 권장)</span><span className="text-xl font-bold text-amber-900">{c.needs_check}건</span></Link>
+              <Link href="/recommend?tab=priority" className="rounded-lg border border-green-200 bg-green-50 p-3 hover:underline"><span className="block text-xs text-green-900">우선 추천</span><span className="text-xl font-bold text-green-900">{c.priority}건</span></Link>
+              <Link href="/recommend?tab=all" className="rounded-lg border border-amber-200 bg-amber-50 p-3 hover:underline"><span className="block text-xs text-amber-900">검토 가능 전체</span><span className="text-xl font-bold text-amber-900">{c.likely_met + c.needs_check - c.insufficient}건</span></Link>
               <Link href="/search?soon=1&met=1&sort=deadline" className="rounded-lg border border-red-200 bg-red-50 p-3 hover:underline"><span className="block text-xs text-red-900">조건 충족 중 마감 7일 이내</span><span className="text-xl font-bold text-red-900">{soon.total}건</span></Link>
             </div>
           </section>
