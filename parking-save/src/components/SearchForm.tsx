@@ -60,7 +60,7 @@ export function SearchForm({ defaults = {}, places = PLACES }: { defaults?: Form
           <div><label htmlFor="start" className="block text-sm">시작 일시</label>
             <input id="start" name="start" type="datetime-local" required className={field} value={start} onChange={(e) => setStart(e.target.value)} /></div>
           <div><label htmlFor="end" className="block text-sm">종료 일시</label>
-            <input id="end" name="end" type="datetime-local" required className={field} value={end} onChange={(e) => setEnd(e.target.value)} /></div>
+            <input id="end" name="end" type="datetime-local" required min={start || undefined} className={field} value={end} onChange={(e) => setEnd(e.target.value)} /></div>
         </div>
         <div className="flex flex-wrap gap-2" role="group" aria-label="빠른 주차 시간 선택">
           {QUICK.map((h) => <button key={h} type="button" onClick={() => quick(h)} className="rounded border border-gray-500 px-3 py-1 text-sm">{h}시간</button>)}
