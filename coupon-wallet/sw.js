@@ -1,5 +1,8 @@
-const CACHE = 'coupon-wallet-v1';
-const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+importScripts('logic.js', 'store.js');
+
+const CACHE = `coupon-wallet-${CW.VERSION}`;
+const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'logic.js', 'store.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const NET_TIMEOUT = 3000;
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -7,26 +10,43 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k.startsWith('coupon-wallet-') && k !== CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
 
-// 네트워크 우선, 실패 시 캐시 (코드 수정이 바로 반영되고 오프라인에서도 동작)
+// 네트워크 우선(항상 최신) + 3초 안에 응답이 없거나 오프라인이면 캐시 (느린 망에서 빈 화면 방지)
 self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
-  e.respondWith(
-    fetch(e.request)
-      .then(res => {
-        const copy = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, copy));
-        return res;
-      })
-      .catch(() => caches.match(e.request).then(r => r || caches.match('index.html')))
-  );
+  const req = e.request;
+  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  e.respondWith((async () => {
+    const cache = await caches.open(CACHE);
+    try {
+      const res = await Promise.race([
+        fetch(req),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), NET_TIMEOUT))
+      ]);
+      if (res && res.ok && res.type === 'basic') cache.put(req, res.clone());
+      return res;
+    } catch (err) {
+      const hit = await cache.match(req, { ignoreSearch: true });
+      if (hit) return hit;
+      if (req.mode === 'navigate') return (await cache.match('index.html')) || Response.error();
+      return Response.error();
+    }
+  })());
+});
+
+// 백그라운드 점검: 설치된 PWA에서 크롬이 허용하는 주기(보통 하루 1회 안팎, 보장되지 않음)로 호출됨
+self.addEventListener('periodicsync', e => {
+  if (e.tag === 'expiry-check') e.waitUntil(CWStore.checkAndNotify(self.registration).catch(() => {}));
 });
 
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  e.waitUntil(self.clients.matchAll({ type: 'window' }).then(list => (list[0] ? list[0].focus() : self.clients.openWindow('./'))));
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then(list => (list[0] ? list[0].focus() : self.clients.openWindow('./')))
+  );
 });
