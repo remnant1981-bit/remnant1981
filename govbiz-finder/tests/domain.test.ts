@@ -531,3 +531,16 @@ describe("관련성(우선 추천)", () => {
     for (const r of all.rows) expect(["met", "check"]).toContain(r.match!.display);
   });
 });
+
+describe("판정 규칙 캐시", () => {
+  it("공고가 바뀌면 캐시를 버리고 새 규칙을 만든다", async () => {
+    const db = await freshDb();
+    const row = (await searchAnnouncements(db, parseSearchParams({ size: "1" }), TODAY)).rows[0];
+    const a = (await loadRules(db, [row.id])).get(row.id)!;
+    expect((await loadRules(db, [row.id])).get(row.id)).toBe(a); // 같은 객체 재사용(캐시 적중)
+    await db.run("UPDATE announcements SET title=?, region_scope='전국', updated_at=? WHERE id=?", ["6G 통신 실증 지원", "2999-01-01T00:00:00.000Z", row.id]);
+    const b = (await loadRules(db, [row.id])).get(row.id)!;
+    expect(b).not.toBe(a);
+    expect(b.some((x) => x.field_key === "tech_field")).toBe(true);
+  });
+});

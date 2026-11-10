@@ -27,9 +27,14 @@ export default async function Home() {
   ]);
   // 기업정보가 있으면 '해당 안 됨' 공고는 홈 목록에서 제외(전체는 '더 보기'의 검색에서 확인)
   const section = async (title: string, id: string, res: typeof open, more: string) => {
-    const rows = v.profile
-      ? (await searchWithMatches(db, { ...parseSearchParams(Object.fromEntries(new URLSearchParams(more.split("?")[1] ?? ""))), pageSize: 5, eligible: true }, v.profile)).rows
-      : await attachMatches(db, res.rows, v.profile);
+    let rows = await attachMatches(db, res.rows, null);
+    if (v.profile) {
+      // 상위 50건만 판정해 해당 가능 공고 5건을 고른다(전체 판정 반복 방지). 부족할 때만 전체 판정으로 보완
+      const q = parseSearchParams(Object.fromEntries(new URLSearchParams(more.split("?")[1] ?? "")));
+      const head = await attachMatches(db, (await searchAnnouncements(db, { ...q, page: 1, pageSize: 50 })).rows, v.profile);
+      rows = head.filter((r) => r.match!.overall !== "likely_not_met").slice(0, 5);
+      if (rows.length < 5 && head.length === 50) rows = (await searchWithMatches(db, { ...q, pageSize: 5, eligible: true }, v.profile)).rows;
+    }
     if (v.profile) { title = `${title} · 우리 기업 해당 가능`; more = `${more}&eligible=1`; }
     return (
       <section aria-labelledby={id} className="mt-8">
@@ -51,15 +56,14 @@ export default async function Home() {
       {v.profile && await (async (company) => {
         const base = parseSearchParams({ sort: "fit", size: "1", status: "open,upcoming,always,unknown", eligible: "1" });
         const all = await searchWithMatches(db, base, company);
-        const soon = await searchWithMatches(db, { ...base, soon: true, metOnly: true }, company);
-        const c = all.counts ?? { likely_met: 0, needs_check: 0, likely_not_met: 0, insufficient: 0, possible_mismatch: 0, priority: 0 };
+        const c = all.counts ?? { likely_met: 0, needs_check: 0, likely_not_met: 0, insufficient: 0, possible_mismatch: 0, priority: 0, soon_met: 0 };
         return (
           <section aria-labelledby="mine" className="card mt-5 p-5">
             <h2 id="mine" className="font-bold">{v.company?.company_name ?? "우리 기업"} 맞춤 현황{!v.company && <span className="ml-2 text-xs font-normal text-[var(--muted)]">(이 브라우저에 저장한 정보 기준)</span>}</h2>
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
               <Link href="/recommend?tab=priority" className="rounded-lg border border-green-200 bg-green-50 p-3 hover:underline"><span className="block text-xs text-green-900">우선 추천</span><span className="text-xl font-bold text-green-900">{c.priority}건</span></Link>
               <Link href="/recommend?tab=all" className="rounded-lg border border-amber-200 bg-amber-50 p-3 hover:underline"><span className="block text-xs text-amber-900">검토 가능 전체</span><span className="text-xl font-bold text-amber-900">{c.likely_met + c.needs_check - c.insufficient}건</span></Link>
-              <Link href="/search?soon=1&met=1&sort=deadline" className="rounded-lg border border-red-200 bg-red-50 p-3 hover:underline"><span className="block text-xs text-red-900">조건 충족 중 마감 7일 이내</span><span className="text-xl font-bold text-red-900">{soon.total}건</span></Link>
+              <Link href="/search?soon=1&met=1&sort=deadline" className="rounded-lg border border-red-200 bg-red-50 p-3 hover:underline"><span className="block text-xs text-red-900">조건 충족 중 마감 7일 이내</span><span className="text-xl font-bold text-red-900">{c.soon_met}건</span></Link>
             </div>
           </section>
         );
