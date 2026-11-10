@@ -92,44 +92,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 건너뛸 실행은 파이썬 설치 전에 끝냄 (쿠키 만료 대기 중인 매시 실행이 수 초 안에 종료)
+      - name: 자동 실행 사전 점검 (Secret 미등록·쿠키 만료 → 실패 없이 종료)
+        if: github.event_name == 'schedule' || github.event_name == 'push'
+        run: |
+          skip() { echo "SKIP=true" >> "$GITHUB_ENV"; exit 0; }
+          if [ -z "$TISTORY_BLOG_NAME" ]; then
+            echo "::notice::Secret 'TISTORY_BLOG_NAME' 미등록 → 자동 실행 건너뜀 (등록 후 자동으로 동작)"; skip
+          fi
+          if [ "$MODE" != "작성+발행" ]; then
+            # 주간 점검: 오래된 글 점검은 로그인 없이도 동작하므로 쿠키 만료와 무관하게 진행. Claude API 키가 없으면 할 일이 없음
+            if [ -z "$ANTHROPIC_API_KEY" ]; then
+              echo "::notice::Secret 'ANTHROPIC_API_KEY' 미등록 → 주간 점검(성과 리포트·댓글·오래된 글) 건너뜀"; skip
+            fi
+            exit 0
+          fi
+          if [ -z "$TISTORY_COOKIES" ] && [ "$HAS_KAKAO" != "true" ]; then
+            echo "::notice::Secret 'TISTORY_COOKIES' 미등록 → 로그인 불가, 자동 실행 건너뜀 (PC에서 쿠키 추출 후 등록)"; skip
+          fi
+          # 같은 쿠키로 이미 로그인 실패한 기록이 있으면 재시도하지 않음 (반복 실패·실패 메일 방지)
+          FP=$(printf '%s' "$TISTORY_COOKIES" | sha256sum | cut -c1-16)
+          if [ -f login_state.json ] && grep -q '"status": *"failed"' login_state.json && grep -q "\"cookies_fp\": *\"$FP\"" login_state.json; then
+            echo "::warning::로그인 쿠키 만료 상태 → PC에서 setup_cookies.bat 재실행 후 TISTORY_COOKIES 재등록 필요 (등록 전까지 자동 실행 건너뜀)"
+            { echo "### ⚠️ 쿠키 만료 → 자동 실행 대기 중"; echo "- PC에서 \`setup_cookies.bat\` 재실행 (카카오 로그인 시 **로그인 상태 유지** 체크) → Secret \`TISTORY_COOKIES\` 재등록"; } >> "$GITHUB_STEP_SUMMARY"
+            skip
+          fi
+
       - uses: actions/setup-python@v5
+        if: env.SKIP != 'true'
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: tistory-autopost/requirements.txt
 
       - name: 패키지 설치
+        if: env.SKIP != 'true'
         run: pip install -r requirements.txt
 
-      - name: 자동 실행 사전 점검 (Secret 미등록·발행할 글 없음 → 실패 없이 종료)
-        if: github.event_name == 'schedule' || github.event_name == 'push'
+      - name: 발행할 글 확인 (없으면 세션 유지 필요 여부만 판단)
+        if: env.SKIP != 'true' && env.HOURLY == 'true'
         run: |
-          if [ -z "$TISTORY_BLOG_NAME" ]; then
-            echo "::notice::Secret 'TISTORY_BLOG_NAME' 미등록 → 자동 실행 건너뜀 (등록 후 자동으로 동작)"
-            echo "SKIP=true" >> "$GITHUB_ENV"; exit 0
-          fi
-          if [ -z "$TISTORY_COOKIES" ] && [ "$HAS_KAKAO" != "true" ]; then
-            echo "::notice::Secret 'TISTORY_COOKIES' 미등록 → 로그인 불가, 자동 실행 건너뜀 (PC에서 쿠키 추출 후 등록)"
-            echo "SKIP=true" >> "$GITHUB_ENV"; exit 0
-          fi
-          # 같은 쿠키로 이미 로그인 실패한 기록이 있으면 재시도하지 않음 (반복 실패·실패 메일 방지)
-          FP=$(printf '%s' "$TISTORY_COOKIES" | sha256sum | cut -c1-16)
-          if [ -f login_state.json ] && python - "$FP" <<'PY'
-          import json, sys
-          d = json.load(open("login_state.json"))
-          sys.exit(0 if d.get("status") == "failed" and d.get("cookies_fp") == sys.argv[1] else 1)
-          PY
-          then
-            echo "::warning::로그인 쿠키 만료 상태 → PC에서 setup_cookies.bat 재실행 후 TISTORY_COOKIES 재등록 필요 (등록 전까지 자동 실행 건너뜀)"
-            { echo "### ⚠️ 쿠키 만료 → 자동 실행 대기 중"; echo "- PC에서 \`setup_cookies.bat\` 재실행 (카카오 로그인 시 **로그인 상태 유지** 체크) → Secret \`TISTORY_COOKIES\` 재등록"; } >> "$GITHUB_STEP_SUMMARY"
-            echo "SKIP=true" >> "$GITHUB_ENV"; exit 0
-          fi
-          if [ "$HOURLY" = "true" ]; then
-            if python tistory_poster.py --due; then
-              echo "발행 시각이 된 글 있음 → 진행"
-            else
-              echo "발행할 글 없음 → 세션 유지 필요 여부만 확인"; echo "NO_DUE=true" >> "$GITHUB_ENV"
-            fi
+          if python tistory_poster.py --due; then
+            echo "발행 시각이 된 글 있음 → 진행"
+          else
+            echo "지금 발행할 글 없음 (예약 전이거나 발행 빈도 제한) → 세션 유지 필요 여부만 확인"; echo "NO_DUE=true" >> "$GITHUB_ENV"
           fi
 
       - name: 설정 확인
@@ -167,7 +173,6 @@ jobs:
           else
             echo "저장된 세션 없음 → 첫 로그인 (카카오톡 승인 필요)"
           fi
-          echo "SESSION_HASH_BEFORE=$(sha256sum "$TISTORY_SESSION_FILE" 2>/dev/null | cut -d' ' -f1)" >> "$GITHUB_ENV"
           # 발행할 글이 없는 정시 실행: 마지막 로그인 성공이 KEEPALIVE_HOURS 보다 오래됐으면 세션 갱신, 아니면 종료
           if [ "$NO_DUE" = "true" ]; then
             if python - "$KEEPALIVE_HOURS" <<'PY'
@@ -240,21 +245,21 @@ jobs:
             echo "변경 없음"
           else
             git commit -m "tistory-autopost: ${MODE} 결과 정리"
-            git pull --rebase -q origin "${GITHUB_REF_NAME}" && git push
+            git pull --rebase --autostash -q origin "${GITHUB_REF_NAME}" && git push
           fi
 
       - name: 로그인 세션 암호화
         id: enc
         if: always()
         run: |
-          AFTER=$(sha256sum "$TISTORY_SESSION_FILE" 2>/dev/null | cut -d' ' -f1)
-          if [ -n "$SESSION_KEY" ] && [ -s "$TISTORY_SESSION_FILE" ] && { [ "$AFTER" != "$SESSION_HASH_BEFORE" ] || [ "$KEEPALIVE" = "true" ]; }; then
+          # 이번 실행에서 로그인에 성공했을 때만(.ok 표시) 세션과 마지막 성공 시각을 갱신 → 실패한 실행이 시각을 갱신해 세션 유지를 건너뛰는 일 방지
+          if [ -n "$SESSION_KEY" ] && [ -n "$TISTORY_SESSION_FILE" ] && [ -s "$TISTORY_SESSION_FILE" ] && [ -f "$TISTORY_SESSION_FILE.ok" ]; then
             openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -in "$TISTORY_SESSION_FILE" -out .session.enc -pass env:SESSION_KEY
             printf '{"last_ok": "%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%S+00:00)" > .session_meta.json
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "로그인 세션 갱신 → 다음 실행부터 승인 생략 가능"
           fi
-          rm -f "$TISTORY_SESSION_FILE"
+          [ -n "$TISTORY_SESSION_FILE" ] && rm -f "$TISTORY_SESSION_FILE" "$TISTORY_SESSION_FILE.ok" || true
 
       - name: 로그인 세션 저장
         if: always() && steps.enc.outputs.changed == 'true'
@@ -267,7 +272,7 @@ jobs:
 
       - name: 실패 알림
         if: failure()
-        run: python notify.py "티스토리 자동화 실패 (${MODE})" "실행 화면에서 오류 확인" high || true
+        run: python3 notify.py "티스토리 자동화 실패 (${MODE})" "실행 화면에서 오류 확인" high || true
 
       - name: 실패 로그 업로드
         if: failure()

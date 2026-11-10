@@ -204,6 +204,14 @@ class TistoryBot:
         # Selenium 4.6+ 내장 Selenium Manager 가 크롬드라이버 자동 설치
         self.d = webdriver.Chrome(options=opts)
         self.d.implicitly_wait(2)
+        try:   # UA 의 크롬 버전을 실제 브라우저 버전에 맞춤 (고정값이 오래되면 로그인 화면에서 구형 브라우저로 취급될 수 있음)
+            major = str(self.d.capabilities.get("browserVersion", "")).split(".")[0]
+            ua = self.d.execute_script("return navigator.userAgent") or ""
+            if major.isdigit() and "Chrome/130.0.0.0" in ua:
+                self.d.execute_cdp_cmd("Network.setUserAgentOverride",
+                                       {"userAgent": ua.replace("Chrome/130.0.0.0", f"Chrome/{major}.0.0.0")})
+        except Exception as e:
+            log.debug("UA 버전 맞춤 생략: %s", e)
 
     @property
     def manage_url(self):
@@ -237,44 +245,94 @@ class TistoryBot:
     # 둘 다 내보내고, 티스토리 쪽이 만료되면 카카오 쿠키로 다시 로그인(SSO)해 세션을 되살림
     COOKIE_SITES = (("tistory.com", "https://www.tistory.com/"),
                     ("kakao.com", "https://accounts.kakao.com/"))
+    COOKIE_KEYS = ("name", "value", "domain", "path", "secure", "httpOnly", "expiry", "sameSite")
+
+    @classmethod
+    def _cookie_site(cls, c: dict) -> str:
+        """쿠키가 속한 사이트 (tistory.com / kakao.com), 대상이 아니면 ''"""
+        host = (c.get("domain") or "").lstrip(".").lower()
+        for domain, _ in cls.COOKIE_SITES:
+            if host == domain or host.endswith("." + domain):
+                return domain
+        return ""
 
     def export_cookies(self) -> str:
+        """브라우저 전체 쿠키(CDP)에서 대상 사이트 것만 추림 → 하위 도메인(kauth.kakao.com 등) 쿠키도 포함"""
         cookies = []
-        for domain, url in self.COOKIE_SITES:
-            try:
-                self.d.get(url)
-                time.sleep(2)
-                cookies += [c for c in self.d.get_cookies() if domain in c.get("domain", "")]
-            except Exception as e:
-                log.warning("%s 쿠키 수집 실패: %s", domain, e)
+        try:
+            for c in self.d.execute_cdp_cmd("Network.getAllCookies", {})["cookies"]:
+                if not self._cookie_site(c):
+                    continue
+                item = {k: c[k] for k in ("name", "value", "domain", "path", "secure", "httpOnly") if k in c}
+                if c.get("sameSite") in ("Strict", "Lax", "None"):
+                    item["sameSite"] = c["sameSite"]
+                if (c.get("expires") or -1) > 0:   # -1 = 브라우저를 닫으면 사라지는 세션 쿠키
+                    item["expiry"] = int(c["expires"])
+                cookies.append(item)
+        except Exception as e:
+            log.debug("CDP 쿠키 수집 불가 → 화면 이동 방식 사용: %s", e)
+            cookies = []
+        if not cookies:   # 예비: 사이트별로 이동해 수집 (해당 주소에서 보이는 쿠키만)
+            for domain, url in self.COOKIE_SITES:
+                try:
+                    self.d.get(url)
+                    time.sleep(2)
+                    cookies += [c for c in self.d.get_cookies() if self._cookie_site(c) == domain]
+                except Exception as e:
+                    log.warning("%s 쿠키 수집 실패: %s", domain, e)
         raw = json.dumps(cookies, ensure_ascii=False).encode("utf-8")
         return base64.b64encode(raw).decode("ascii")
 
+    def _set_cookie_cdp(self, c: dict) -> bool:
+        host = c["domain"].lstrip(".")
+        p = {"name": c["name"], "value": c["value"], "path": c.get("path") or "/",
+             "secure": bool(c.get("secure")), "httpOnly": bool(c.get("httpOnly")),
+             "url": f"http{'s' if c.get('secure') else ''}://{host}{c.get('path') or '/'}"}
+        if c["domain"].startswith("."):   # 하위 도메인 공용 쿠키만 domain 지정 (호스트 전용 쿠키는 url 로 충분)
+            p["domain"] = c["domain"]
+        if c.get("sameSite") in ("Strict", "Lax", "None"):
+            p["sameSite"] = c["sameSite"]
+        if c.get("expiry"):
+            p["expires"] = int(c["expiry"])
+        return bool(self.d.execute_cdp_cmd("Network.setCookie", p).get("success"))
+
     def import_cookies(self, encoded: str) -> dict:
         """도메인별 적용 개수 반환 (예: {'tistory.com': 6, 'kakao.com': 4})"""
-        cookies = json.loads(base64.b64decode(encoded.strip()))
-        counts = {}
-        for domain, url in self.COOKIE_SITES:
-            mine = [c for c in cookies if domain in c.get("domain", "")]
+        cookies = [c for c in json.loads(base64.b64decode(encoded.strip()))
+                   if c.get("name") and c.get("domain") and self._cookie_site(c)]
+        counts, failed = {}, []
+        try:
+            for c in cookies:
+                if self._set_cookie_cdp(c):
+                    site = self._cookie_site(c)
+                    counts[site] = counts.get(site, 0) + 1
+                else:
+                    failed.append(c)
+        except Exception as e:
+            log.debug("CDP 쿠키 적용 불가 → 화면 이동 방식 사용: %s", e)
+            counts, failed = {}, cookies
+        for domain, url in self.COOKIE_SITES:   # 예비: 해당 사이트로 이동해 적용
+            mine = [c for c in failed if self._cookie_site(c) == domain]
             if not mine:
                 continue
             self.d.get(url)
             for c in mine:
-                c = {k: v for k, v in c.items() if k in
-                     ("name", "value", "domain", "path", "secure", "httpOnly", "expiry")}
+                c = {k: v for k, v in c.items() if k in self.COOKIE_KEYS}
                 if "expiry" in c:
                     c["expiry"] = int(c["expiry"])
                 try:
                     self.d.add_cookie(c)
+                    counts[domain] = counts.get(domain, 0) + 1
                 except Exception as e:
                     log.debug("쿠키 추가 실패 %s: %s", c.get("name"), e)
-            counts[domain] = len(mine)
         log.info("로그인 쿠키 적용: %s", ", ".join(f"{k} {v}개" for k, v in counts.items()) or "없음")
         return counts
 
     def _on_manage(self) -> bool:
-        url = self.d.current_url
-        return "/manage" in url and "login" not in url and "auth" not in url
+        from urllib.parse import urlparse
+        u = urlparse(self.d.current_url)
+        return (u.hostname or "").endswith(".tistory.com") and u.path.startswith("/manage") \
+            and "login" not in u.path and "auth" not in u.path
 
     def _cookie_sources(self):
         """(이름, 쿠키문자열) 후보: 저장된 세션 → Secrets 쿠키 순"""
@@ -327,7 +385,9 @@ class TistoryBot:
             return
         try:
             Path(sf).write_text(self.export_cookies(), encoding="utf-8")
-            self.d.get(self.manage_url)
+            Path(sf + ".ok").write_text("ok", encoding="utf-8")
+            if not self._on_manage():
+                self.d.get(self.manage_url)
             log.info("로그인 세션 저장 (다음 실행부터 승인 생략 가능)")
         except Exception as e:
             log.warning("세션 저장 실패: %s", e)
@@ -369,17 +429,14 @@ class TistoryBot:
 
     def kakao_sso_login(self) -> bool:
         """카카오 '로그인 상태 유지' 쿠키가 살아 있으면 비밀번호 없이 티스토리 세션 재발급 (클라우드 실행용)"""
-        from selenium.webdriver.common.by import By
         if not self._click_tistory_kakao_button():
             return False
-        time.sleep(3)
-        if self.d.find_elements(By.CSS_SELECTOR, "input[name='loginId'], input#loginId--1, input[type='password']"):
-            log.info("카카오 쿠키도 만료 (비밀번호 입력 화면) → 재로그인 불가")
-            return False
-        return self._wait_kakao_redirect(int(os.environ.get("KAKAO_SSO_WAIT", "40")))
+        return self._wait_kakao_redirect(int(os.environ.get("KAKAO_SSO_WAIT", "40")), sso=True)
 
-    def _wait_kakao_redirect(self, wait_sec: int) -> bool:
-        """카카오 → 티스토리 복귀를 기다리며 동의 화면은 자동 진행"""
+    LOGIN_FORM = "input[name='loginId'], input#loginId--1, input[type='password']"
+
+    def _wait_kakao_redirect(self, wait_sec: int, sso: bool = False) -> bool:
+        """카카오 → 티스토리 복귀를 기다리며 동의 화면은 자동 진행. sso=True: 비밀번호 입력 화면이 뜨면 즉시 중단"""
         from selenium.webdriver.common.by import By
         d = self.d
         notified = False
@@ -387,6 +444,9 @@ class TistoryBot:
         while time.time() < end:
             time.sleep(3)
             url = d.current_url
+            if sso and "kakao.com" in url and any(e.is_displayed() for e in d.find_elements(By.CSS_SELECTOR, self.LOGIN_FORM)):
+                log.info("카카오 쿠키도 만료 (비밀번호 입력 화면) → 재로그인 불가")
+                return False
             if "tistory.com" in url and "auth/login" not in url and "kakao.com" not in url:
                 d.get(self.manage_url)
                 time.sleep(3)
@@ -402,7 +462,7 @@ class TistoryBot:
                 log.error("카카오 로그인 실패: 아이디/비밀번호 확인 필요")
                 self._log_page()
                 return False
-            if not notified and any(k in text for k in ("카카오톡", "인증", "승인", "KakaoTalk", "verif", "approve")):
+            if not notified and not sso and any(k in text for k in ("카카오톡", "인증", "승인", "KakaoTalk", "verif", "approve")):
                 log.warning(">>> 휴대폰 카카오톡에서 로그인 승인 필요 (최대 %d초 대기) <<<", wait_sec)
                 notified = True
             # 동의/계속 화면 자동 진행
@@ -413,7 +473,7 @@ class TistoryBot:
                         break
                 except Exception:
                     pass
-        log.error("카카오 로그인 미완료 (승인 시간 초과 또는 추가 인증 필요)")
+        (log.info if sso else log.error)("카카오 로그인 미완료 (승인 시간 초과 또는 추가 인증 필요)")
         self._log_page()
         return False
 
@@ -732,26 +792,38 @@ def record_publish(title: str, visibility: str):
                             "visibility": visibility}, ensure_ascii=False) + "\n")
 
 
-def apply_rate_limit(cfg: dict, files: list) -> list:
-    """계정 보호용 발행 빈도 제한: 1회 최대 N편, 24시간 최대 M편, 직전 발행 후 최소 간격"""
+RATE_LIMIT_DEFAULT = {"max_per_run": 1, "max_per_24h": 2, "min_gap_hours": 20, "manual_min_gap_hours": 4}
+LAST_LIMIT_REASON = ""
+
+
+def apply_rate_limit(cfg: dict, files: list, quiet: bool = False) -> list:
+    """계정 보호용 발행 빈도 제한: 1회 최대 N편, 24시간 최대 M편, 직전 발행 후 최소 간격.
+    자동 실행은 min_gap_hours(기본 20시간 = 하루 1편), 사람이 직접 실행(workflow_dispatch)하면 manual_min_gap_hours"""
+    global LAST_LIMIT_REASON
+    LAST_LIMIT_REASON = ""
     if not files:
         return files
-    r = {"max_per_run": 1, "max_per_24h": 2, "min_gap_hours": 4, **cfg.get("rate_limit", {})}
+    r = {**RATE_LIMIT_DEFAULT, **cfg.get("rate_limit", {})}
+    manual = os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
+    gap = float(min(r["manual_min_gap_hours"], r["min_gap_hours"]) if manual else r["min_gap_hours"])
     t = now(cfg)
     times = _publish_times()
     last24 = [x for x in times if x > t - dt.timedelta(hours=24)]
     allowed = min(len(files), int(r["max_per_run"]), max(0, int(r["max_per_24h"]) - len(last24)))
     reason = ""
-    if times and max(times) > t - dt.timedelta(hours=float(r["min_gap_hours"])):
-        allowed, reason = 0, f"직전 발행 {max(times):%m-%d %H:%M} 후 {r['min_gap_hours']}시간 미경과"
+    if times and max(times) > t - dt.timedelta(hours=gap):
+        allowed = 0
+        reason = f"직전 발행 {max(times):%m-%d %H:%M} 후 {gap:g}시간 미경과 (다음 발행 가능 {max(times) + dt.timedelta(hours=gap):%m-%d %H:%M})"
     elif allowed < len(files) and len(last24) >= int(r["max_per_24h"]):
         reason = f"최근 24시간 {len(last24)}편 발행 (한도 {r['max_per_24h']}편)"
     elif allowed < len(files):
         reason = f"1회 최대 {r['max_per_run']}편"
     if allowed < len(files):
-        log.info("발행 빈도 제한: %s → 이번 실행 %d편, 다음 실행으로 %d편 미룸", reason, allowed, len(files) - allowed)
-        summary([f"### ⏳ 발행 빈도 제한 (계정 보호)", f"- {reason}",
-                 f"- 이번 실행 {allowed}편 발행, {len(files) - allowed}편은 다음 실행에서 발행"])
+        LAST_LIMIT_REASON = reason
+        if not quiet:
+            log.info("발행 빈도 제한: %s → 이번 실행 %d편, 다음 실행으로 %d편 미룸", reason, allowed, len(files) - allowed)
+            summary(["### ⏳ 발행 빈도 제한 (계정 보호)", f"- {reason}",
+                     f"- 이번 실행 {allowed}편 발행, {len(files) - allowed}편은 다음 실행에서 발행"])
     return files[:allowed]
 
 
@@ -889,9 +961,14 @@ def main():
             bot.close()
         return
     if args.due:
-        sys.exit(0 if pending_posts(cfg) else 3)
+        # 빈도 제한에 걸려 지금 발행할 수 없는 글은 '없음'으로 판단 → 그 사이에도 세션 유지 갱신이 돌게 함
+        sys.exit(0 if apply_rate_limit(cfg, pending_posts(cfg), quiet=True) else 3)
     if args.list:
-        for f in pending_posts(cfg):
+        due = pending_posts(cfg)
+        apply_rate_limit(cfg, due, quiet=True)
+        if LAST_LIMIT_REASON:
+            print(f"[발행 빈도 제한] {LAST_LIMIT_REASON}")
+        for f in due:
             print(f"[발행 대기] {f.name}")
         for w, t, f in scheduled_posts(cfg):
             print(f"[예약 {w:%Y-%m-%d %H:%M}] {t}  ({f})")
