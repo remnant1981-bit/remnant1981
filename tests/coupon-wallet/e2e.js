@@ -257,8 +257,12 @@ const ICON = path.join(ROOT, 'icon-192.png');
   /* --- 레이아웃: 큰 금액이 카드를 넘치지 않음 --- */
   await p.evaluate(async () => { await CWStore.put('coupons', { id: 'big', brand: '큰금액', title: 'x', value: 0, expires: '', code: '', memo: '', image: '', usedAt: new Date().toISOString().slice(0, 10), saved: 123456789 }); });
   await p.reload(); await p.waitForSelector('.cards');
-  const overflow = await p.evaluate(() => [...document.querySelectorAll('.stat')].some(s => s.scrollWidth > s.clientWidth + 1));
-  check('레이아웃: 큰 금액(1.2억) 카드 넘침 없음', !overflow);
+  const numOverflow = () => p.evaluate(() => [...document.querySelectorAll('.stat b')].some(b => b.scrollWidth > b.clientWidth + 1));
+  check('레이아웃: 큰 금액(1.2억)이 카드 안에 들어옴', !(await numOverflow()));
+  // 폰트마다 글자 폭이 다르므로(CI 러너 등) 넓은 폰트를 흉내 내어 재검증
+  await p.addStyleTag({ content: '.stat b { letter-spacing: 3px !important; }' });
+  await p.evaluate(() => window.dispatchEvent(new Event('resize')));
+  check('레이아웃: 글자 폭이 넓은 폰트에서도 넘침 없음', !(await numOverflow()));
   const hscroll = await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   check('레이아웃: 가로 스크롤 없음', !hscroll);
 

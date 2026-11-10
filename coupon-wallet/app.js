@@ -90,7 +90,18 @@ function render() {
   $('#view').innerHTML = { home: renderHome, coupons: renderCoupons, loyalty: renderLoyalty }[ui.tab](T);
   const used = [...state.coupons, ...state.loyalty].map(x => x.brand);
   $('#brands').innerHTML = [...new Set([...used, ...DEFAULT_BRANDS])].map(b => `<option value="${esc(b)}">`).join('');
+  fitStats();
 }
+
+// 통계 카드의 금액이 폰트·화면 폭과 관계없이 카드 안에 들어오도록 글자 크기를 줄여 맞춤
+function fitStats() {
+  document.querySelectorAll('.stat b').forEach(b => {
+    b.style.fontSize = '';
+    let size = parseFloat(getComputedStyle(b).fontSize);
+    while (b.scrollWidth > b.clientWidth && size > 11) { size -= 1; b.style.fontSize = size + 'px'; }
+  });
+}
+window.addEventListener('resize', fitStats);
 
 function couponItem(c, T) {
   const st = CW.couponStatus(c, T);
