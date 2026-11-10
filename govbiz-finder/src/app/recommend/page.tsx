@@ -37,7 +37,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
     const res = await searchWithMatches(db, p, profile, undefined, { view: tab });
     if (member) await saveMatches(db, v.company!.id, res.rows);
     const marks = member ? await bookmarkedIds(db, v.session!.user.id, v.company!.id) : new Set<string>();
-    const c = res.counts ?? { likely_met: 0, needs_check: 0, likely_not_met: 0, insufficient: 0, possible_mismatch: 0, priority: 0 };
+    const c = res.counts ?? { likely_met: 0, needs_check: 0, likely_not_met: 0, insufficient: 0, possible_mismatch: 0, priority: 0, soon_met: 0 };
     const tabCount: Record<TabId, number> = { priority: c.priority, all: c.likely_met + c.needs_check - c.insufficient, met: c.likely_met, insufficient: c.insufficient, mismatch: c.possible_mismatch };
     const comp = profileCompleteness(profile as unknown as Record<string, unknown>);
     return (

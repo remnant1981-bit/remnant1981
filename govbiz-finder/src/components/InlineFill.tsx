@@ -8,7 +8,7 @@ import { saveProfilePatch } from "./profile-save";
  * 공고 카드 안에서 판정에 필요한 미입력 기업정보를 그 자리에서 입력.
  * 드롭다운은 고르는 즉시 저장·재판정, 텍스트·날짜·복수선택은 [적용] 버튼.
  */
-export function InlineFill({ fields, member }: { fields: { fieldKey: string; label: string }[]; member: boolean }) {
+export function InlineFill({ fields, member, sido }: { fields: { fieldKey: string; label: string }[]; member: boolean; sido?: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
@@ -35,7 +35,8 @@ export function InlineFill({ fields, member }: { fields: { fieldKey: string; lab
             <label htmlFor={id} className="text-sm font-medium">✎ {f.label}</label>
             <select id={id} defaultValue="" disabled={saving} className="input !w-auto !py-1 text-sm" onChange={(e) => save(s.key, e.target.value)}>
               <option value="">선택하면 바로 판정</option>
-              {Object.entries(SIGUNGU).map(([sd, list]) => <optgroup key={sd} label={sd}>{list.map((g) => <option key={sd + g} value={g}>{g}</option>)}</optgroup>)}
+              {/* 공고 지역이 한 시/도면 그 시/도의 시/군/구만 표시(카드마다 전국 250여 개 목록을 싣지 않음) */}
+              {(sido && SIGUNGU[sido] ? [[sido, SIGUNGU[sido]] as const] : Object.entries(SIGUNGU)).map(([sd, list]) => <optgroup key={sd} label={sd}>{list.map((g) => <option key={sd + g} value={g}>{g}</option>)}</optgroup>)}
             </select>
             {saving && <span className="text-xs">판정 중…</span>}
           </div>);

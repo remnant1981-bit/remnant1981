@@ -72,7 +72,7 @@ function CheckHighlight({ r, member }: { r: RowWithMatch; member: boolean }) {
         {met.length > 0 && <li>✔ 충족 확인: {[...new Set(met)].join(", ")}</li>}
         {m.results.length === 0 && <li>? 자동으로 확인할 수 있는 조건이 없어 공고 원문에서 자격을 확인해야 합니다.</li>}
       </ul>
-      <InlineFill member={member} fields={[...new Map(m.results.filter((x) => x.missing).map((x) => [x.fieldKey, { fieldKey: x.fieldKey, label: x.label }])).values()]} />
+      <InlineFill member={member} sido={r.region_scope} fields={[...new Map(m.results.filter((x) => x.missing).map((x) => [x.fieldKey, { fieldKey: x.fieldKey, label: x.label }])).values()]} />
     </div>
   );
 }

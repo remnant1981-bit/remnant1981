@@ -1,6 +1,7 @@
 import { evaluateMatch, type CompanyProfile, type MatchResult, type Rule } from "@/domain/matching";
 import { searchAllForExport, searchAnnouncements, type AnnouncementRow, type SearchParams } from "@/domain/search";
 import { seoulToday } from "@/lib/time";
+import { isDeadlineSoon } from "@/domain/status";
 import { newId } from "@/lib/crypto";
 import { nowIso } from "@/lib/time";
 import type { Db } from "./db";
@@ -111,9 +112,29 @@ export function textRulesFor(row: { title?: string | null; target_summary?: stri
   return rules;
 }
 
+/**
+ * 공고별 판정 규칙 캐시(DB 인스턴스별). 규칙은 기업과 무관하게 공고 내용에서만 만들어지므로
+ * 공고·규칙 테이블이 바뀌지 않는 한 재사용한다(매 요청마다 본문 전체를 다시 읽고 정규식을 돌리지 않음).
+ */
+const ruleCache = new WeakMap<Db, { stamp: string; rules: Map<string, Rule[]> }>();
+async function rulesStamp(db: Db): Promise<string> {
+  const r = await db.get<{ s: string }>(
+    `SELECT (SELECT COUNT(*) || ':' || COALESCE(MAX(updated_at), '') FROM announcements) || '|' ||
+            (SELECT COUNT(*) || ':' || COALESCE(MAX(rowid), 0) FROM eligibility_rules) AS s`);
+  return r?.s ?? "";
+}
+
 export async function loadRules(db: Db, ids: string[]): Promise<Map<string, Rule[]>> {
   const map = new Map<string, Rule[]>();
   if (!ids.length) return map;
+  const stamp = await rulesStamp(db);
+  let cache = ruleCache.get(db);
+  if (!cache || cache.stamp !== stamp) { cache = { stamp, rules: new Map() }; ruleCache.set(db, cache); }
+  const missing: string[] = [];
+  for (const id of ids) { const hit = cache.rules.get(id); if (hit) map.set(id, hit); else missing.push(id); }
+  if (!missing.length) return map;
+  const store = cache.rules;
+  ids = missing;
   for (let i = 0; i < ids.length; i += 200) {
     const chunk = ids.slice(i, i + 200);
     const regions = await db.all<{ id: string; region_scope: string; title: string; target_summary: string | null; eligibility_text: string | null; original_text: string | null }>(
@@ -127,6 +148,7 @@ export async function loadRules(db: Db, ids: string[]): Promise<Map<string, Rule
       const extra = [...regionRulesFor(g.region_scope), ...textRulesFor(g)].filter((r) => !cur.some((x) => x.field_key === r.field_key));
       if (extra.length) map.set(g.id, [...cur, ...extra]);
     }
+    for (const id of chunk) store.set(id, map.get(id) ?? map.set(id, []).get(id)!);
   }
   return map;
 }
@@ -181,6 +203,8 @@ export interface MatchCounts {
   possible_mismatch: number;
   /** 적합/추가 확인 중 관련성 근거가 있는 '우선 추천' */
   priority: number;
+  /** 조건 충족 공고 중 접수 중이며 마감 7일 이내 */
+  soon_met: number;
 }
 /** 맞춤 추천 화면 보기: 우선 추천 / 검토 가능 전체(적합+추가 확인) / 조건 충족만 / 정보 부족 / 불일치 가능성 */
 export type RecommendView = "priority" | "all" | "met" | "insufficient" | "mismatch";
@@ -217,12 +241,13 @@ export async function searchWithMatches(db: Db, p: SearchParams, company: Compan
   if (company && (p.sort === "fit" || p.eligible || p.metOnly || opts.view)) {
     const candidates = await searchAllForExport(db, p, MATCH_CANDIDATE_LIMIT, today);
     let all = await attachMatches(db, candidates, company, today);
-    const counts: MatchCounts = { likely_met: 0, needs_check: 0, likely_not_met: 0, insufficient: 0, possible_mismatch: 0, priority: 0 };
+    const counts: MatchCounts = { likely_met: 0, needs_check: 0, likely_not_met: 0, insufficient: 0, possible_mismatch: 0, priority: 0, soon_met: 0 };
     for (const r of all) {
       counts[r.match!.overall]++;
       if (r.match!.display === "insufficient") counts.insufficient++;
       if (r.match!.display === "possible_mismatch") counts.possible_mismatch++;
       if (isPriority(r)) counts.priority++;
+      if (r.match!.overall === "likely_met" && isDeadlineSoon(r.application_status, r.application_end, today)) counts.soon_met++;
     }
     const stats = missingStatsOf(all);
     const v = opts.view;

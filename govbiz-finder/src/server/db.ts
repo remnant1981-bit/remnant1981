@@ -45,20 +45,33 @@ export async function createSqliteDb(file: string): Promise<Db> {
   const { DatabaseSync } = await import("node:sqlite");
   if (file !== ":memory:") fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true });
   const raw = new DatabaseSync(file);
-  raw.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = " + (file === ":memory:" ? "MEMORY" : "WAL") + ";");
+  // busy_timeout: 수집(별도 프로세스)이 쓰는 동안 웹 요청이 즉시 실패하지 않고 대기. synchronous=NORMAL 은 WAL 에서 안전하며 쓰기가 빠름
+  raw.exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; PRAGMA journal_mode = " + (file === ":memory:" ? "MEMORY" : "WAL; PRAGMA synchronous = NORMAL") + ";");
+  // 같은 SQL 을 매번 다시 파싱하지 않도록 준비된 문장을 재사용(상한 300개, 초과 시 오래된 것부터 버림)
+  const stmts = new Map<string, ReturnType<typeof raw.prepare>>();
+  const prep = (sql: string) => {
+    let st = stmts.get(sql);
+    if (!st) {
+      st = raw.prepare(sql);
+      if (stmts.size >= 300) stmts.delete(stmts.keys().next().value as string);
+      stmts.set(sql, st);
+    }
+    return st;
+  };
   return {
     async all(sql, params = []) {
-      return raw.prepare(sql).all(...params).map((r) => ({ ...r })) as never; // null-prototype → 일반 객체
+      return prep(sql).all(...params).map((r) => ({ ...r })) as never; // null-prototype → 일반 객체
     },
     async get(sql, params = []) {
-      const r = raw.prepare(sql).get(...params);
+      const r = prep(sql).get(...params);
       return (r ? { ...r } : undefined) as never;
     },
     async run(sql, params = []) {
-      const r = raw.prepare(sql).run(...params);
+      const r = prep(sql).run(...params);
       return { changes: Number(r.changes) };
     },
     async exec(sql) {
+      stmts.clear(); // 스키마 변경(마이그레이션) 후 낡은 문장 재사용 방지
       raw.exec(sql);
     },
   };
