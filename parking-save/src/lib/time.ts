@@ -18,7 +18,11 @@ export function kstWeekday(ms: number): number {
 /** ISO 8601 (오프셋 필수, 예: 2026-11-09T10:00:00+09:00 / Z). 오프셋 없는 값은 null */
 export function parseOffsetIso(s: unknown): Date | null {
   if (typeof s !== "string") return null;
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.test(s)) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.exec(s);
+  if (!m) return null;
+  // Date.parse 는 2026-02-31 같은 없는 날짜를 다음 달로 넘기고 24:00 도 허용하므로 직접 검증(요금 기간이 조용히 바뀌는 것 방지)
+  const [y, mo, d, h] = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])];
+  if (mo < 1 || mo > 12 || d < 1 || d > new Date(Date.UTC(y, mo, 0)).getUTCDate() || h > 23) return null;
   const t = Date.parse(s);
   return Number.isNaN(t) ? null : new Date(t);
 }
@@ -40,3 +44,6 @@ export function defaultStayInputs(nowMs: number = Date.now()): { start: string; 
   const s = Math.ceil(nowMs / 900000) * 900000;
   return { start: toKstLocalInput(s), end: toKstLocalInput(s + 2 * 3600_000) };
 }
+
+/** 종료 시각 = 주입된 시작 시각 + 실제 경과. 시계를 주입한 테스트에서 결정적이고, 운영(now=현재)에서는 실제 시각과 같다. */
+export const finishedIso = (start: Date, t0: number): string => new Date(start.getTime() + Math.round(performance.now() - t0)).toISOString();

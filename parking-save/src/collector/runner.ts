@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { finishedIso } from "@/lib/time";
 import type { Db } from "@/server/db";
 import type { SourceAdapter, RawRow, NormalizedLot } from "./types";
 import { normalizeStandardRow } from "./standard-parking";
@@ -16,10 +17,9 @@ const sha = (x: string) => createHash("sha256").update(x).digest("hex");
  */
 export async function runSync(db: Db, adapter: SourceAdapter, now = new Date()): Promise<SyncSummary> {
   const startedAt = now.toISOString();
+  const t0 = performance.now(); // 종료 시각 = 주입된 시작 시각 + 실제 경과(테스트에서 시계 주입 시 결정적, 운영에서는 실제 시각과 같음)
   const sum: SyncSummary = { status: "SUCCESS", keyCollisions: 0, collisionSuperseded: 0, collisionSplit: 0, received: 0, inserted: 0, updated: 0, unchanged: 0, excluded: 0, invalid: 0, errors: 0, duplicateCandidates: 0 };
-  const log = await db.run("INSERT INTO source_sync_logs(source_name, started_at, status) VALUES (?,?, 'RUNNING')", [adapter.sourceName, startedAt]);
-  void log;
-  const logId = (await db.get<{ id: number }>("SELECT MAX(id) AS id FROM source_sync_logs"))!.id;
+  const logId = (await db.run("INSERT INTO source_sync_logs(source_name, started_at, status) VALUES (?,?, 'RUNNING')", [adapter.sourceName, startedAt])).lastId; // 동시 수집에서도 자기 로그 행을 가리킴
   const touched: number[] = [];
   let fatal: string | null = null;
   let newestBase: string | null = null;
@@ -47,7 +47,10 @@ export async function runSync(db: Db, adapter: SourceAdapter, now = new Date()):
     const plan = resolveKeyCollisions(pending);
     sum.collisionSuperseded = plan.superseded; sum.collisionSplit = plan.split; sum.keyCollisions = plan.superseded + plan.split;
     // 3단계: 저장
-    for (const { id: key, item, collided } of plan.items) {
+    // 500건씩 한 트랜잭션으로 커밋(건별 커밋은 fsync 때문에 전체 적재가 수 배 느림). 청크 중간 실패는 행 단위로 집계되며 이미 커밋된 청크는 유지
+    const CHUNK = 500;
+    for (let off = 0; off < plan.items.length; off += CHUNK) await db.transaction(async () => {
+    for (const { id: key, item, collided } of plan.items.slice(off, off + CHUNK)) {
       try {
         const { row, lot } = item.payload;
         if (collided) lot.qualityFlags.push("SOURCE_KEY_COLLISION");
@@ -92,6 +95,7 @@ export async function runSync(db: Db, adapter: SourceAdapter, now = new Date()):
         console.error("[sync] row error", adapter.sourceName, e instanceof Error ? e.message : e);
       }
     }
+    });
     // 중복 후보 탐지(자동 병합 없음)
     for (const id of touched) {
       const me = await db.get<{ id: number; name: string; road_address: string | null; latitude: number | null; longitude: number | null }>("SELECT id,name,road_address,latitude,longitude FROM parking_lots WHERE id=?", [id]);
@@ -113,7 +117,7 @@ export async function runSync(db: Db, adapter: SourceAdapter, now = new Date()):
   }
   sum.status = fatal ? "FAILED" : sum.errors > 0 || sum.invalid > 0 ? "PARTIAL" : "SUCCESS";
   await db.run("UPDATE source_sync_logs SET finished_at=?, status=?, records_received=?, records_inserted=?, records_updated=?, error_summary=?, source_data_timestamp=? WHERE id=?",
-    [new Date().toISOString(), sum.status, sum.received, sum.inserted, sum.updated,
+    [finishedIso(now, t0), sum.status, sum.received, sum.inserted, sum.updated,
       fatal ? "원천 수집 실패(상세는 서버 로그)" : sum.errors || sum.invalid ? `행 오류 ${sum.errors}건, 형식 불량 ${sum.invalid}건` : null, newestBase, logId]);
   return sum;
 }

@@ -55,7 +55,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       <details className="my-4 rounded border border-gray-300 p-3"><summary className="cursor-pointer font-semibold">검색 조건 변경</summary><div className="mt-3">{form}</div></details>
 
       <p className="text-sm" role="status">
-        {cov.returned}곳 · 요금 계산 가능 {cov.feeCalculable}곳 · 요금 정보 없음/계산 불가 {cov.feeUnknown}곳 · 실시간 잔여면수 {cov.withValidRealtime}곳
+        {cov.candidates > cov.returned ? `후보 ${cov.candidates}곳 중 ` : ""}{cov.returned}곳 · 요금 계산 가능 {cov.feeCalculable}곳 · 요금 정보 없음/계산 불가 {cov.feeUnknown}곳 · 실시간 잔여면수 {cov.withValidRealtime}곳
       </p>
       <p className="mt-1 text-xs text-gray-600">지도 보기는 준비 중입니다(목록만 제공). 거리는 직선거리이며 실제 이동 거리와 다릅니다.</p>
       {res.warnings.filter((w) => !w.startsWith("MOCK_DATA") && !w.startsWith("EMPTY")).map((w) => (
