@@ -56,3 +56,15 @@ describe("관리번호 반복 판정", () => {
     expect(names(resolveKeyCollisions([c("K", "날짜있음", 37, 127, "2026-01-01", 0), c("K", "날짜없음", 37, 127, null, 1)]))).toEqual(["K=날짜있음"]);
   });
 });
+
+describe("분리 시설 ID 유일성", () => {
+  it("같은 소수 3자리 칸에 들어가는 서로 다른 장소(60m 간격)도 서로 다른 ID", () => {
+    const mk = (lat: number, seq: number) => ({ key: "K1", lat, lng: 127.0, date: "2026-01-01", seq, payload: seq });
+    // 위도 0.0006도 ≈ 67m: 50m 초과라 별도 장소, 소수 3자리로는 같은 칸(37.500)
+    const r = resolveKeyCollisions([mk(37.5001, 0), mk(37.5007, 1), mk(37.5013, 2)]);
+    const ids = r.items.map((x) => x.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toContain("K1");
+    expect(r.split).toBe(2);
+  });
+});

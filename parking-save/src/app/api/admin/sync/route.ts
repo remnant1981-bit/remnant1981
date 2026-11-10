@@ -17,10 +17,15 @@ export const dynamic = "force-dynamic";
  *            `seoul-occupancy` (SEOUL_OPENAPI_KEY 필요, 응답 형식은 공개 샘플키로 검증 — OPEN_ISSUES #3).
  * 주차장 원천 job은 실제 어댑터 구현 후 추가.
  */
+/** 같은 job의 동시 실행 방지(표준데이터 전체 수집은 1분 이상 걸려, 겹치면 DB 쓰기 경합·외부 API 호출 한도 낭비) */
+const running = new Set<string>();
+const KNOWN_JOBS = ["holidays", "seoul-occupancy", "standard-parking"];
+
 export async function POST(req: NextRequest) {
   const tooMany = limited(req, adminLimiter); // 인증 전에 제한(무차별 대입 완화)
   if (tooMany) return tooMany;
   const key = clientKey(req.headers);
+  let acquired: string | null = null;
   try {
     const db = await getAppDb();
     const token = adminToken();
@@ -29,6 +34,10 @@ export async function POST(req: NextRequest) {
 
     let body: { job?: unknown } = {};
     try { body = await req.json(); } catch { /* 빈 본문 */ }
+    if (typeof body.job === "string" && KNOWN_JOBS.includes(body.job)) {
+      if (running.has(body.job)) { await audit(db, `sync:${body.job}`, "REJECTED", key, "ALREADY_RUNNING"); return apiError(409, "ALREADY_RUNNING", "같은 수집이 이미 실행 중입니다."); }
+      running.add(body.job); acquired = body.job;
+    }
     if (body.job === "standard-parking") {
       const dk = process.env.DATA_GO_KR_SERVICE_KEY;
       if (!dk) { await audit(db, "sync:standard-parking", "REJECTED", key, "KEY_MISSING"); return apiError(400, "KEY_MISSING", "공공데이터포털 인증키가 설정되지 않았습니다."); }
@@ -52,5 +61,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ job: "holidays", ...summary }, { status: summary.status === "FAILED" ? 502 : 200, headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     return internalError(e);
+  } finally {
+    if (acquired) running.delete(acquired);
   }
 }

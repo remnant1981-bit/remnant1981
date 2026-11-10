@@ -1,4 +1,4 @@
-import { kstWeekday, kstYmd, kstDayStart } from "@/lib/time";
+import { DAY_MS, kstWeekday, kstYmd, kstDayStart } from "@/lib/time";
 import type { DayType } from "./fee";
 
 export interface ScheduleRow {
@@ -48,9 +48,25 @@ export function operatingAt(rows: ScheduleRow[], ms: number, holidays: ReadonlyS
   return sawOutside ? "OUTSIDE" : "UNKNOWN";
 }
 
-/** 입차·출차 시각 기준 판정(중간 운영 중단은 미검사) */
+/**
+ * 이용 구간 [start, end) 전체 기준 판정. 입차·출차 시각뿐 아니라 구간 안의 모든 개·폐장 시각(경계)에서도 운영 중이어야 OPERATING.
+ * - 하나라도 운영 외 → OUTSIDE(예: 09–18시 시설에 10:00~익일 10:00 주차는 중간에 폐장), 판정 불가가 있으면 UNKNOWN.
+ * - 종료 시각 정각은 구간에 포함하지 않음(18시 폐장 시설에 16–18시 주차는 운영).
+ */
 export function operatingForStay(rows: ScheduleRow[], startMs: number, endMs: number, holidays: ReadonlySet<string> | null): OperatingStatus {
-  const a = operatingAt(rows, startMs, holidays), b = operatingAt(rows, endMs, holidays);
-  if (a === "UNKNOWN" || b === "UNKNOWN") return "UNKNOWN";
-  return a === "OPERATING" && b === "OPERATING" ? "OPERATING" : "OUTSIDE";
+  const last = endMs - 1; // 구간의 마지막 순간
+  const points = new Set<number>([startMs, Math.max(startMs, last)]);
+  for (let ds = kstDayStart(startMs); ds <= last; ds += DAY_MS) {
+    points.add(ds); // 자정(날짜가 바뀌며 적용 규칙이 달라질 수 있음)
+    const use = pickRows(rows, ds, holidays);
+    for (const r of use ?? []) for (const t of [hm(r.openTime), hm(r.closeTime)]) if (t != null) points.add(ds + t * 60000);
+  }
+  let sawOutside = false;
+  for (const t of points) {
+    if (t < startMs || t > last) continue;
+    const st = operatingAt(rows, t, holidays);
+    if (st === "UNKNOWN") return "UNKNOWN";
+    if (st === "OUTSIDE") sawOutside = true;
+  }
+  return sawOutside ? "OUTSIDE" : "OPERATING";
 }

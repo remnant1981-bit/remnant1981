@@ -37,6 +37,7 @@ export function resolveKeyCollisions<T>(input: Array<Candidate<T>>): Resolution<
         : clusters.find((cl) => cl[0].lat != null && cl[0].lng != null && distanceMeters({ lat: cl[0].lat, lng: cl[0].lng }, { lat: c.lat!, lng: c.lng! }) <= SAME_PLACE_METERS);
       if (target) target.push(c); else clusters.push([c]);
     }
+    const used = new Set<string>([key]);
     clusters.forEach((cl, idx) => {
       const winner = cl.reduce((w, c) => {
         const cd = c.date ?? "", wd = w.date ?? "";
@@ -45,8 +46,16 @@ export function resolveKeyCollisions<T>(input: Array<Candidate<T>>): Resolution<
       superseded += cl.length - 1;
       if (idx > 0) split++;
       // 첫 묶음(좌표가 가장 작은 장소)이 원래 번호를 유지하고, 나머지는 장소(소수 3자리 ≈ 100m)를 덧붙여 구분한다
-      const place = `${cl[0].lat?.toFixed(3) ?? "x"},${cl[0].lng?.toFixed(3) ?? "x"}`;
-      items.push({ id: idx === 0 ? key : `${key}~${place}`, item: winner, collided: true });
+      // 50m 넘게 떨어진 두 장소가 같은 소수 3자리 칸(≈100m)에 들어갈 수 있어, 겹치면 정밀도를 올리고 그래도 겹치면 일련번호를 붙여 항상 유일하게 만든다
+      let id = key;
+      if (idx > 0) {
+        const at = (d: number) => `${key}~${cl[0].lat?.toFixed(d) ?? "x"},${cl[0].lng?.toFixed(d) ?? "x"}`;
+        id = at(3);
+        if (used.has(id)) id = at(5);
+        for (let n = 2; used.has(id); n++) id = `${at(5)}#${n}`;
+      }
+      used.add(id);
+      items.push({ id, item: winner, collided: true });
     });
   }
   items.sort((a, b) => a.item.seq - b.item.seq);

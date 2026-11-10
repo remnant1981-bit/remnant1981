@@ -3,7 +3,7 @@
 //   2차 자료 기준이다. 필드명(locdate, isHoliday, dateName, dateKind, seq, resultCode)은 공식 응답 표 기준.
 //   API 키로 실응답을 확인하기 전에는 운영 사용 금지. 테스트는 명세 기반 합성 응답을 사용한다.
 import type { Db } from "@/server/db";
-import { kstYmd } from "@/lib/time";
+import { finishedIso, kstYmd } from "@/lib/time";
 import { normalizeServiceKey } from "./service-key";
 
 export const HOLIDAY_SOURCE = "KASI_SPCDE";
@@ -96,8 +96,8 @@ export interface HolidaySyncSummary {
 export async function syncHolidays(db: Db, fetchMonth: MonthFetcher, now = new Date(), source = HOLIDAY_SOURCE): Promise<HolidaySyncSummary> {
   const y0 = Number(kstYmd(now.getTime()).slice(0, 4));
   const startedAt = now.toISOString();
-  await db.run("INSERT INTO source_sync_logs(source_name, started_at, status) VALUES (?,?, 'RUNNING')", [source, startedAt]);
-  const logId = (await db.get<{ id: number }>("SELECT MAX(id) AS id FROM source_sync_logs"))!.id;
+  const t0 = performance.now();
+  const logId = (await db.run("INSERT INTO source_sync_logs(source_name, started_at, status) VALUES (?,?, 'RUNNING')", [source, startedAt])).lastId;
   const years: HolidaySyncSummary["years"] = [];
   const collected: HolidayEntry[] = [];
   let lastErr: string | null = null;
@@ -133,6 +133,6 @@ export async function syncHolidays(db: Db, fetchMonth: MonthFetcher, now = new D
   }
   const status = done.length === 0 ? "FAILED" : done.length === 2 ? "SUCCESS" : "PARTIAL";
   await db.run("UPDATE source_sync_logs SET finished_at=?, status=?, records_received=?, records_inserted=?, error_summary=? WHERE id=?",
-    [new Date().toISOString(), status, collected.length, collected.length, status === "SUCCESS" ? null : `공휴일 수집 ${status}: ${years.filter((y) => !y.complete).map((y) => `${y.year}년 ${y.reason}`).join(", ") || lastErr}`, logId]);
+    [finishedIso(now, t0), status, collected.length, collected.length, status === "SUCCESS" ? null : `공휴일 수집 ${status}: ${years.filter((y) => !y.complete).map((y) => `${y.year}년 ${y.reason}`).join(", ") || lastErr}`, logId]);
   return { status, years, coverage };
 }

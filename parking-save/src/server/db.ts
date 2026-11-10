@@ -8,8 +8,13 @@ export type SqlValue = string | number | null;
 export interface Db {
   all<T = Record<string, unknown>>(sql: string, params?: SqlValue[]): Promise<T[]>;
   get<T = Record<string, unknown>>(sql: string, params?: SqlValue[]): Promise<T | undefined>;
-  run(sql: string, params?: SqlValue[]): Promise<{ changes: number }>;
+  run(sql: string, params?: SqlValue[]): Promise<{ changes: number; lastId: number }>;
   exec(sql: string): Promise<void>;
+  /**
+   * 여러 쓰기를 한 번에 커밋(대량 적재 속도). SQLite: 단일 연결에서 직렬화된 BEGIN/COMMIT, 실패 시 ROLLBACK 후 재던짐.
+   * D1: 트랜잭션 API가 없어 그냥 실행(원자성 없음 — 호출부는 원자성에 의존하지 말 것).
+   */
+  transaction<T>(fn: () => Promise<T>): Promise<T>;
 }
 
 /** Cloudflare D1 바인딩 어댑터(배포 환경 전용, 로컬에서는 미검증). */
@@ -18,7 +23,7 @@ export interface D1LikeDb {
     bind(...v: SqlValue[]): {
       all(): Promise<{ results: unknown[] }>;
       first(): Promise<unknown>;
-      run(): Promise<{ meta: { changes: number } }>;
+      run(): Promise<{ meta: { changes: number; last_row_id?: number } }>;
     };
   };
   exec(sql: string): Promise<unknown>;
@@ -32,11 +37,13 @@ export function createD1Db(d1: D1LikeDb): Db {
       return ((await d1.prepare(sql).bind(...params).first()) ?? undefined) as never;
     },
     async run(sql, params = []) {
-      return { changes: (await d1.prepare(sql).bind(...params).run()).meta.changes };
+      const { meta } = await d1.prepare(sql).bind(...params).run();
+      return { changes: meta.changes, lastId: Number(meta.last_row_id ?? 0) };
     },
     async exec(sql) {
       await d1.exec(sql);
     },
+    transaction: (fn) => fn(),
   };
 }
 
@@ -45,6 +52,7 @@ export async function createSqliteDb(file: string): Promise<Db> {
   const { DatabaseSync } = await import("node:sqlite");
   if (file !== ":memory:") fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true });
   const raw = new DatabaseSync(file);
+  let depth = 0, txChain: Promise<void> = Promise.resolve();
   raw.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = " + (file === ":memory:" ? "MEMORY" : "WAL") + ";");
   return {
     async all(sql, params = []) {
@@ -56,10 +64,30 @@ export async function createSqliteDb(file: string): Promise<Db> {
     },
     async run(sql, params = []) {
       const r = raw.prepare(sql).run(...params);
-      return { changes: Number(r.changes) };
+      return { changes: Number(r.changes), lastId: Number(r.lastInsertRowid) };
     },
     async exec(sql) {
       raw.exec(sql);
+    },
+    async transaction(fn) {
+      if (depth > 0) return fn(); // 이미 트랜잭션 안(중첩은 바깥에 합류)
+      const prev = txChain;
+      let release!: () => void;
+      txChain = new Promise<void>((r) => (release = r));
+      await prev; // 다른 트랜잭션이 끝날 때까지 대기(단일 연결)
+      depth++;
+      raw.exec("BEGIN IMMEDIATE");
+      try {
+        const out = await fn();
+        raw.exec("COMMIT");
+        return out;
+      } catch (e) {
+        try { raw.exec("ROLLBACK"); } catch { /* 이미 종료 */ }
+        throw e;
+      } finally {
+        depth--;
+        release();
+      }
     },
   };
 }

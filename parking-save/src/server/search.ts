@@ -66,8 +66,8 @@ interface LotRow {
   total_spaces: number | null; phone: string | null; source_url: string | null;
   source_updated_at: string | null; collected_at: string; data_status: string; quality_flags: string | null; fee_note: string | null;
 }
-interface FeeRow { id: number; rule_type: string; amount: number | null; duration_minutes: number | null; valid_day_type: DayType; start_time: string | null; end_time: string | null; daily_max_basis: string | null }
-interface SchedRow { day_type: DayType; open_time: string | null; close_time: string | null; all_day_flag: number | null; closed_flag: number | null; holiday_policy: string | null }
+interface FeeRow { id: number; parking_lot_id: number; rule_type: string; amount: number | null; duration_minutes: number | null; valid_day_type: DayType; start_time: string | null; end_time: string | null; daily_max_basis: string | null }
+interface SchedRow { parking_lot_id: number; day_type: DayType; open_time: string | null; close_time: string | null; all_day_flag: number | null; closed_flag: number | null; holiday_policy: string | null }
 
 export function toFeeRules(rows: FeeRow[]): FeeRule[] | "UNSUPPORTED" {
   const out: FeeRule[] = [];
@@ -135,16 +135,38 @@ export const notInLatestSync = (lot: { source_name: string; collected_at: string
   return at !== undefined && lot.collected_at < at;
 };
 
-async function evaluateLot(db: Db, lot: LotRow, p: Pick<SearchParams, "startAt" | "endAt">, holidays: Set<string> | null, now: Date) {
-  const feeRows = await db.all<FeeRow>("SELECT * FROM fee_rules WHERE parking_lot_id=? ORDER BY id", [lot.id]);
+/** 검색 한 번에 필요한 시설별 행을 IN 조회로 한꺼번에 읽어 N+1 쿼리를 없앤다(후보 수에 비례하던 왕복 제거). */
+interface Preloaded { fees: Map<number, FeeRow[]>; scheds: Map<number, SchedRow[]>; occMaybe: Set<number> }
+const IN_CHUNK = 400;
+async function loadGrouped<T extends { parking_lot_id: number }>(db: Db, table: "fee_rules" | "operating_schedules", ids: number[]): Promise<Map<number, T[]>> {
+  const out = new Map<number, T[]>();
+  for (let i = 0; i < ids.length; i += IN_CHUNK) {
+    const part = ids.slice(i, i + IN_CHUNK);
+    const rows = await db.all<T>(`SELECT * FROM ${table} WHERE parking_lot_id IN (${part.map(() => "?").join(",")}) ORDER BY id`, part);
+    for (const r of rows) { const a = out.get(r.parking_lot_id); if (a) a.push(r); else out.set(r.parking_lot_id, [r]); }
+  }
+  return out;
+}
+async function preload(db: Db, ids: number[]): Promise<Preloaded> {
+  const [fees, scheds, occ] = await Promise.all([
+    loadGrouped<FeeRow>(db, "fee_rules", ids),
+    loadGrouped<SchedRow>(db, "operating_schedules", ids),
+    // 스냅샷이 있는 시설 + 승인(MERGED) 연결 시설의 상위집합. 이 밖의 시설은 실시간 데이터가 있을 수 없어 개별 조회를 생략한다.
+    db.all<{ id: number }>("SELECT parking_lot_id AS id FROM occupancy_snapshots UNION SELECT lot_a_id FROM duplicate_candidates WHERE status='MERGED' UNION SELECT lot_b_id FROM duplicate_candidates WHERE status='MERGED'"),
+  ]);
+  return { fees, scheds, occMaybe: new Set(occ.map((r) => r.id)) };
+}
+
+async function evaluateLot(db: Db, lot: LotRow, p: Pick<SearchParams, "startAt" | "endAt">, holidays: Set<string> | null, now: Date, pre?: Preloaded) {
+  const feeRows = pre ? pre.fees.get(lot.id) ?? [] : await db.all<FeeRow>("SELECT * FROM fee_rules WHERE parking_lot_id=? ORDER BY id", [lot.id]);
   const rules = toFeeRules(feeRows);
   const fee = rules === "UNSUPPORTED"
     ? feeView({ status: "UNKNOWN", reason: "UNSUPPORTED_RULE", detail: "계산에 지원되지 않는 요금 유형 포함" })
     : feeView(calculateFee({ startAt: p.startAt, endAt: p.endAt, rules, holidays }));
-  const sched = toSchedules(await db.all<SchedRow>("SELECT * FROM operating_schedules WHERE parking_lot_id=?", [lot.id]));
+  const sched = toSchedules(pre ? pre.scheds.get(lot.id) ?? [] : await db.all<SchedRow>("SELECT * FROM operating_schedules WHERE parking_lot_id=?", [lot.id]));
   const operating = operatingForStay(sched, p.startAt.getTime(), p.endAt.getTime(), holidays);
   const operatingAssumed = operating !== "UNKNOWN" && operatingUsesAssumed(sched, p.startAt.getTime(), p.endAt.getTime(), holidays);
-  const occupancy = await occupancyFor(db, lot.id, now);
+  const occupancy = pre && !pre.occMaybe.has(lot.id) ? evaluateOccupancy({ totalSpaces: null, availableSpaces: null, observedAt: null }, now) : await occupancyFor(db, lot.id, now);
   const stale = (now.getTime() - Date.parse(lot.source_updated_at ?? lot.collected_at)) / 86400_000 > staleDaysFor(lot.source_name);
   return { fee, operating, operatingAssumed, occupancy, freshness: (stale ? "STALE" : "FRESH") as "FRESH" | "STALE", rules, sched };
 }
@@ -168,12 +190,16 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
   const holidays = await loadHolidays(db, p.startAt, p.endAt, now);
 
   const syncStarts = await latestSyncStarts(db);
-  let items: LotItem[] = [];
+  const inRange: Array<{ lot: LotRow; dist: number }> = [];
   for (const lot of lots) {
+    const dist = distanceMeters(p.center, { lat: lot.latitude!, lng: lot.longitude! });
+    if (dist <= p.radiusMeters) inRange.push({ lot, dist });
+  }
+  const pre = await preload(db, inRange.map((x) => x.lot.id));
+  let items: LotItem[] = [];
+  for (const { lot, dist } of inRange) {
     const here = { lat: lot.latitude!, lng: lot.longitude! };
-    const dist = distanceMeters(p.center, here);
-    if (dist > p.radiusMeters) continue;
-    const ev = await evaluateLot(db, lot, p, holidays, now);
+    const ev = await evaluateLot(db, lot, p, holidays, now, pre);
     items.push({
       id: lot.id, name: lot.name, address: lot.road_address ?? lot.address, parkingType: lot.parking_type, ownershipType: lot.ownership_type,
       latitude: here.lat, longitude: here.lng, distanceMeters: Math.round(dist), totalSpaces: lot.total_spaces,

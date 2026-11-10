@@ -42,7 +42,7 @@ export function explainAll(items: RecommendInput[]): Map<number, Explanation> {
     if (i.distanceMeters >= FAR_METERS) c.push(`직선거리 ${km(i.distanceMeters)}로 다소 멉니다 — 실제 이동 거리는 더 길 수 있음`);
     if (i.fee.status !== "OK") c.push("요금을 계산하지 못해 요금 비교에서 제외됨");
     if (i.operatingAssumed) c.push("일요일 운영시간은 공휴일 규칙을 적용한 추정입니다 — 방문 전 확인 권장");
-    if (i.operating === "OUTSIDE") c.push("입·출차 시각이 운영시간 밖일 수 있음");
+    if (i.operating === "OUTSIDE") c.push("이용 시간 중 운영시간 밖인 구간이 있음");
     else if (i.operating === "UNKNOWN") c.push("운영시간 정보 없음 — 이용 가능 여부 확인 필요");
     if (i.ownershipType === "UNKNOWN") c.push("공영 여부 미확인");
     out.set(i.id, { highlights: h, cautions: c });

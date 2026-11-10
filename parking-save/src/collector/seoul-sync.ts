@@ -3,6 +3,7 @@
 // 표준데이터 시설과 '주소 일치'로 연결 후보(duplicate_candidates)를 만들고, 관리자가 승인(MERGED)한 경우에만 실시간 값을 사용한다.
 import { createHash } from "node:crypto";
 import type { Db } from "@/server/db";
+import { finishedIso } from "@/lib/time";
 import { SEOUL_SOURCE, SeoulApiError, parseSeoulResponse, seoulOccupancy, type SeoulRow } from "./seoul-parking";
 
 export const SEOUL_DEFAULT_BASE = "http://openapi.seoul.go.kr:8088"; // 문서 예시는 http. https 지원 여부 미확인 → 환경변수로 변경 가능
@@ -54,8 +55,8 @@ export interface SeoulSyncSummary {
 export async function syncSeoulOccupancy(db: Db, fetchPage: PageFetcher, now = new Date()): Promise<SeoulSyncSummary> {
   const startedAt = now.toISOString();
   const sum: SeoulSyncSummary = { status: "SUCCESS", received: 0, lots: 0, snapshots: 0, unavailable: {}, newCandidates: 0 };
-  await db.run("INSERT INTO source_sync_logs(source_name, started_at, status) VALUES (?,?, 'RUNNING')", [SEOUL_SOURCE, startedAt]);
-  const logId = (await db.get<{ id: number }>("SELECT MAX(id) AS id FROM source_sync_logs"))!.id;
+  const t0 = performance.now();
+  const logId = (await db.run("INSERT INTO source_sync_logs(source_name, started_at, status) VALUES (?,?, 'RUNNING')", [SEOUL_SOURCE, startedAt])).lastId;
   let fatal: string | null = null, newestObserved: string | null = null;
   try {
     const rows: SeoulRow[] = [];
@@ -110,7 +111,7 @@ export async function syncSeoulOccupancy(db: Db, fetchPage: PageFetcher, now = n
   }
   sum.status = fatal ? "FAILED" : Object.keys(sum.unavailable).length > 0 ? "PARTIAL" : "SUCCESS";
   await db.run("UPDATE source_sync_logs SET finished_at=?, status=?, records_received=?, records_inserted=?, error_summary=?, source_data_timestamp=? WHERE id=?",
-    [new Date().toISOString(), sum.status, sum.received, sum.snapshots, fatal ? `서울 수집 실패 ${fatal}` : sum.status === "PARTIAL" ? `현재 주차대수 사용 불가 ${JSON.stringify(sum.unavailable)}` : null, newestObserved, logId]);
+    [finishedIso(now, t0), sum.status, sum.received, sum.snapshots, fatal ? `서울 수집 실패 ${fatal}` : sum.status === "PARTIAL" ? `현재 주차대수 사용 불가 ${JSON.stringify(sum.unavailable)}` : null, newestObserved, logId]);
   return sum;
 }
 
