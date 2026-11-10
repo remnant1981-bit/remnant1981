@@ -139,6 +139,7 @@ python tistory_poster.py --login
 - 쿠키가 모두 만료되면: 실행 1회 실패(메일 1통) → 이후 같은 쿠키로는 자동 실행을 건너뜀(실패 메일 반복 없음) → PC에서 `setup_cookies.bat` 재실행해 `TISTORY_COOKIES` 재등록 → 자동 재개
 - 세션 유지: 발행할 글이 없어도 마지막 로그인 후 2시간(Variables `KEEPALIVE_HOURS`)이 지나면 가볍게 로그인해 세션을 갱신함 (GitHub 정기 실행이 몇 시간씩 밀리는 날이 있어 짧게 잡음)
 - `SESSION_KEY`를 등록하면 실행 중 갱신된 세션이 암호화 저장돼 쿠키 수명이 길어짐
+- 쿠키는 브라우저 전체에서 tistory.com·kakao.com(하위 도메인 포함) 것만 추려 저장함. 로그인에 성공한 실행만 저장 세션과 마지막 성공 시각을 갱신함
 
 ### 휴대폰에서 실행 (순서대로)
 **① 설정 점검 (최초 1회)** — 글은 올리지 않고 로그인만 확인
@@ -186,6 +187,7 @@ python tistory_poster.py --login
 
 - 자동 배정 시간대: Variables `SCHEDULE_SLOTS` = `09:00,19:00` (기본 `09:00`). 이미 예약된 칸은 건너뜀
 - 지정 시각으로 여러 글 작성 시 24시간 간격으로 배정 (`config.json` → `schedule.gap_hours`)
+- **발행 빈도 제한 (계정 보호)**: 자동 실행은 1회 1편·직전 발행 후 20시간 간격(하루 1편)·24시간 최대 2편. 밀린 글이 여러 편 있어도 하루 1편씩 나감. 실행 화면에서 직접 실행(Run workflow)할 때는 간격 4시간 적용 (`config.json` → `rate_limit`)
 - 주말 제외 (PC): `config.json` → `schedule.skip_weekdays: [5, 6]`
 - 예약 대기 목록: 실행 화면 Summary ⏰ 표, 또는 `python tistory_poster.py --list`
 - 시각은 한국시간(KST). **GitHub 정기 실행은 이용자가 적은 저장소에서 몇 시간씩 늦거나 건너뛸 수 있음** (실측: 매시 설정인데 2~8시간 간격 실행) → 매시 7분·37분 2회로 보완함. 정확한 시각이 중요하면 아래 '정기 실행 보강' 참고
@@ -254,3 +256,12 @@ GitHub 정기 실행이 늦을 때, 외부 무료 스케줄러로 매시간 실�
   - 티스토리 관리 → 플러그인 → **메타 태그 등록** 또는 꾸미기 → 스킨 편집 → HTML의 `<head>` 안에 붙여넣기 → 서치콘솔에서 확인
   - 확인 후 **Sitemaps** 메뉴에 `sitemap.xml` 제출, RSS(`rss`)도 추가 제출 가능
 - 파일 방식(`googleXXXX.html`)은 GitHub Pages 사이트용 → `coupon-wallet/` 폴더에 넣으면 `https://<소유자>.github.io/<저장소>/googleXXXX.html` 로 배포됨
+
+## 점검용 테스트
+
+발행 판단 로직(예약·빈도 제한·글 파싱)은 브라우저 없이 확인 가능:
+
+```
+pip install pytest
+python -m pytest tests -q
+```
