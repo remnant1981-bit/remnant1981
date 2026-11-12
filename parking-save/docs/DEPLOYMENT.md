@@ -1,6 +1,6 @@
-# 배포 가이드 (플랫폼 중립)
+# 배포 가이드
 
-운영 인프라는 미결정(OPEN_ISSUES #10: AWS Lightsail 서울 / Fly.io 도쿄 / Naver Cloud Micro VPS 비교 보류). 세 후보 모두 Docker 컨테이너를 실행할 수 있으므로 이미지 하나로 공통 대응한다. 플랫폼별 세부 설정은 결정 후 이 문서에 추가한다.
+운영 인프라: **네이버클라우드 Micro**(사용자 결정 2026-11-12, OPEN_ISSUES #10). 실제 설치 절차는 **9절**. 1~8절은 Docker 이미지 기준의 공통 내용이라 다른 플랫폼에도 그대로 적용된다.
 
 ## 1. 구성
 
@@ -100,3 +100,61 @@ npm run demo:build -- --db ./data/dev.sqlite --out ./data/demo/parking-save-demo
 - 제외: 목업·샘플 원천, 좌표 없는 시설(건수만 표시), 실시간 잔여면수(정적 페이지라 신선도 보장 불가).
 - 공휴일이 DB에 없으면 넣지 않으며, 요일별 규칙 시설은 판정 불가로 표시된다.
 - 전국 약 1.6만 곳 기준 약 3.2MB. 데이터 갱신 후 다시 빌드해 같은 링크에 재게시한다.
+
+## 9. 네이버클라우드 Micro 설치 (운영)
+
+구성: GitHub Actions가 이미지를 빌드해 GHCR(`ghcr.io/remnant1981-bit/parking-save`)에 올림 → 서버는 받아서 실행만 함(1GB 메모리로 `next build`는 빠듯). 서버 안에서 nginx(HTTPS) → 앱(127.0.0.1:3000), cron이 수집·백업.
+
+### 9-1. 콘솔에서 할 일 (사용자)
+
+> 콘솔 메뉴명·Micro 무료 조건은 이 세션에서 확인하지 못했음. 화면이 다르면 같은 의미의 항목을 찾을 것.
+
+1. **서버 생성**: Micro(1vCPU/1GB), OS **Ubuntu 22.04 또는 24.04**, 공인 IP 할당.
+2. **ACG(방화벽) 인바운드**: TCP 80·443 전체 허용, TCP 22는 **본인 IP만**. 3000은 열지 않음.
+3. **아웃바운드**: 기본 전체 허용이면 그대로. 제한한다면 `apis.data.go.kr`(443), `api.data.go.kr`(443), `openapi.seoul.go.kr`(8088, http), `ghcr.io`(443), Let's Encrypt(443) 허용.
+4. **도메인**: DNS A 레코드를 서버 공인 IP로. 도메인이 없으면 임시로 `<IP를 하이픈으로>.sslip.io`(예: `203-0-113-10.sslip.io`)도 가능하나 인증서 발급 한도가 공유돼 실패할 수 있음. **HTTPS가 없으면 '현재 위치 사용'이 동작하지 않음**(브라우저 보안 정책).
+
+### 9-2. 이미지 준비 (최초 1회)
+
+- 이 PR이 main에 머지되면 `.github/workflows/parking-image.yml`이 이미지를 GHCR에 올린다(Actions 탭에서 확인).
+- 저장소가 비공개면 패키지도 비공개 → 서버에서 `docker login ghcr.io -u <GitHub 사용자명>` 후 비밀번호 자리에 `read:packages` 권한 토큰 입력. 또는 GitHub 패키지 설정에서 공개로 전환.
+
+### 9-3. 서버에서 실행
+
+```bash
+# SSH 접속 후
+git clone https://github.com/remnant1981-bit/remnant1981.git   # 비공개면 토큰 필요. 또는 deploy/naver 폴더만 scp
+cd remnant1981/parking-save/deploy/naver
+sudo DOMAIN=parking.example.com EMAIL=you@example.com bash setup.sh
+```
+
+`setup.sh`가 하는 일: 시간대 Asia/Seoul, 스왑 2GB, docker·nginx·certbot 설치, `/etc/parking-save/env` 생성(관리자 토큰 무작위 생성, 권한 600), 이미지 실행(127.0.0.1:3000, 메모리 700MB 제한, 로그 30MB 상한), nginx 설정(`/api/admin`은 외부 404), HTTPS 인증서, cron 등록. 다시 실행해도 안전.
+
+### 9-4. 키 입력 후 첫 수집
+
+```bash
+sudo nano /etc/parking-save/env        # DATA_GO_KR_SERVICE_KEY, SEOUL_OPENAPI_KEY 입력
+sudo parking-update                    # 환경변수 반영(컨테이너 재생성, 데이터 유지)
+sudo parking-sync holidays             # 공휴일 먼저
+sudo parking-sync standard-parking     # 표준데이터(1~2분)
+tail /var/log/parking-save-sync.log
+curl -s https://<도메인>/api/health
+```
+
+### 9-5. 운영 명령
+
+| 명령 | 용도 |
+|---|---|
+| `sudo parking-update` | 최신 이미지로 교체(main 머지 후 Actions 완료 → 실행). 데이터 볼륨 유지, 헬스체크 실패 시 종료 코드 1 |
+| `sudo parking-sync <job>` | 수동 수집(`standard-parking`·`holidays`·`seoul-occupancy`). 결과는 `/var/log/parking-save-sync.log` |
+| `sudo parking-backup` | 즉시 백업 → `/var/backups/parking-save/parking-YYYY-MM-DD.sqlite`(14일 보관, 매일 03:37 자동) |
+| `docker logs --tail 100 parking-save` | 앱 로그 |
+
+- 백업은 같은 서버 디스크에 있음 → 서버 장애 대비로 주 1회 이상 PC나 오브젝트 스토리지로 옮길 것(관리자 승인한 중복 후보·감사로그는 재수집으로 복구되지 않음).
+- 관리자 API는 서버 안에서만 호출됨(nginx가 외부 차단). 앱은 nginx 1단계 뒤이므로 `TRUSTED_PROXY_COUNT=1`.
+
+### 9-6. 검증 기록 (2026-11-12, 이 세션)
+
+- `update.sh`로 컨테이너 실행 → 헬스 200, `parking-sync holidays`가 관리자 인증 통과(키 미입력이라 400 `KEY_MISSING` 로그), `parking-backup`이 백업 파일 생성·임시 파일 정리.
+- `nginx.conf`: `nginx -t` 통과, nginx 경유 시 `/api/admin/sync` 404·`/api/health` 200·홈 200.
+- 미검증: 실제 네이버클라우드 VM에서의 `setup.sh` 전체 실행(systemd·certbot·apt), GHCR 푸시 워크플로(머지 후 첫 실행에서 확인).

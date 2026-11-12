@@ -173,3 +173,9 @@
 ## 요청 제한 클라이언트 식별 보강 (2026-11-12)
 - **보안 결함 수정**: `X-Forwarded-For` **첫 값**으로 클라이언트를 구분 → nginx 기본값·대부분의 로드밸런서처럼 헤더에 덧붙이는 프록시 뒤에서는 클라이언트가 첫 값을 매번 바꿔 요청 제한(검색 분당 60회, 관리자 분당 5회 — 관리자 토큰 무차별 대입 완화용)을 우회할 수 있었음. 기존 배포 문서는 "프록시가 덮어쓰도록 설정"에 의존했음.
 - 조치: 끝에서 `TRUSTED_PROXY_COUNT`번째 값(기본 1) 사용. 우회 시도 재현 테스트 추가(첫 값을 매번 바꿔도 같은 키로 집계).
+
+## 운영 배포 구성: 네이버클라우드 Micro (2026-11-12)
+- 사용자 결정: 네이버클라우드 Micro(OPEN_ISSUES #10).
+- `.github/workflows/parking-image.yml`: main의 parking-save 변경 시 linux/amd64 이미지 빌드 → GHCR(`:latest`, `:<sha>`). 서버(1GB)에서는 빌드하지 않음.
+- `deploy/naver/`: `setup.sh`(스왑·docker·nginx·certbot·env·cron 설치, 재실행 안전), `update.sh`(이미지 교체·헬스 확인), `parking-sync.sh`(서버 안 관리자 API 호출, 409는 정상), `parking-backup.sh`(VACUUM INTO, 14일 보관), `nginx.conf`(`/api/admin` 외부 404, X-Forwarded-For 덧붙이기).
+- 검증: 스크립트 문법, 로컬 Docker에서 update/sync/backup 실제 실행, nginx 경유 라우팅·차단 확인. 실제 VM 전체 설치와 GHCR 푸시는 머지 후 첫 실행에서 확인.

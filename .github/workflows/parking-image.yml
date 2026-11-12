@@ -1,0 +1,42 @@
+name: ParkingSave image
+
+# main에 parking-save 변경이 들어오면 운영용 Docker 이미지를 빌드해 GHCR에 올린다.
+# 서버(네이버클라우드 Micro, 1GB)는 빌드하지 않고 이 이미지를 받아 실행만 한다(parking-save/docs/DEPLOYMENT.md).
+on:
+  push:
+    branches: [main]
+    paths: ['parking-save/**', '.github/workflows/parking-image.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: parking-image
+  cancel-in-progress: true
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: 이미지 이름(소문자)
+        id: name
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/parking-save" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: parking-save
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.name.outputs.image }}:latest
+            ${{ steps.name.outputs.image }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
