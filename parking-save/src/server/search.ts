@@ -37,7 +37,9 @@ export function parseSearchParams(q: URLSearchParams): ParseResult {
   } else if (dest) {
     if (dest.length > 100) return bad("INVALID_DESTINATION", "목적지가 너무 깁니다.");
     const p = mockEnabled() ? MOCK_PLACES[dest] : undefined; // 실제 지오코딩 미연동(D7)
-    if (!p) return bad("DESTINATION_NOT_FOUND", `목적지를 찾을 수 없습니다. (목업 모드: ${Object.keys(MOCK_PLACES).join(", ")}만 검색 가능)`);
+    if (!p) return bad("DESTINATION_NOT_FOUND", mockEnabled()
+      ? `목적지를 찾을 수 없습니다. (목업 모드: ${Object.keys(MOCK_PLACES).join(", ")}만 검색 가능)`
+      : "목적지 검색은 준비 중입니다(주소·장소 검색 미연동). '현재 위치 사용'으로 검색해 주세요.");
     center = p; label = dest; kind = "destination";
   } else return bad("MISSING_CENTER", "현재 위치 또는 목적지를 입력하세요.");
 

@@ -5,7 +5,16 @@ import type { Db } from "./db";
 export const MOCK_SOURCE = "MOCK";
 /** 실서비스 데이터가 아닌 원천(목업/샘플 픽스처). UI에서 목업·샘플로 표시 */
 export const NON_PRODUCTION_SOURCES: string[] = [MOCK_SOURCE, "STANDARD_SAMPLE"];
-export const mockEnabled = () => process.env.PARKING_MOCK_DATA !== "false";
+/**
+ * 목업 데이터 사용 여부. 명시값(true/false)이 우선이고, 미설정이면 개발·테스트에서만 켜고 운영(production)에서는 끈다.
+ * (이전에는 미설정 시 운영에서도 켜져, 환경변수를 빠뜨리고 배포하면 가상 주차장이 실서비스에 섞일 수 있었음)
+ */
+export const mockEnabled = () => {
+  const v = process.env.PARKING_MOCK_DATA;
+  if (v === "true") return true;
+  if (v === "false") return false;
+  return process.env.NODE_ENV !== "production";
+};
 
 /** 목업 목적지 지오코더(실제 지오코딩 아님 — OPEN_ISSUES D7). 좌표는 대략값 */
 export const MOCK_PLACES: Record<string, { lat: number; lng: number }> = {
