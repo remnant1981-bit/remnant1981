@@ -35,6 +35,7 @@ curl -s localhost:3000/api/health
 | `DATA_GO_KR_SERVICE_KEY` | 예 | 표준데이터·특일 정보 공용 |
 | `SEOUL_OPENAPI_KEY` | 선택 | 서울 실시간. 없으면 서울 job 거부 |
 | `ADMIN_AUDIT_SALT` | 권장 | 감사로그 클라이언트 해시 솔트 |
+| `TRUSTED_PROXY_COUNT` | 권장 | 앱 앞 프록시 단계 수(기본 1). 4절 참고 |
 | `STANDARD_PAGE_SIZE`, `SEOUL_OPENAPI_BASE` | 선택 | 기본값 사용 가능 |
 
 ## 3. 정기 수집 (스케줄러 → 관리자 API)
@@ -56,10 +57,11 @@ curl -s localhost:3000/api/health
 
 ## 4. 리버스 프록시 필수 조건
 
-요청 제한(검색 분당 60회, 관리자 분당 5회)은 `X-Forwarded-For` 첫 값으로 클라이언트를 구분한다(`src/server/rate-limit.ts`).
+요청 제한(검색 분당 60회, 관리자 분당 5회)은 `X-Forwarded-For`의 **끝에서 N번째 값**으로 클라이언트를 구분한다(`src/server/rate-limit.ts`). 프록시는 이 헤더 끝에 자기가 본 접속 IP를 덧붙이므로, 앞쪽 값은 클라이언트가 위조할 수 있다.
 
-- 앱 포트(3000)를 인터넷에 직접 노출하지 말 것 — 직접 노출 시 헤더 위조로 제한 우회 가능.
-- 프록시가 클라이언트가 보낸 `X-Forwarded-For`를 **덮어쓰도록** 설정(nginx: `proxy_set_header X-Forwarded-For $remote_addr;`).
+- `TRUSTED_PROXY_COUNT` = 앱 앞의 프록시 단계 수(기본 1). 예: 로드밸런서만 → 1, CDN → 로드밸런서 → 2. 실제 구성과 다르면 모든 사용자가 같은 키로 묶이거나(값이 너무 큼) 위조가 가능해짐(값이 너무 작음).
+- nginx는 기본 설정(`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`, 덧붙이기)으로 충분하다.
+- 앱 포트(3000)를 인터넷에 직접 노출하지 말 것 — 프록시 없이 받으면 헤더 전체가 클라이언트 입력이라 제한 우회 가능.
 - 제한은 프로세스 메모리 기반 → 인스턴스 1개 기준. 여러 개로 늘리면 엣지(CDN/WAF) 제한으로 교체.
 
 ## 5. 백업·복구

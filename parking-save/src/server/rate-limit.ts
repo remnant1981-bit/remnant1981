@@ -1,6 +1,6 @@
 // 단순 고정 윈도 요청 제한 (SECURITY_PRIVACY.md: 요청 제한).
-// ⚠ 한계: 프로세스 메모리 기반이라 인스턴스가 여러 개면 인스턴스별로 적용됨. 클라이언트 식별은 프록시가 붙이는
-//   x-forwarded-for 첫 값을 사용하므로, 신뢰할 수 있는 프록시 뒤에서만 의미가 있음(직접 노출 시 위조 가능).
+// ⚠ 한계: 프로세스 메모리 기반이라 인스턴스가 여러 개면 인스턴스별로 적용됨. 클라이언트 식별은
+//   x-forwarded-for 끝에서 TRUSTED_PROXY_COUNT번째 값(신뢰 프록시가 덧붙인 접속 IP) — 프록시 뒤에서만 의미가 있음.
 //   운영 인프라(OPEN_ISSUES #10) 결정 후 공유 저장소/엣지 제한으로 교체 권장.
 export interface Limiter { check(key: string, now?: number): { ok: boolean; retryAfterSec: number } }
 
@@ -17,9 +17,20 @@ export function createLimiter(limit: number, windowMs: number): Limiter {
   };
 }
 
-export function clientKey(headers: Headers): string {
-  const xff = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return (xff || headers.get("x-real-ip") || "unknown").slice(0, 64);
+/**
+ * 앞단 신뢰 프록시 수(기본 1). 프록시는 X-Forwarded-For 끝에 "자기가 본 접속 IP"를 덧붙이므로,
+ * 끝에서 N번째 값이 실제 클라이언트다. 첫 값은 클라이언트가 임의로 보낸 값일 수 있어 쓰지 않는다.
+ * (예: 클라이언트가 "1.1.1.1"을 보내면 프록시 1개 뒤에서 헤더는 "1.1.1.1, <실제 IP>")
+ */
+export function trustedProxyCount(): number {
+  const n = Number(process.env.TRUSTED_PROXY_COUNT ?? "1");
+  return Number.isInteger(n) && n >= 1 && n <= 10 ? n : 1;
+}
+
+export function clientKey(headers: Headers, proxies: number = trustedProxyCount()): string {
+  const chain = (headers.get("x-forwarded-for") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  const fromChain = chain.length >= proxies ? chain[chain.length - proxies] : chain[0];
+  return (fromChain || headers.get("x-real-ip") || "unknown").slice(0, 64);
 }
 
 export const searchLimiter = createLimiter(60, 60_000);   // 검색·상세: 분당 60회/클라이언트

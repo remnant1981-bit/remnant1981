@@ -21,7 +21,11 @@ describe("요청 제한", () => {
     expect(l.check("a", 1001).ok).toBe(true);
   });
   it("클라이언트 키는 x-forwarded-for 첫 값", () => {
-    expect(clientKey(new Headers({ "x-forwarded-for": "1.1.1.1, 10.0.0.1" }))).toBe("1.1.1.1");
+    // 프록시 1개 뒤: 끝 값(프록시가 덧붙인 실제 접속 IP)을 사용. 첫 값은 클라이언트가 위조할 수 있음
+    expect(clientKey(new Headers({ "x-forwarded-for": "1.1.1.1, 10.0.0.1" }))).toBe("10.0.0.1");
+    expect(clientKey(new Headers({ "x-forwarded-for": "203.0.113.9" }))).toBe("203.0.113.9");
+    // 프록시 2개(CDN → 로드밸런서): 끝에서 두 번째
+    expect(clientKey(new Headers({ "x-forwarded-for": "6.6.6.6, 203.0.113.9, 10.0.0.2" }), 2)).toBe("203.0.113.9");
     expect(clientKey(new Headers())).toBe("unknown");
   });
   it("검색 API는 분당 60회 초과 시 429 + Retry-After", async () => {
@@ -124,5 +128,13 @@ describe("POST /api/admin/sync", () => {
     for (let i = 0; i < 7; i++) statuses.push((await post("10.0.0.6", "Bearer wrong")).status);
     expect(statuses.slice(0, 5).every((s) => s === 401)).toBe(true);
     expect(statuses.slice(5)).toEqual([429, 429]);
+  });
+});
+
+describe("요청 제한 우회 방지", () => {
+  it("클라이언트가 X-Forwarded-For 첫 값을 매번 바꿔도 같은 키로 집계(프록시가 실제 IP를 덧붙임)", () => {
+    const lim = createLimiter(3, 60_000);
+    const results = [1, 2, 3, 4, 5].map((i) => lim.check(clientKey(new Headers({ "x-forwarded-for": `9.9.9.${i}, 198.51.100.7` })), 1000).ok);
+    expect(results).toEqual([true, true, true, false, false]);
   });
 });
