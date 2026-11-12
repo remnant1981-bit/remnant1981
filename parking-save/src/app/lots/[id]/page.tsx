@@ -13,6 +13,8 @@ import { TooManyRequests } from "@/components/TooManyRequests";
 import { FavoriteButton } from "@/components/FavoriteButton";
 import { ShareButton } from "@/components/ShareButton";
 import type { DayBreakdown } from "@/domain/fee";
+import { FeeCurve } from "@/components/FeeCurve";
+import { ParkingTimerPanel } from "@/components/ParkingTimer";
 
 export const dynamic = "force-dynamic";
 type SP = Record<string, string | string[] | undefined>;
@@ -40,6 +42,9 @@ export default async function LotPage({ params, searchParams }: { params: Promis
   const links = lot.latitude != null && lot.longitude != null
     ? buildNaverLinks({ lot: { lat: lot.latitude, lng: lot.longitude, name: lot.name }, destination, appname: process.env.SITE_URL || "http://localhost:3000" })
     : { car: null, walk: null, place: null };
+  // 그래프에서 강조할 막대: 입력한 이용 시간이 1~12시간 정수일 때
+  const stayMin = d.requestedPeriod ? (Date.parse(d.requestedPeriod.endAt) - Date.parse(d.requestedPeriod.startAt)) / 60000 : 0;
+  const stayHours = stayMin > 0 && stayMin % 60 === 0 && stayMin / 60 <= 12 ? stayMin / 60 : null;
   const days = (d.fee?.status === "OK" ? (d.fee.days ?? []) : []) as DayBreakdown[];
   const hhmm = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}시간${m % 60 ? ` ${m % 60}분` : ""}` : `${m}분`);
   const hm = (r: { startTime: string | null; endTime: string | null }) => (r.startTime ? `${r.startTime}~${r.endTime}` : "종일");
@@ -81,6 +86,7 @@ export default async function LotPage({ params, searchParams }: { params: Promis
                 </table>
               </div>
             )}
+            {d.feeCurve && <FeeCurve points={d.feeCurve} highlightHours={stayHours} />}
             {d.operating && <p className="mt-1 text-sm">운영 상태(이용 시간 전체 기준): {OPERATING_LABEL[d.operating]}{d.operatingAssumed && <span className="text-amber-800"> (일요일은 공휴일 규칙 적용 · 추정)</span>}</p>}
           </>
         ) : <p className="text-sm">주차 시작·종료 일시를 지정해 검색하면 예상 요금을 계산합니다.</p>}
@@ -91,6 +97,8 @@ export default async function LotPage({ params, searchParams }: { params: Promis
             <tbody>{d.feeRules.map((r, i) => <tr key={i}><td>{RULE_LABEL[r.ruleType] ?? r.ruleType}</td><td>{DAY_LABEL[r.dayType]}</td><td>{hm(r)}</td><td>{ruleText(r)}</td></tr>)}</tbody>
           </table>)}
       </section>
+
+      <ParkingTimerPanel lotId={lot.id} name={lot.name} rules={d.timer?.rules ?? null} holidays={d.timer?.holidays ?? null} />
 
       <section className="mt-4" aria-labelledby="op"><h2 id="op" className="font-semibold">운영시간</h2>
         {d.operatingSchedules.length === 0 ? <p className="text-sm">운영시간 정보 없음 (24시간 운영 아님)</p> : (
