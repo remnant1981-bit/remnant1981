@@ -4,7 +4,6 @@ import { createSqliteDb, migrate } from "@/server/db";
 import { operatingForStay, type ScheduleRow } from "@/domain/operating";
 import { parseOffsetIso } from "@/lib/time";
 import { runSync } from "@/collector/runner";
-import { FixtureAdapter } from "@/collector/fixture-adapter";
 import { readFileSync } from "node:fs";
 
 const kst = (s: string) => Date.parse(`${s}+09:00`);
@@ -81,12 +80,15 @@ describe("동시 수집 로그", () => {
     await migrate(db);
     const FIX = JSON.parse(readFileSync("tests/fixtures/standard-parking.sample.json", "utf8"));
     const rows = Array.isArray(FIX) ? FIX : FIX.rows ?? FIX.items;
-    const A = new FixtureAdapter("SRC_A", rows), B = new FixtureAdapter("SRC_B", rows.slice(0, 3));
+    const rowsAdapter = (name: string, rs: Record<string, string>[]) => ({ sourceName: name, async *fetch() { for (const r of rs) yield r; } });
+    const A = rowsAdapter("SRC_A", rows), B = rowsAdapter("SRC_B", rows.slice(0, 3));
     const now = new Date("2026-11-07T12:00:00+09:00");
     const [ra, rb] = await Promise.all([runSync(db, A, now), runSync(db, B, now)]);
     const logs = await db.all<{ source_name: string; status: string; records_received: number; finished_at: string | null }>("SELECT source_name, status, records_received, finished_at FROM source_sync_logs ORDER BY source_name");
     expect(logs.map((l) => l.source_name)).toEqual(["SRC_A", "SRC_B"]);
     expect(logs.every((l) => l.status !== "RUNNING" && l.finished_at)).toBe(true);
+    expect(ra.status).not.toBe("FAILED"); expect(rb.status).not.toBe("FAILED");
+    expect(ra.received).toBe(rows.length); expect(rb.received).toBe(3);
     expect(logs[0].records_received).toBe(ra.received);
     expect(logs[1].records_received).toBe(rb.received);
     // 종료 시각은 주입한 시작 시각 이후(시계 주입 시 결정적)
