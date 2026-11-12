@@ -4,7 +4,7 @@ import { toKstLocalInput } from "@/lib/time";
 
 export interface FormDefaults {
   destination?: string; lat?: string; lng?: string; start?: string; end?: string;
-  radiusMeters?: string; sort?: string; type?: string; freeOnly?: boolean; realtimeOnly?: boolean;
+  radiusMeters?: string; sort?: string; type?: string; freeOnly?: boolean; realtimeOnly?: boolean; operatingOnly?: boolean;
 }
 const QUICK = [1, 2, 3] as const;
 const PLACES = ["서울시청", "광화문", "서울역", "을지로입구"];
@@ -84,6 +84,7 @@ export function SearchForm({ defaults = {}, places = PLACES }: { defaults?: Form
           </select></div>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="freeOnly" value="true" defaultChecked={defaults.freeOnly} /> 무료만</label>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="realtimeOnly" value="true" defaultChecked={defaults.realtimeOnly} /> 실시간 잔여면수 확인 가능만</label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="operatingOnly" value="true" defaultChecked={defaults.operatingOnly} /> 이용 시간 내내 운영 중인 곳만</label>
       </fieldset>
 
       <button type="submit" className="w-full rounded bg-blue-700 px-4 py-3 text-base font-semibold text-white">주차장 검색</button>

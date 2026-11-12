@@ -107,6 +107,13 @@ th { color: var(--muted); font-weight: 500; }
 .links { display: flex; flex-wrap: wrap; gap: 8px; }
 .links a { font-size: 13px; color: var(--accent); }
 .similar { font-size: 12.5px; color: var(--muted); }
+.fav { font: inherit; font-size: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 6px; padding: 3px 8px; white-space: nowrap; }
+.fav[aria-pressed="true"] { border-color: var(--warn); color: var(--warn); background: var(--warn-soft); }
+.saved { display: grid; gap: 10px; }
+.saved h2 { margin: 0; font-size: 15px; }
+.saved ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.saved .row-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.linkbtn { font: inherit; font-size: 12px; background: none; border: 0; color: var(--muted); text-decoration: underline; padding: 0; }
 .empty { background: var(--surface); border: 1px dashed var(--line); border-radius: 12px; padding: 20px; text-align: center; color: var(--muted); }
 footer { font-size: 12.5px; color: var(--muted); display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 14px; }
 footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
@@ -158,13 +165,14 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
         <div><label for="sort">정렬</label>
           <select id="sort"><option value="free_first">무료 우선</option><option value="price_asc">요금 낮은 순</option><option value="distance_asc">거리 가까운 순</option></select></div>
       </div>
-      <div class="checks"><label><input type="checkbox" id="freeOnly"> 무료만</label></div>
+      <div class="checks"><label><input type="checkbox" id="freeOnly"> 무료만</label><label><input type="checkbox" id="operatingOnly"> 이용 시간 내내 운영 중인 곳만</label></div>
     </fieldset>
     </details>
     <p class="note" id="formError" role="alert" hidden></p>
     <button class="go" type="submit">주차장 비교하기</button>
   </form>
 
+  <section class="panel saved" id="saved" aria-label="즐겨찾기와 최근 검색" hidden></section>
   <section class="summary" id="summary" aria-live="polite"></section>
   <ul class="results" id="results"></ul>
 
@@ -304,6 +312,7 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
     }
     const candidates = items.length;
     if (p.freeOnly) items = items.filter((i) => i.fee.status === "OK" && i.fee.isFree);
+    if (p.operatingOnly) items = items.filter((i) => i.operating === "OPERATING");
     const price = (i) => (i.fee.status === "OK" ? i.fee.amount : Infinity);
     const byDist = (a, b) => a.distanceMeters - b.distanceMeters || a.id - b.id;
     const free = (i) => (i.fee.status === "OK" && i.fee.isFree ? 0 : 1);
@@ -338,6 +347,47 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
     return `<tr><td>${esc(DAY[s.dayType] ?? s.dayType)}${s.assumed ? " (추정)" : ""}</td><td>${esc(t)}</td></tr>`;
   }
 
+  const hhmm = (m) => (m >= 60 ? `${Math.floor(m / 60)}시간${m % 60 ? ` ${m % 60}분` : ""}` : `${m}분`);
+  function dayTable(f) {
+    if (f.status !== "OK" || !(f.days.length > 1 || f.days.some((x) => x.freeMinutes > 0 || x.capped))) return "";
+    return `<div class="tbl"><table><caption style="text-align:left;color:var(--muted);font-size:12px">날짜별 요금 내역</caption><thead><tr><th>날짜</th><th>구분</th><th>이용</th><th>무료</th><th>요금</th></tr></thead><tbody>${f.days.map((x) =>
+      `<tr><td>${esc(x.date.slice(5).replace("-", "/"))}</td><td>${esc(DAY[x.dayType] ?? x.dayType)}</td><td>${hhmm(x.minutes)}</td><td>${x.freeMinutes > 0 ? hhmm(x.freeMinutes) : "-"}</td><td>${won(x.fee)}${x.capped ? " (일 최대)" : ""}</td></tr>`).join("")}</tbody></table></div>`;
+  }
+
+  // 즐겨찾기·최근 검색: 이 브라우저에만 저장(저장 불가 환경에서도 페이지는 정상 동작)
+  const SKEY = { fav: "ps-demo:favorites", recent: "ps-demo:recent" };
+  const load = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } };
+  const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* 저장 불가 */ } };
+  const isFav = (i) => load(SKEY.fav).some((f) => f.i === i);
+  function renderSaved() {
+    const favs = load(SKEY.fav).filter((f) => LOTS[f.i] && LOTS[f.i].name === f.name);
+    const recent = load(SKEY.recent).filter((r) => typeof r.label === "string" && Number.isFinite(r.lat) && Number.isFinite(r.lng));
+    const el = $("saved");
+    if (!favs.length && !recent.length) { el.hidden = true; el.innerHTML = ""; return; }
+    el.hidden = false;
+    el.innerHTML = `
+      ${recent.length ? `<div><div class="row-h"><h2>최근 검색</h2><button type="button" class="linkbtn" data-clear="recent">기록 지우기</button></div>
+        <ul>${recent.map((r, k) => `<li><button type="button" class="chip" data-recent="${k}">${esc(r.label)}</button></li>`).join("")}</ul></div>` : ""}
+      ${favs.length ? `<div><h2>즐겨찾는 주차장</h2><ul>${favs.map((f) => `<li><button type="button" class="chip" data-favgo="${f.i}">★ ${esc(f.name)}</button></li>`).join("")}</ul></div>` : ""}
+      <p class="center" style="margin:0">즐겨찾기·최근 검색은 이 브라우저에만 저장됩니다.</p>`;
+  }
+  $("saved").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.clear) { save(SKEY.recent, []); renderSaved(); return; }
+    if (b.dataset.recent) { const r = load(SKEY.recent)[Number(b.dataset.recent)]; if (r) { setCenter({ lat: r.lat, lng: r.lng, label: r.label }, -1); run(); } return; }
+    if (b.dataset.favgo) { const l = LOTS[Number(b.dataset.favgo)]; if (l) { setCenter({ lat: l.lat, lng: l.lng, label: l.name }, -1); $("q").value = l.name; run(); } }
+  });
+  $("results").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-fav]"); if (!b) return;
+    const i = Number(b.dataset.fav), l = LOTS[i];
+    const list = load(SKEY.fav);
+    const on = list.some((f) => f.i === i);
+    save(SKEY.fav, on ? list.filter((f) => f.i !== i) : [{ i, name: l.name }, ...list].slice(0, 30));
+    b.setAttribute("aria-pressed", String(!on)); b.textContent = on ? "☆ 즐겨찾기" : "★ 즐겨찾기됨";
+    renderSaved();
+  });
+  const recordRecent = (c) => save(SKEY.recent, [{ label: c.label, lat: c.lat, lng: c.lng }, ...load(SKEY.recent).filter((r) => r.label !== c.label)].slice(0, 5));
+
   function card(it, dest) {
     const l = it.lot, ex = it.explanation;
     const pills = [...ex.highlights.map((t) => `<li class="pill good"><span class="sr">장점: </span>${esc(t)}</li>`), ...ex.cautions.map((t) => `<li class="pill caution"><span class="sr">유의: </span>${esc(t)}</li>`)].join("");
@@ -347,7 +397,7 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
     const links = PS.buildNaverLinks({ lot: { lat: l.lat, lng: l.lng, name: l.name }, destination: dest, appname: "https://claude.ai" });
     const sim = it.similar.length ? `<p class="similar">같은 시설일 가능성이 있는 다른 기록 ${it.similar.length}건: ${it.similar.map((s) => `${esc(s.it.lot.name)} (${dist(s.it.distanceMeters)}, ${s.status === "MERGED" ? "동일 시설로 승인됨" : "미확정"})`).join(", ")}</p>` : "";
     return `<li class="card">
-      <div class="card-top"><h3>${esc(l.name)}</h3><span class="dist">${dist(it.distanceMeters)} <span class="sr">직선거리</span></span></div>
+      <div class="card-top"><h3>${esc(l.name)}</h3><span class="dist">${dist(it.distanceMeters)} <span class="sr">직선거리</span> <button type="button" class="fav" data-fav="${l.i}" aria-pressed="${isFav(l.i)}">${isFav(l.i) ? "★ 즐겨찾기됨" : "☆ 즐겨찾기"}</button></span></div>
       <p class="addr">${esc(l.addr ?? "주소 정보 없음")} · ${TYPE[l.type]} · ${l.pub ? "공영" : "공영 여부 미확인"}</p>
       ${feeHtml(it.fee)}
       <dl class="facts">
@@ -359,6 +409,7 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
       ${mixed}${sim}
       <details class="more"><summary>요금 규칙·운영시간 보기</summary>
         <div class="detail">
+          ${dayTable(it.fee)}
           ${l.rawRules.length ? `<div class="tbl"><table><thead><tr><th>구분</th><th>요일</th><th>시간대</th><th>요금</th></tr></thead><tbody>${l.rawRules.map(ruleRow).join("")}</tbody></table></div>` : `<p>요금 규칙 정보 없음 (무료 아님)</p>`}
           ${l.sched.length ? `<div class="tbl"><table><thead><tr><th>요일</th><th>운영시간</th></tr></thead><tbody>${l.sched.map(schedRow).join("")}</tbody></table></div>` : `<p>운영시간 정보 없음 (24시간으로 간주하지 않음)</p>`}
           ${it.fee.status === "OK" && it.fee.assumptions.length ? `<p class="mixed">${esc(it.fee.assumptions[0])}</p>` : ""}
@@ -381,9 +432,10 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
     if (Number.isNaN(s) || Number.isNaN(e)) return fail("시작·종료 일시를 입력하세요.");
     if (e <= s) return fail("종료 일시는 시작 일시보다 늦어야 합니다.");
     if (e - s > 31 * 86400000) return fail("주차 기간은 최대 31일입니다.");
-    const p = { center, start: new Date(s), end: new Date(e), radius: Number($("radius").value), type: $("type").value, sort: $("sort").value, freeOnly: $("freeOnly").checked };
+    const p = { center, start: new Date(s), end: new Date(e), radius: Number($("radius").value), type: $("type").value, sort: $("sort").value, freeOnly: $("freeOnly").checked, operatingOnly: $("operatingOnly").checked };
     const t0 = performance.now();
     const r = search(p);
+    recordRecent(center); renderSaved();
     const ms = Math.round(performance.now() - t0);
     const ok = r.items.filter((i) => i.fee.status === "OK").length;
     const freeN = r.items.filter((i) => i.fee.status === "OK" && i.fee.isFree).length;
@@ -402,11 +454,11 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
       <p>거리는 직선거리입니다. 요금을 계산할 수 없는 시설은 0원으로 보지 않고 비교에서 제외합니다.</p>`;
     const dest = { lat: center.lat, lng: center.lng, name: center.label };
     $("results").innerHTML = r.items.length ? r.items.map((it) => card(it, dest)).join("")
-      : `<li class="empty">조건에 맞는 주차장이 없습니다. 반경을 넓히거나 ‘무료만’을 해제해 보세요.</li>`;
+      : `<li class="empty">조건에 맞는 주차장이 없습니다. 반경을 넓히거나 ‘무료만’·‘운영 중인 곳만’을 해제해 보세요.</li>`;
   }
 
   $("form").addEventListener("submit", (e) => { e.preventDefault(); hideSuggest(); run(); });
-  ["radius", "type", "sort", "freeOnly"].forEach((id) => $(id).addEventListener("change", run));
+  ["radius", "type", "sort", "freeOnly", "operatingOnly"].forEach((id) => $(id).addEventListener("change", run));
   setCenter(center, 0);
   run();
 })();

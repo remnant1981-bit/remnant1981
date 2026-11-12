@@ -3,11 +3,15 @@
 // 지도 타일: OpenStreetMap(키 불필요, 출처 표시 필수, 대량 사용 금지 정책 — OPEN_ISSUES 기록). 네이버 지도 JS API로 바꿀 때 이 파일만 교체.
 import "leaflet/dist/leaflet.css";
 import { useEffect, useRef } from "react";
+import { clusterLabel, clusterPoints } from "@/domain/cluster";
 
 export const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 export const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
 
-export interface MapItem { id: number; name: string; lat: number; lng: number; feeLabel: string; tone: "free" | "paid" | "unknown"; distanceLabel: string; href: string }
+export interface MapItem { id: number; name: string; lat: number; lng: number; feeLabel: string; tone: "free" | "paid" | "unknown"; amount: number | null; distanceLabel: string; href: string }
+
+/** 이 거리(화면 px) 안의 핀은 하나로 묶어 표시 — 시설이 몰린 곳에서 요금 핀이 서로 가리는 문제 방지 */
+const CLUSTER_PX = 64;
 
 const TONE: Record<MapItem["tone"], { bg: string; fg: string; border: string }> = {
   free: { bg: "#e3f4ec", fg: "#0b5a3a", border: "#11724b" },
@@ -16,12 +20,24 @@ const TONE: Record<MapItem["tone"], { bg: string; fg: string; border: string }> 
 };
 
 /** 핀 라벨 DOM(텍스트는 textContent로만 넣어 시설명·요금 문자열이 HTML로 해석되지 않게 함) */
-function pinEl(item: MapItem): HTMLElement {
-  const t = TONE[item.tone];
+function pinEl(item: Pick<MapItem, "tone" | "feeLabel">, cluster = false): HTMLElement {
+  const t = cluster ? { bg: "#1d4ed8", fg: "#ffffff", border: "#1e3a8a" } : TONE[item.tone];
   const el = document.createElement("div");
   el.textContent = item.feeLabel;
   el.style.cssText = `display:inline-block;white-space:nowrap;padding:2px 7px;border-radius:999px;font:600 12px/1.4 system-ui,sans-serif;background:${t.bg};color:${t.fg};border:1.5px solid ${t.border};box-shadow:0 1px 2px rgba(0,0,0,.25);transform:translate(-50%,-100%)`;
   return el;
+}
+function clusterPopupEl(items: MapItem[]): HTMLElement {
+  const ul = document.createElement("ul");
+  ul.style.cssText = "margin:0;padding-left:16px;max-height:180px;overflow:auto";
+  for (const it of items) {
+    const li = document.createElement("li");
+    const a = document.createElement("a");
+    a.href = it.href; a.textContent = it.name;
+    li.append(a, document.createTextNode(` · ${it.feeLabel}`));
+    ul.append(li);
+  }
+  return ul;
 }
 function popupEl(item: MapItem): HTMLElement {
   const box = document.createElement("div");
@@ -46,14 +62,32 @@ export function ResultsMap({ center, radiusMeters, items }: { center: { lat: num
       L.circle([center.lat, center.lng], { radius: radiusMeters, color: "#1d4ed8", weight: 1, fillOpacity: 0.04 }).addTo(map);
       L.circleMarker([center.lat, center.lng], { radius: 7, color: "#ffffff", weight: 2, fillColor: "#1d4ed8", fillOpacity: 1 })
         .addTo(map).bindTooltip(`검색 중심: ${center.label}`.replace(/[<>&]/g, ""));
-      const pts: Array<[number, number]> = [[center.lat, center.lng]];
-      for (const it of items) {
-        L.marker([it.lat, it.lng], { icon: L.divIcon({ html: pinEl(it), className: "", iconSize: [0, 0] }), keyboard: true, title: `${it.name} ${it.feeLabel}` })
-          .addTo(map).bindPopup(popupEl(it));
-        pts.push([it.lat, it.lng]);
-      }
+      const pts: Array<[number, number]> = [[center.lat, center.lng], ...items.map((it) => [it.lat, it.lng] as [number, number])];
       if (pts.length > 1) map.fitBounds(L.latLngBounds(pts), { padding: [28, 28], maxZoom: 17 });
       else map.setView([center.lat, center.lng], 16);
+      // 확대 수준마다 화면 거리 기준으로 다시 묶음. 최대 확대에서도 겹치면(같은 건물 등) 묶음 팝업에 목록 표시
+      const layer = L.layerGroup().addTo(map);
+      const m = map;
+      const draw = () => {
+        layer.clearLayers();
+        const screen = items.map((it) => { const p = m.latLngToLayerPoint([it.lat, it.lng]); return { x: p.x, y: p.y, item: it }; });
+        for (const c of clusterPoints(screen, CLUSTER_PX)) {
+          if (c.items.length === 1) {
+            const it = c.items[0];
+            L.marker([it.lat, it.lng], { icon: L.divIcon({ html: pinEl(it), className: "", iconSize: [0, 0] }), keyboard: true, title: `${it.name} ${it.feeLabel}` })
+              .addTo(layer).bindPopup(popupEl(it));
+            continue;
+          }
+          const label = clusterLabel(c.items);
+          const at = m.layerPointToLatLng([c.x, c.y]);
+          const mk = L.marker(at, { icon: L.divIcon({ html: pinEl({ tone: "paid", feeLabel: label }, true), className: "", iconSize: [0, 0] }), keyboard: true, title: `${label} — 눌러서 확대` }).addTo(layer);
+          const bounds = L.latLngBounds(c.items.map((it) => [it.lat, it.lng] as [number, number]));
+          if (m.getZoom() >= m.getMaxZoom() - 1 || bounds.getNorthEast().equals(bounds.getSouthWest())) mk.bindPopup(clusterPopupEl(c.items));
+          else mk.on("click", () => m.fitBounds(bounds, { padding: [40, 40], maxZoom: m.getMaxZoom() }));
+        }
+      };
+      draw();
+      map.on("zoomend", draw);
     })();
     return () => { disposed = true; map?.remove(); };
   }, [center.lat, center.lng, center.label, radiusMeters, items]);

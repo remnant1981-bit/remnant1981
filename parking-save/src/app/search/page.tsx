@@ -26,12 +26,12 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   const sp = await searchParams;
   const g = (k: string) => one(sp[k]);
   const qs = new URLSearchParams();
-  for (const k of ["destination", "lat", "lng", "radiusMeters", "sort", "type", "freeOnly", "realtimeOnly"]) { const v = g(k); if (v) qs.set(k, v); }
+  for (const k of ["destination", "lat", "lng", "radiusMeters", "sort", "type", "freeOnly", "realtimeOnly", "operatingOnly"]) { const v = g(k); if (v) qs.set(k, v); }
   const sIso = kstLocalToIso(g("start")), eIso = kstLocalToIso(g("end"));
   if (sIso) qs.set("startAt", sIso);
   if (eIso) qs.set("endAt", eIso);
 
-  const defaults = { destination: g("destination"), lat: g("lat"), lng: g("lng"), start: g("start"), end: g("end"), radiusMeters: g("radiusMeters"), sort: g("sort"), type: g("type"), freeOnly: !!g("freeOnly"), realtimeOnly: !!g("realtimeOnly") };
+  const defaults = { destination: g("destination"), lat: g("lat"), lng: g("lng"), start: g("start"), end: g("end"), radiusMeters: g("radiusMeters"), sort: g("sort"), type: g("type"), freeOnly: !!g("freeOnly"), realtimeOnly: !!g("realtimeOnly"), operatingOnly: !!g("operatingOnly") };
   const parsed = parseSearchParams(qs);
   const form = <SearchForm defaults={defaults} places={mockEnabled() ? Object.keys(MOCK_PLACES) : []} />;
 
@@ -55,13 +55,13 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   // 목록/지도 전환: 같은 검색 조건에 view만 바꾼 링크(공유·뒤로가기에도 유지)
   const view = g("view") === "map" ? "map" : "list";
   const pageQs = new URLSearchParams();
-  for (const k of ["destination", "lat", "lng", "start", "end", "radiusMeters", "sort", "type", "freeOnly", "realtimeOnly"]) { const v = g(k); if (v) pageQs.set(k, v); }
+  for (const k of ["destination", "lat", "lng", "start", "end", "radiusMeters", "sort", "type", "freeOnly", "realtimeOnly", "operatingOnly"]) { const v = g(k); if (v) pageQs.set(k, v); }
   const viewHref = (v: "list" | "map") => { const q = new URLSearchParams(pageQs); if (v === "map") q.set("view", "map"); return `/search?${q.toString()}`; };
   const periodText = `${formatKst(res.requestedPeriod.startAt)} ~ ${formatKst(res.requestedPeriod.endAt)}`;
   const mapItems: MapItem[] = res.items.map((i) => {
     const f = feeText(i.fee);
     return { id: i.id, name: i.name, lat: i.latitude, lng: i.longitude, href: `/lots/${i.id}?${detailQuery}`,
-      feeLabel: i.fee.status === "OK" ? (i.fee.isFree ? "무료" : won(i.fee.amount!)) : "?", tone: f.tone,
+      feeLabel: i.fee.status === "OK" ? (i.fee.isFree ? "무료" : won(i.fee.amount!)) : "?", tone: f.tone, amount: i.fee.status === "OK" ? i.fee.amount! : null,
       distanceLabel: i.distanceMeters >= 1000 ? `${(i.distanceMeters / 1000).toFixed(1)}km` : `${i.distanceMeters}m` };
   });
   const tab = (v: "list" | "map", label: string) => (
@@ -92,7 +92,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       {res.items.length === 0 ? (
         <div className="mt-6 rounded border border-gray-300 p-4" role="status">
           <p className="font-semibold">조건에 맞는 주차장이 없습니다.</p>
-          <p className="mt-1 text-sm">반경을 넓히거나 &lsquo;무료만&rsquo;·&lsquo;실시간 확인 가능만&rsquo; 필터를 해제해 보세요. <Link href="/" className="underline">처음으로</Link></p>
+          <p className="mt-1 text-sm">반경을 넓히거나 &lsquo;무료만&rsquo;·&lsquo;실시간 확인 가능만&rsquo;·&lsquo;운영 중인 곳만&rsquo; 필터를 해제해 보세요. <Link href="/" className="underline">처음으로</Link></p>
         </div>
       ) : (
         <ul className="mt-4 space-y-3">{res.items.map((i) => <LotCard key={i.id} item={i} query={detailQuery} />)}</ul>

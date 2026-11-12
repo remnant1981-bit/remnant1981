@@ -210,3 +210,17 @@ describe("최근 수집에서 미확인 시설", () => {
     expect((await db.get<{ c: number }>("SELECT COUNT(*) AS c FROM parking_lots WHERE id=?", [x]))!.c).toBe(1);
   });
 });
+
+describe("운영 중인 곳만 보기", () => {
+  it("이용 시간 전체 운영이 확인된 시설만 남기고, 운영 외·확인 불가는 제외", async () => {
+    const opts = { startAt: "2026-11-09T22:00:00+09:00", endAt: "2026-11-10T02:00:00+09:00", limit: "100" };
+    const all = await run(opts);
+    const only = await run({ ...opts, operatingOnly: "true" });
+    expect(all.items.some((i) => i.operating !== "OPERATING")).toBe(true); // 검증 의미가 있도록 섞인 상황 확인
+    expect(only.items.length).toBeLessThan(all.items.length);
+    expect(only.items.every((i) => i.operating === "OPERATING")).toBe(true);
+    // 전체 결과에서 운영 중인 시설은 모두 남아 있어야 함(동일 시설 묶음은 필터 후 대표가 바뀔 수 있어 포함 관계로 확인)
+    const onlyIds = new Set(only.items.map((i) => i.id));
+    expect(all.items.filter((i) => i.operating === "OPERATING").every((i) => onlyIds.has(i.id))).toBe(true);
+  });
+});

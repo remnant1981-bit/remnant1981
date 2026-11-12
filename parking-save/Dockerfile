@@ -18,6 +18,7 @@ ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0 \
     DATABASE_PATH=/data/parking.sqlite PARKING_MOCK_DATA=false
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
+COPY --from=build --chown=node:node /app/public ./public
 # 마이그레이션 SQL은 첫 요청 시 process.cwd()/migrations 에서 적용됨
 COPY --from=build --chown=node:node /app/migrations ./migrations
 RUN mkdir -p /data && chown node:node /data
