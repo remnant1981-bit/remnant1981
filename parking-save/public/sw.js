@@ -17,3 +17,17 @@ self.addEventListener("fetch", (event) => {
   if (event.request.mode !== "navigate") return; // 화면 이동만 처리, 나머지는 브라우저 기본 동작
   event.respondWith(fetch(event.request).catch(() => caches.match(OFFLINE_URL)));
 });
+
+// 주차 타이머 알림을 누르면 해당 주차장 화면으로(같은 사이트 경로만)
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const raw = event.notification.data && event.notification.data.url;
+  const url = typeof raw === "string" && raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
+      const w = wins.find((c) => "focus" in c);
+      if (w) return (w.navigate ? w.navigate(url) : Promise.resolve()).then(() => w.focus());
+      return self.clients.openWindow(url);
+    }),
+  );
+});

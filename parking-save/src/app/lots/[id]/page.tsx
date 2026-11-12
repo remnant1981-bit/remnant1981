@@ -153,7 +153,7 @@ export default async function LotPage({ params, searchParams }: { params: Promis
         </section>
       )}
 
-      <ParkingTimerPanel lang={lang} lotId={lot.id} name={lot.name} rules={d.timer?.rules ?? null} holidays={d.timer?.holidays ?? null} />
+      <ParkingTimerPanel lang={lang} lotId={lot.id} name={lot.name} rules={d.timer?.rules ?? null} holidays={d.timer?.holidays ?? null} schedules={d.timer?.schedules} />
 
       <section className="mt-4" aria-labelledby="op"><h2 id="op" className="font-semibold">{D.hours}</h2>
         {d.operatingSchedules.length === 0 ? <p className="text-sm">{D.noHours}</p> : (
@@ -163,6 +163,7 @@ export default async function LotPage({ params, searchParams }: { params: Promis
       <section className="mt-4" aria-labelledby="sp"><h2 id="sp" className="font-semibold">{D.spaces}</h2>
         <p className="text-sm">{D.total(lot.totalSpaces != null ? t.spaces(lot.totalSpaces) : t.card.noInfo)}</p>
         <p className="text-sm">{D.live} {occ.main}{occ.sub ? ` (${occ.sub})` : ""}</p>
+        {d.occupancyTrend && <p className="mt-1 text-sm">{D.trend(d.occupancyTrend.kind, d.occupancyTrend.hour, d.occupancyTrend.availablePct, t.occ.level[d.occupancyTrend.level], d.occupancyTrend.days)} <span className="block text-xs text-gray-600">{D.trendNote}</span></p>}
       </section>
 
       <section className="mt-4" aria-labelledby="src"><h2 id="src" className="font-semibold">{D.src}</h2>
