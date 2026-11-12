@@ -5,6 +5,7 @@ import type { SourceAdapter, RawRow, NormalizedLot } from "./types";
 import { normalizeStandardRow } from "./standard-parking";
 import { findCandidates } from "./dedupe";
 import { resolveKeyCollisions, type Candidate } from "./collisions";
+import { errText, logError, logWarn } from "../server/log";
 
 export interface SyncSummary { status: "SUCCESS" | "PARTIAL" | "FAILED"; keyCollisions: number; collisionSuperseded: number; collisionSplit: number; received: number; inserted: number; updated: number; unchanged: number; excluded: number; invalid: number; errors: number; duplicateCandidates: number }
 
@@ -40,7 +41,7 @@ export async function runSync(db: Db, adapter: SourceAdapter, now = new Date()):
         pending.push({ key, lat: res.lot.latitude, lng: res.lot.longitude, date: res.lot.sourceUpdatedAt, seq: pending.length, payload: { row, lot: res.lot } });
       } catch (e) {
         sum.errors++;
-        console.error("[sync] row error", adapter.sourceName, e instanceof Error ? e.message : e);
+        logWarn("sync.row_error", { source: adapter.sourceName, error: errText(e) });
       }
     }
     // 2단계: 같은 관리번호 반복 판정 — 같은 장소(50m 이내)는 기준일이 최신인 행만, 다른 장소는 별도 시설로 보존(사용자 결정 2026-11-08 + 실데이터 확인)
@@ -92,7 +93,7 @@ export async function runSync(db: Db, adapter: SourceAdapter, now = new Date()):
         touched.push(id);
       } catch (e) {
         sum.errors++;
-        console.error("[sync] row error", adapter.sourceName, e instanceof Error ? e.message : e);
+        logWarn("sync.row_error", { source: adapter.sourceName, error: errText(e) });
       }
     }
     });
@@ -113,7 +114,7 @@ export async function runSync(db: Db, adapter: SourceAdapter, now = new Date()):
     }
   } catch (e) {
     fatal = e instanceof Error ? e.message : String(e);
-    console.error("[sync] fatal", adapter.sourceName, fatal);
+    logError("sync.fatal", fatal, { source: adapter.sourceName });
   }
   sum.status = fatal ? "FAILED" : sum.errors > 0 || sum.invalid > 0 ? "PARTIAL" : "SUCCESS";
   await db.run("UPDATE source_sync_logs SET finished_at=?, status=?, records_received=?, records_inserted=?, records_updated=?, error_summary=?, source_data_timestamp=? WHERE id=?",

@@ -231,3 +231,10 @@
 - **데모 반영**(#76, Version 4): 가성비 정렬, 요금 이상치 경고, 감면·할인, 월정기권 안내, 나란히 비교(최대 3곳).
 - **영어 화면**: `src/i18n`(사전·언어 쿠키), `/lang` 전환(같은 사이트 경로만 복귀, 오픈 리다이렉트 차단), 추천 사유·지도 묶음 라벨·검색 오류·경고 문구까지 영어. 원천 값은 원문 유지(`lang="ko"`). 약관·관리자 한국어 유지.
 - 검증: vitest 258(신규 7), 접근성 16개 화면 × 4개 환경(영어 포함) 위반 0건, 실데이터 브라우저에서 영어 전환 후 검색·비교·상세·홈에 원천 값 외 한국어 0건, 한국어 복귀 확인.
+
+## 운영 안정화 (2026-11-12)
+- **구조화 로그** `src/server/log.ts`: 한 줄 JSON(`ts·level·event`). 좌표·목적지·토큰 필드 차단, 오류 문자열 안의 `serviceKey=`·Bearer 토큰·좌표 쌍 가림. 최근 5분 오류 수 집계. 기존 `console.error` 전부 교체(수집 행 오류는 warn).
+- **헬스체크 상세화**: `ok/degraded/error` + `issues`(MIGRATIONS_PENDING·STANDARD_SYNC_STALE(50시간)·ERROR_BURST·DB_UNAVAILABLE), 가동 시간, 스키마 적용 수, 최근 5분 오류 수. degraded는 200(재시작 대신 알림).
+- **DB 점검** `src/server/db-check.ts` + `GET /api/admin/db-check`(integrity_check·외래키·마이그레이션 누락·건수).
+- **운영 스크립트**: `parking-alert`(헬스+품질 ERROR → Slack/Discord 웹훅, 6시간 중복 억제, 수집 실패 즉시 알림), `parking-backup` 백업본 무결성 확인 후 보관, `parking-restore-test`(격리 컨테이너 읽기 전용 복원 리허설, 주 1회). cron 등록, env에 `ALERT_WEBHOOK_URL` 추가.
+- 검증: 단위 테스트(로그 가림·오류 집계·DB 점검 3종·헬스 degraded/503), 실데이터 서버에서 알림 스크립트(전송→중복 생략→즉시 전송) 가짜 웹훅으로 확인, 복원 리허설 정상/손상 백업 판정 확인(docker 대역 사용, 실제 docker 미검증).

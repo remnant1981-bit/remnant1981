@@ -40,6 +40,8 @@ NODE_OPTIONS=--max-old-space-size=512
 # 아래 키는 발급 후 입력하고 'bash update.sh' 실행
 DATA_GO_KR_SERVICE_KEY=
 SEOUL_OPENAPI_KEY=
+# 운영 알림 웹훅(Slack/Discord 등, 선택). 비워 두면 /var/log/parking-save-alert.log 에만 기록
+ALERT_WEBHOOK_URL=
 EOT
   echo "   생성: $ENV_FILE (관리자 토큰은 무작위로 채움)"
 fi
@@ -69,6 +71,9 @@ echo "== 7. 정기 수집·백업 (cron, KST)"
 install -m 755 "$HERE/parking-sync.sh" /usr/local/bin/parking-sync
 install -m 755 "$HERE/parking-backup.sh" /usr/local/bin/parking-backup
 install -m 755 "$HERE/parking-reports.sh" /usr/local/bin/parking-reports
+install -m 755 "$HERE/parking-alert.sh" /usr/local/bin/parking-alert
+install -m 755 "$HERE/parking-restore-test.sh" /usr/local/bin/parking-restore-test
+mkdir -p /var/lib/parking-save
 cat > /etc/cron.d/parking-save <<'EOT'
 # 파킹세이브 정기 작업 (시간대: Asia/Seoul)
 SHELL=/bin/bash
@@ -79,8 +84,12 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 47 4 * * 1   root parking-sync holidays
 # 서울 실시간: 5분마다 (키가 없으면 400으로 끝나며 로그만 남음)
 */5 * * * *  root parking-sync seoul-occupancy
-# DB 백업: 매일 03:37, 14일 보관
+# DB 백업: 매일 03:37, 14일 보관(무결성 확인 후 보관)
 37 3 * * *   root parking-backup
+# 운영 알림 점검: 15분마다(ALERT_WEBHOOK_URL 설정 시 전송, 같은 내용은 6시간에 1회)
+*/15 * * * * root parking-alert
+# 백업 복원 리허설: 매주 일 05:13
+13 5 * * 0   root parking-restore-test
 EOT
 
 echo "== 완료"

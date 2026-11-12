@@ -125,9 +125,39 @@ describe("헬스체크", () => {
     const res = await GET();
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.status).toBe("ok");
+    // 표준데이터 수집 기록이 없으면 서비스는 되지만 'degraded'(외부 알림 대상), 컨테이너 재시작 대상(503)은 아님
+    expect(body.status).toBe("degraded");
+    expect(body.issues).toEqual(["STANDARD_SYNC_STALE"]);
+    expect(body.schema.applied).toBe(body.schema.expected);
     expect(body.lastSuccessfulSync.X).toBe("2026-11-10T00:01:00Z");
+    // 최근 표준데이터 수집이 있으면 ok
+    const t = new Date(Date.now() - 3_600_000).toISOString();
+    await db.run("INSERT INTO source_sync_logs(source_name, started_at, finished_at, status) VALUES ('DATA_GO_KR_15012896',?,?,'SUCCESS')", [t, t]);
+    const ok = await (await GET()).json();
+    expect(ok.status).toBe("ok");
+    expect(ok.issues).toEqual([]);
+    expect(JSON.stringify(ok)).not.toMatch(/token|key/i);
     setDb(undefined); resetAppDbForTest();
+  });
+
+  it("DB를 열 수 없으면 503", async () => {
+    const { resetAppDbForTest } = await import("@/server/app-db");
+    const { setDb } = await import("@/server/db");
+    setDb(undefined);
+    const env = process.env as Record<string, string | undefined>;
+    const saved = env.DATABASE_PATH;
+    env.DATABASE_PATH = `${process.execPath}/x/parking.sqlite`; // 상위 경로가 파일이라 열 수 없음
+    resetAppDbForTest();
+    try {
+      const { GET } = await import("@/app/api/health/route");
+      const res = await GET();
+      expect(res.status).toBe(503);
+      expect((await res.json()).issues).toEqual(["DB_UNAVAILABLE"]);
+    } finally {
+      if (saved === undefined) delete env.DATABASE_PATH; else env.DATABASE_PATH = saved;
+      const { setDb } = await import("@/server/db");
+      setDb(undefined); resetAppDbForTest();
+    }
   });
 });
 
