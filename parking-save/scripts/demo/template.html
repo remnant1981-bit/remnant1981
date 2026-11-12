@@ -113,6 +113,17 @@ th { color: var(--muted); font-weight: 500; }
 .saved h2 { margin: 0; font-size: 15px; }
 .saved ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .saved .row-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.cheaper { font-size: 12.5px; background: var(--free-soft); color: var(--free); border-radius: 8px; padding: 8px 10px; }
+.cheaper ul { margin: 4px 0 0; padding-left: 16px; }
+.curve { width: 100%; max-width: 420px; height: auto; }
+.curve .bar { fill: var(--accent); }
+.curve .bar.dim { opacity: .45; }
+.curve text { fill: var(--muted); font-size: 10px; }
+.curve .grid { stroke: var(--line); }
+.how { font-size: 13px; }
+.how ol, .how dl { margin: 6px 0 0; }
+.how dt { font-weight: 600; margin-top: 4px; }
+.how dd { margin: 0; color: var(--muted); }
 .linkbtn { font: inherit; font-size: 12px; background: none; border: 0; color: var(--muted); text-decoration: underline; padding: 0; }
 .empty { background: var(--surface); border: 1px dashed var(--line); border-radius: 12px; padding: 20px; text-align: center; color: var(--muted); }
 footer { font-size: 12.5px; color: var(--muted); display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 14px; }
@@ -126,6 +137,18 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
   <header>
     <div class="brand"><span class="sign" aria-hidden="true">P</span><h1>파킹세이브</h1><span class="tag">데모</span></div>
     <p class="lede">주차하기 전에 주차비부터 비교하세요. 전국 공영주차장의 예상 요금을 이용 시간 기준으로 계산합니다.</p>
+    <details class="more how"><summary>파킹세이브는 이렇게 계산해요</summary>
+      <ol>
+        <li>주변 장소를 고르고 주차 시작·종료 시각을 넣습니다.</li>
+        <li>반경 안의 공영주차장마다 평일·토요일·공휴일 요금, 무료 시간대, 일 최대요금을 반영해 예상 요금을 계산합니다.</li>
+        <li>무료 우선·요금 낮은 순·거리순으로 비교하고, 시간을 조금 옮기면 더 싼 경우 알려줍니다.</li>
+      </ol>
+      <dl>
+        <dt>계산 불가</dt><dd>요금 규칙이 원천 데이터에 없거나 불완전한 시설. 0원으로 보지 않고 비교에서 뺍니다.</dd>
+        <dt>추정</dt><dd>원천에 명시되지 않은 부분을 보수적으로 해석한 값(예: 일요일에 공휴일 운영시간 적용).</dd>
+        <dt>실시간 확인 불가</dt><dd>잔여면수를 실시간 제공하지 않는 시설. 빈자리가 있다는 뜻이 아닙니다.</dd>
+      </dl>
+    </details>
   </header>
 
   <form class="panel" id="form" aria-label="주차장 검색" novalidate>
@@ -388,6 +411,44 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
   });
   const recordRecent = (c) => save(SKEY.recent, [{ label: c.label, lat: c.lat, lng: c.lng }, ...load(SKEY.recent).filter((r) => r.label !== c.label)].slice(0, 5));
 
+  // 더 싼 시간대(같은 이용 시간 ±30·60분)와 이용 시간별 요금(1~12시간) — 앱과 같은 엔진
+  function extras(it, p) {
+    const l = it.lot, s = p.start.getTime();
+    const cheaper = it.fee.status === "OK" && !it.fee.isFree
+      ? PS.cheaperShifts({ rules: l.rules, schedules: l.sched, holidays: holidaysFor(new Date(s - 3600000), new Date(p.end.getTime() + 3600000)), startAt: p.start, endAt: p.end, now: new Date(), baseFee: it.fee.amount })
+      : [];
+    const hol = holidaysFor(p.start, new Date(s + 12 * 3600000));
+    const curve = Array.from({ length: 12 }, (_, k) => { const r = PS.calculateFee({ startAt: p.start, endAt: new Date(s + (k + 1) * 3600000), rules: l.rules, holidays: hol }); return r.status === "OK" ? r.amount : null; });
+    return { cheaper, curve };
+  }
+  function cheaperHtml(list) {
+    if (!list.length) return "";
+    return `<div class="cheaper"><b>시간을 조금 옮기면 더 쌉니다</b><ul>${list.map((c) => {
+      const m = Math.abs(c.shiftMinutes), label = `${m >= 60 ? m / 60 + "시간" : m + "분"} ${c.shiftMinutes > 0 ? "늦게" : "일찍"}`;
+      return `<li>${label} (${esc(PS.formatKst(c.startAt))} ~ ${esc(PS.formatKst(c.endAt))}): ${c.fee === 0 ? "무료" : won(c.fee)} · ${won(c.saving)} 절약</li>`; }).join("")}</ul></div>`;
+  }
+  function curveHtml(curve, stayH) {
+    const known = curve.filter((v) => v != null);
+    if (!known.length || Math.max(...known) === 0) return ""; // 전 구간 계산 불가·무료면 그래프 생략
+    const W = 300, H = 120, L = 34, T = 14, B = 18, pw = W - L - 4, ph = H - T - B, slot = pw / 12, bw = slot - 4;
+    const raw = Math.max(...known), p10 = 10 ** Math.floor(Math.log10(Math.max(raw, 1)));
+    const top = raw <= 0 ? 1000 : [1, 2, 2.5, 5, 10].map((m) => m * p10).find((m) => m >= raw);
+    const y = (v) => T + ph - (v / top) * ph;
+    const bars = curve.map((v, i) => {
+      const x = L + slot * i + 2, lab = `<text x="${L + slot * i + slot / 2}" y="${H - 5}" text-anchor="middle">${i + 1}</text>`;
+      if (v == null) return `${lab}<text x="${L + slot * i + slot / 2}" y="${T + ph - 3}" text-anchor="middle">–<title>${i + 1}시간: 계산 불가</title></text>`;
+      const h = Math.max(v > 0 ? 2 : 0, T + ph - y(v));
+      return `${lab}<rect class="bar${stayH && stayH !== i + 1 ? " dim" : ""}" x="${x}" y="${T + ph - h}" width="${bw}" height="${h}" rx="2"><title>${i + 1}시간: ${won(v)}</title></rect>`;
+    }).join("");
+    const lastI = curve.map((v, i) => (v == null ? -1 : i)).filter((i) => i >= 0).pop();
+    return `<figure style="margin:0"><figcaption style="font-size:12px;color:var(--muted)">이용 시간별 예상 요금(시작 시각 기준, 가로축은 시간)</figcaption>
+      <svg class="curve" viewBox="0 0 ${W} ${H}" role="img" aria-label="${lastI + 1}시간 이용 시 ${won(curve[lastI])}">
+        <line class="grid" x1="${L}" x2="${W - 4}" y1="${y(top)}" y2="${y(top)}"/><line class="grid" x1="${L}" x2="${W - 4}" y1="${y(0)}" y2="${y(0)}"/>
+        <text x="${L - 4}" y="${y(top) + 3}" text-anchor="end">${top >= 1000 ? top / 1000 + "천" : top}</text><text x="${L - 4}" y="${y(0) + 3}" text-anchor="end">0</text>
+        ${bars}<text x="${L + slot * (lastI + 1)}" y="${Math.max(10, y(curve[lastI]) - 3)}" text-anchor="end" style="fill:var(--ink);font-weight:600">${won(curve[lastI])}</text>
+      </svg></figure>`;
+  }
+
   function card(it, dest) {
     const l = it.lot, ex = it.explanation;
     const pills = [...ex.highlights.map((t) => `<li class="pill good"><span class="sr">장점: </span>${esc(t)}</li>`), ...ex.cautions.map((t) => `<li class="pill caution"><span class="sr">유의: </span>${esc(t)}</li>`)].join("");
@@ -407,8 +468,10 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
       </dl>
       ${pills ? `<ul class="pills" aria-label="이 시설의 특징과 유의점">${pills}</ul>` : ""}
       ${mixed}${sim}
-      <details class="more"><summary>요금 규칙·운영시간 보기</summary>
+      ${cheaperHtml(it.extra.cheaper)}
+      <details class="more"><summary>요금 그래프·규칙·운영시간 보기</summary>
         <div class="detail">
+          ${curveHtml(it.extra.curve, it.stayH)}
           ${dayTable(it.fee)}
           ${l.rawRules.length ? `<div class="tbl"><table><thead><tr><th>구분</th><th>요일</th><th>시간대</th><th>요금</th></tr></thead><tbody>${l.rawRules.map(ruleRow).join("")}</tbody></table></div>` : `<p>요금 규칙 정보 없음 (무료 아님)</p>`}
           ${l.sched.length ? `<div class="tbl"><table><thead><tr><th>요일</th><th>운영시간</th></tr></thead><tbody>${l.sched.map(schedRow).join("")}</tbody></table></div>` : `<p>운영시간 정보 없음 (24시간으로 간주하지 않음)</p>`}
@@ -436,6 +499,8 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
     const t0 = performance.now();
     const r = search(p);
     recordRecent(center); renderSaved();
+    const stayMin = (p.end - p.start) / 60000, stayH = stayMin % 60 === 0 && stayMin / 60 <= 12 ? stayMin / 60 : null;
+    for (const it of r.items) { it.extra = extras(it, p); it.stayH = stayH; }
     const ms = Math.round(performance.now() - t0);
     const ok = r.items.filter((i) => i.fee.status === "OK").length;
     const freeN = r.items.filter((i) => i.fee.status === "OK" && i.fee.isFree).length;

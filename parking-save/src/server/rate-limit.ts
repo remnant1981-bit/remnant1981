@@ -35,4 +35,5 @@ export function clientKey(headers: Headers, proxies: number = trustedProxyCount(
 
 export const searchLimiter = createLimiter(60, 60_000);   // 검색·상세: 분당 60회/클라이언트
 export const adminLimiter = createLimiter(5, 60_000);
+export const adminUiLimiter = createLimiter(30, 60_000); // 관리자 화면 조회·처리: 분당 30회(토큰은 32자 이상 무작위라 대입 공격 비현실적, 감사로그 남김)
 export const reportLimiter = createLimiter(5, 3600_000);  // 오류 신고: 시간당 5회/클라이언트(도배 방지)     // 관리자 API: 분당 5회/클라이언트(무차별 대입 완화)

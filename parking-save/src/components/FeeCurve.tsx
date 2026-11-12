@@ -16,7 +16,7 @@ function niceMax(v: number): number {
 
 export function FeeCurve({ points, highlightHours }: { points: CurvePoint[]; highlightHours: number | null }) {
   const known = points.filter((p) => p.fee != null) as Array<CurvePoint & { fee: number }>;
-  if (known.length === 0) return null; // 전 구간 계산 불가면 그래프를 그리지 않음(위 요금 안내로 충분)
+  if (known.length === 0 || Math.max(...known.map((p) => p.fee)) === 0) return null; // 전 구간 계산 불가·무료면 그래프 생략(위 요금 안내로 충분)
   const top = niceMax(Math.max(...known.map((p) => p.fee)));
   const plotW = W - PAD.l - PAD.r, plotH = H - PAD.t - PAD.b;
   const slot = plotW / points.length, barW = Math.max(6, slot - 6); // 막대 사이 간격으로 구분

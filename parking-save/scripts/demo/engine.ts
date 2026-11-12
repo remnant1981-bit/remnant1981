@@ -5,3 +5,4 @@ export { distanceMeters } from "../../src/domain/geo";
 export { explainAll } from "../../src/domain/recommend";
 export { buildNaverLinks } from "../../src/domain/map-link";
 export { kstYmd, toKstLocalInput, formatKst } from "../../src/lib/time";
+export { cheaperShifts } from "../../src/domain/cheaper";

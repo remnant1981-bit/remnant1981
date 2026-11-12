@@ -21,10 +21,10 @@ export async function listPending(db: Db, limit = 100): Promise<PendingCandidate
 }
 
 /** 승인(MERGED)/거절(REJECTED). 이미 결정된 후보는 변경하지 않는다. 감사로그를 남긴다 */
-export async function decide(db: Db, id: number, decision: "MERGED" | "REJECTED", by: string): Promise<boolean> {
+export async function decide(db: Db, id: number, decision: "MERGED" | "REJECTED", by: string, clientKey?: string): Promise<boolean> {
   const who = by.trim().slice(0, 60);
   if (!who) throw new Error("결정자 이름이 필요합니다.");
   const r = await db.run("UPDATE duplicate_candidates SET status=?, decided_by=?, decided_at=? WHERE id=? AND status='PENDING'", [decision, who, new Date().toISOString(), id]);
-  await audit(db, `duplicate:${decision === "MERGED" ? "approve" : "reject"}`, r.changes ? "OK" : "REJECTED", `cli:${who}`, r.changes ? `candidate ${id}` : `candidate ${id} not pending`);
+  await audit(db, `duplicate:${decision === "MERGED" ? "approve" : "reject"}`, r.changes ? "OK" : "REJECTED", clientKey ?? `cli:${who}`, r.changes ? `candidate ${id}` : `candidate ${id} not pending`);
   return r.changes > 0;
 }
