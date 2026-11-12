@@ -16,6 +16,7 @@ import { RecentSearchRecorder } from "@/components/RecentSearchRecorder";
 import { feeText, won } from "@/lib/labels";
 
 export const metadata: Metadata = { title: "검색 결과" };
+const FIRST_LIMIT = 20, MORE_LIMIT = 50;
 export const dynamic = "force-dynamic";
 type SP = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
@@ -33,6 +34,9 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   if (eIso) qs.set("endAt", eIso);
 
   const defaults = { destination: g("destination"), lat: g("lat"), lng: g("lng"), start: g("start"), end: g("end"), radiusMeters: g("radiusMeters"), sort: g("sort"), type: g("type"), freeOnly: !!g("freeOnly"), realtimeOnly: !!g("realtimeOnly"), operatingOnly: !!g("operatingOnly") };
+  // 첫 화면은 20곳(화면 렌더링·전송량이 카드 수에 비례 — 부하 측정 기준), '더 보기'로 50곳
+  const pageLimit = g("limit") === String(MORE_LIMIT) ? MORE_LIMIT : FIRST_LIMIT;
+  qs.set("limit", String(pageLimit));
   const parsed = parseSearchParams(qs);
   const form = <SearchForm defaults={defaults} places={mockEnabled() ? Object.keys(MOCK_PLACES) : []} />;
 
@@ -96,7 +100,12 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
           <p className="mt-1 text-sm">반경을 넓히거나 &lsquo;무료만&rsquo;·&lsquo;실시간 확인 가능만&rsquo;·&lsquo;운영 중인 곳만&rsquo; 필터를 해제해 보세요. <Link href="/" className="underline">처음으로</Link></p>
         </div>
       ) : (
-        <ul className="mt-4 space-y-3">{res.items.map((i) => <LotCard key={i.id} item={i} query={detailQuery} />)}</ul>
+        <>
+          <ul className="mt-4 space-y-3">{res.items.map((i) => <LotCard key={i.id} item={i} query={detailQuery} />)}</ul>
+          {pageLimit === FIRST_LIMIT && cov.candidates > cov.returned && (
+            <p className="mt-4 text-center"><Link href={`/search?${(() => { const q = new URLSearchParams(pageQs); q.set("limit", String(MORE_LIMIT)); if (view === "map") q.set("view", "map"); return q.toString(); })()}`} className="inline-block rounded border border-gray-500 px-4 py-2 text-sm">결과 더 보기 (최대 {MORE_LIMIT}곳)</Link></p>
+          )}
+        </>
       )}
       <CompareTray query={`${detailQuery}&lat=${res.searchCenter.lat.toFixed(4)}&lng=${res.searchCenter.lng.toFixed(4)}`} />
     </>

@@ -8,6 +8,7 @@ import { evaluateOccupancy, occupancyConfigFor, type OccupancyResult } from "@/d
 import { explainAll, type Explanation } from "@/domain/recommend";
 import { cheaperShifts, type CheaperShift } from "@/domain/cheaper";
 import { discountTargets, feeAnomalies, type FeeAnomaly } from "@/domain/fee-check";
+import { seasonPassHint, type PassHint } from "@/domain/season-pass";
 import { kstYmd, parseOffsetIso } from "@/lib/time";
 import { HOLIDAY_COVERAGE_MAX_AGE_DAYS } from "@/collector/holidays";
 
@@ -114,6 +115,9 @@ export interface LotItem {
   feeWarnings: FeeAnomaly[];
   /** 특기사항의 감면·할인 대상(안내만, 금액 미반영) */
   discounts: string[];
+  /** 원천 월정기권 요금(판매·자격 조건 미확인)과 장기 이용 안내 */
+  monthlyPass: number | null;
+  passHint: PassHint | null;
   explanation: Explanation;
   /** 같은 시설일 가능성이 높아 이 항목 아래로 묶인 다른 레코드(삭제·병합 아님, 상세에서 개별 확인 가능) */
   similar: Array<{ id: number; name: string; distanceMeters: number; status: "MERGED" | "PENDING"; source: string }>;
@@ -179,7 +183,9 @@ async function evaluateLot(db: Db, lot: LotRow, p: Pick<SearchParams, "startAt" 
   const occupancy = pre && !pre.occMaybe.has(lot.id) ? evaluateOccupancy({ totalSpaces: null, availableSpaces: null, observedAt: null }, now) : await occupancyFor(db, lot.id, now);
   const stale = (now.getTime() - Date.parse(lot.source_updated_at ?? lot.collected_at)) / 86400_000 > staleDaysFor(lot.source_name);
   const feeWarnings = rules === "UNSUPPORTED" ? [] : feeAnomalies(rules);
-  return { fee, operating, operatingAssumed, occupancy, freshness: (stale ? "STALE" : "FRESH") as "FRESH" | "STALE", rules, sched, feeWarnings };
+  const monthlyPass = feeRows.find((r) => r.rule_type === "SEASON_PASS" && r.amount != null && r.amount > 0)?.amount ?? null;
+  const passHint = seasonPassHint({ pass: monthlyPass, stayMinutes: (p.endAt.getTime() - p.startAt.getTime()) / 60000, fee: fee.status === "OK" ? fee.amount! : null });
+  return { fee, operating, operatingAssumed, occupancy, freshness: (stale ? "STALE" : "FRESH") as "FRESH" | "STALE", rules, sched, feeWarnings, monthlyPass, passHint };
 }
 
 export interface SearchResponse {
@@ -216,7 +222,7 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
       latitude: here.lat, longitude: here.lng, distanceMeters: Math.round(dist), totalSpaces: lot.total_spaces,
       fee: ev.fee, operating: ev.operating, operatingAssumed: ev.operatingAssumed, occupancy: ev.occupancy,
       source: { name: lot.source_name, url: lot.source_url, updatedAt: lot.source_updated_at, collectedAt: lot.collected_at, freshness: ev.freshness, notInLatestSync: notInLatestSync(lot, syncStarts) },
-      isMock: NON_PRODUCTION_SOURCES.includes(lot.source_name), qualityFlags: lot.quality_flags ? JSON.parse(lot.quality_flags) : [], feeNote: lot.fee_note, feeWarnings: ev.feeWarnings, discounts: discountTargets(lot.fee_note),
+      isMock: NON_PRODUCTION_SOURCES.includes(lot.source_name), qualityFlags: lot.quality_flags ? JSON.parse(lot.quality_flags) : [], feeNote: lot.fee_note, feeWarnings: ev.feeWarnings, discounts: discountTargets(lot.fee_note), monthlyPass: ev.monthlyPass, passHint: ev.passHint,
       explanation: { highlights: [], cautions: [] }, similar: [],
     });
   }
@@ -303,13 +309,14 @@ export async function getLotDetail(db: Db, id: number, period: { startAt: Date; 
   const feeRules = await db.all<FeeRow>("SELECT * FROM fee_rules WHERE parking_lot_id=? ORDER BY id", [id]);
   const schedules = await db.all<SchedRow>("SELECT * FROM operating_schedules WHERE parking_lot_id=?", [id]);
   const occupancy = await occupancyFor(db, id, now);
-  let fee: FeeView | null = null, operating: OperatingStatus | null = null, operatingAssumed = false, holidayDataAvailable: boolean | null = null;
+  let fee: FeeView | null = null, operating: OperatingStatus | null = null, operatingAssumed = false, holidayDataAvailable: boolean | null = null, passHint: PassHint | null = null;
   if (period) {
     const holidays = await loadHolidays(db, period.startAt, period.endAt, now);
     holidayDataAvailable = holidays !== null;
     const ev = await evaluateLot(db, lot, period, holidays, now);
-    fee = ev.fee; operating = ev.operating; operatingAssumed = ev.operatingAssumed;
+    fee = ev.fee; operating = ev.operating; operatingAssumed = ev.operatingAssumed; passHint = ev.passHint;
   }
+  const monthlyPass = feeRules.find((r) => r.rule_type === "SEASON_PASS" && r.amount != null && r.amount > 0)?.amount ?? null;
   const detailRules = toFeeRules(feeRules);
   const feeWarnings = detailRules === "UNSUPPORTED" ? [] : feeAnomalies(detailRules);
   const engineRules = toFeeRules(feeRules);
@@ -346,7 +353,7 @@ export async function getLotDetail(db: Db, id: number, period: { startAt: Date; 
     operatingSchedules: schedules.map((s) => ({ dayType: s.day_type, openTime: s.open_time, closeTime: s.close_time, allDay: s.all_day_flag === 1, closed: s.closed_flag === 1, assumed: s.holiday_policy === "SUNDAY_ASSUMED" })),
     occupancy, fee, operating, operatingAssumed, holidayDataAvailable,
     requestedPeriod: period ? { startAt: period.startAt.toISOString(), endAt: period.endAt.toISOString(), timezone: "Asia/Seoul" } : null,
-    feeCurve, timer, cheaper, feeWarnings, discounts: discountTargets(lot.fee_note),
+    feeCurve, timer, cheaper, feeWarnings, discounts: discountTargets(lot.fee_note), monthlyPass, passHint,
   };
 }
 export const FEE_CURVE_HOURS = 12;
