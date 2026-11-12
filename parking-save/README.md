@@ -43,6 +43,7 @@ npm run dev          # http://localhost:3000  (처음 실행 시 data/dev.sqlite
 | `docs/DEVELOPMENT_LOG.md` | 단계별 구현 내용과 한계 |
 | `docs/RELEASE_STATUS.md` | 출시 체크리스트 대비 현황 (검증/부분/대기) |
 | `docs/FIRST_RUN.md` | API 키 발급 후 첫 실호출 검증 절차 |
+| `docs/DEPLOYMENT.md` | Docker 배포·정기 수집(cron)·백업·리버스 프록시 조건 (인프라 무관 공통) |
 | 그 외 `docs/*.md` | 도메인별 설계 기준(요금 계산, 검색, 실시간, 보안, API 등) |
 
 ## 핵심 원칙

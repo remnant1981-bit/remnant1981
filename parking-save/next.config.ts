@@ -18,6 +18,8 @@ const securityHeaders = [
 
 const config: NextConfig = {
   reactStrictMode: true,
+  // 컨테이너 배포용 최소 실행 파일(.next/standalone). 로컬 `next start`에는 영향 없음
+  output: "standalone",
   poweredByHeader: false,
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];

@@ -93,3 +93,54 @@ describe("동시 수집 로그", () => {
     expect(logs.every((l) => Date.parse(l.finished_at!) >= now.getTime() && Date.parse(l.finished_at!) < now.getTime() + 60_000)).toBe(true);
   });
 });
+
+describe("목업 기본값", () => {
+  it("미설정이면 운영(production)에서 꺼지고 개발·테스트에서 켜짐, 명시값 우선", async () => {
+    const { mockEnabled } = await import("@/server/mock");
+    const env = process.env as Record<string, string | undefined>;
+    const saved = { m: env.PARKING_MOCK_DATA, n: env.NODE_ENV };
+    try {
+      delete env.PARKING_MOCK_DATA;
+      env.NODE_ENV = "production"; expect(mockEnabled()).toBe(false);
+      env.NODE_ENV = "development"; expect(mockEnabled()).toBe(true);
+      env.NODE_ENV = "production"; env.PARKING_MOCK_DATA = "true"; expect(mockEnabled()).toBe(true);
+      env.NODE_ENV = "development"; env.PARKING_MOCK_DATA = "false"; expect(mockEnabled()).toBe(false);
+    } finally {
+      if (saved.m === undefined) delete env.PARKING_MOCK_DATA; else env.PARKING_MOCK_DATA = saved.m;
+      env.NODE_ENV = saved.n;
+    }
+  });
+});
+
+describe("헬스체크", () => {
+  it("DB 연결 시 200과 원천별 마지막 성공 수집 시각", async () => {
+    const { setDb } = await import("@/server/db");
+    const { resetAppDbForTest } = await import("@/server/app-db");
+    const db = await createSqliteDb(":memory:"); await migrate(db);
+    await db.run("INSERT INTO source_sync_logs(source_name, started_at, finished_at, status) VALUES ('X','2026-11-10T00:00:00Z','2026-11-10T00:01:00Z','SUCCESS')");
+    setDb(db); resetAppDbForTest();
+    const { GET } = await import("@/app/api/health/route");
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("ok");
+    expect(body.lastSuccessfulSync.X).toBe("2026-11-10T00:01:00Z");
+    setDb(undefined); resetAppDbForTest();
+  });
+});
+
+describe("운영 모드 목적지 안내", () => {
+  it("목업이 꺼져 있으면 목업 장소명을 안내하지 않고 현재 위치 사용을 안내", async () => {
+    const { parseSearchParams } = await import("@/server/search");
+    const env = process.env as Record<string, string | undefined>;
+    const saved = env.PARKING_MOCK_DATA;
+    try {
+      env.PARKING_MOCK_DATA = "false";
+      const r = parseSearchParams(new URLSearchParams({ destination: "서울시청", startAt: "2026-11-13T10:00:00+09:00", endAt: "2026-11-13T11:00:00+09:00" }));
+      expect(r.ok).toBe(false);
+      if (!r.ok) { expect(r.code).toBe("DESTINATION_NOT_FOUND"); expect(r.message).not.toContain("목업"); expect(r.message).toContain("현재 위치"); }
+    } finally {
+      if (saved === undefined) delete env.PARKING_MOCK_DATA; else env.PARKING_MOCK_DATA = saved;
+    }
+  });
+});

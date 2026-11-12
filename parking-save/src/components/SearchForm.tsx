@@ -44,7 +44,7 @@ export function SearchForm({ defaults = {}, places = PLACES }: { defaults?: Form
       <fieldset className="space-y-2">
         <legend className="font-semibold">어디에 주차할까요?</legend>
         <label htmlFor="destination" className="block text-sm">목적지</label>
-        <input id="destination" name="destination" list="places" className={field} value={dest} placeholder="예: 서울시청"
+        <input id="destination" name="destination" list="places" className={field} value={dest} placeholder={places.length ? `예: ${places[0]}` : "목적지 검색 준비 중 — 아래 '현재 위치 사용'을 눌러 주세요"}
           onChange={(e) => { setDest(e.target.value); if (e.target.value) setCoords(null); }} autoComplete="off" />
         <datalist id="places">{places.map((p) => <option key={p} value={p} />)}</datalist>
         <div className="flex flex-wrap items-center gap-3">

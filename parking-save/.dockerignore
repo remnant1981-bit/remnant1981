@@ -1,0 +1,9 @@
+node_modules
+.next
+data
+*.sqlite*
+.env*
+!.env.example
+tests
+coverage
+tsconfig.tsbuildinfo

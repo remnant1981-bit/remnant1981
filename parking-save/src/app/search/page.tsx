@@ -4,7 +4,7 @@ import { SearchForm } from "@/components/SearchForm";
 import { LotCard } from "@/components/LotCard";
 import { getAppDb } from "@/server/app-db";
 import { parseSearchParams, searchLots } from "@/server/search";
-import { MOCK_PLACES } from "@/server/mock";
+import { MOCK_PLACES, mockEnabled } from "@/server/mock";
 import { kstLocalToIso, formatKst } from "@/lib/time";
 import { headers } from "next/headers";
 import { clientKey, searchLimiter } from "@/server/rate-limit";
@@ -29,7 +29,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
 
   const defaults = { destination: g("destination"), lat: g("lat"), lng: g("lng"), start: g("start"), end: g("end"), radiusMeters: g("radiusMeters"), sort: g("sort"), type: g("type"), freeOnly: !!g("freeOnly"), realtimeOnly: !!g("realtimeOnly") };
   const parsed = parseSearchParams(qs);
-  const form = <SearchForm defaults={defaults} places={Object.keys(MOCK_PLACES)} />;
+  const form = <SearchForm defaults={defaults} places={mockEnabled() ? Object.keys(MOCK_PLACES) : []} />;
 
   if (!parsed.ok) {
     return (<><h1 className="mb-4 text-xl font-bold">검색 결과</h1>
