@@ -22,7 +22,11 @@ const config: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      // 서비스 워커는 항상 최신본을 받도록(배포 후 옛 워커가 남지 않게)
+      { source: "/sw.js", headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }, { key: "Service-Worker-Allowed", value: "/" }] },
+    ];
   },
 };
 export default config;

@@ -22,7 +22,7 @@ import { staleDaysFor } from "./freshness";
 export interface SearchParams {
   center: LatLng; centerLabel: string; centerKind: "current_location" | "destination";
   radiusMeters: number; startAt: Date; endAt: Date; sort: Sort; type: TypeFilter;
-  freeOnly: boolean; realtimeOnly: boolean; limit: number;
+  freeOnly: boolean; realtimeOnly: boolean; operatingOnly: boolean; limit: number;
 }
 export type ParseResult = { ok: true; params: SearchParams } | { ok: false; code: string; message: string };
 const bad = (code: string, message: string): ParseResult => ({ ok: false, code, message });
@@ -58,7 +58,7 @@ export function parseSearchParams(q: URLSearchParams): ParseResult {
   const limit = q.get("limit") ? Number(q.get("limit")) : 50;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) return bad("INVALID_LIMIT", "limit은 1~100입니다.");
   const flag = (k: string) => q.get(k) === "true" || q.get(k) === "1" || q.get(k) === "on";
-  return { ok: true, params: { center, centerLabel: label, centerKind: kind, radiusMeters: rad, startAt, endAt, sort, type, freeOnly: flag("freeOnly"), realtimeOnly: flag("realtimeOnly"), limit } };
+  return { ok: true, params: { center, centerLabel: label, centerKind: kind, radiusMeters: rad, startAt, endAt, sort, type, freeOnly: flag("freeOnly"), realtimeOnly: flag("realtimeOnly"), operatingOnly: flag("operatingOnly"), limit } };
 }
 
 interface LotRow {
@@ -214,6 +214,8 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
   const candidates = items.length;
   if (p.freeOnly) items = items.filter((i) => i.fee.status === "OK" && i.fee.isFree);
   if (p.realtimeOnly) items = items.filter((i) => i.occupancy.status === "AVAILABLE");
+  // 이용 시간 전체에 운영이 확인된 곳만(운영 외·확인 불가 제외 — 확인 불가를 운영 중으로 보지 않음)
+  if (p.operatingOnly) items = items.filter((i) => i.operating === "OPERATING");
   items.sort(comparator(p.sort));
   items = await groupSimilar(db, items);
   items = items.slice(0, p.limit);
