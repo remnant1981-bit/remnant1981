@@ -1,4 +1,5 @@
 import { SearchForm } from "@/components/SearchForm";
+import { SavedPanel } from "@/components/SavedPanel";
 import { defaultStayInputs } from "@/lib/time";
 import { MOCK_PLACES, mockEnabled } from "@/server/mock";
 
@@ -11,6 +12,7 @@ export default function Home() {
       <h1 className="text-2xl font-bold">파킹세이브</h1>
       <p className="mb-6 mt-1 text-gray-700">주차하기 전에, 주차비부터 아끼자!</p>
       <SearchForm defaults={defaults} places={mockEnabled() ? Object.keys(MOCK_PLACES) : []} />
+      <SavedPanel />
     </>
   );
 }
