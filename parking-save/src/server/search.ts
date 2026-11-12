@@ -7,10 +7,13 @@ import { operatingForStay, operatingUsesAssumed, type OperatingStatus, type Sche
 import { evaluateOccupancy, occupancyConfigFor, type OccupancyResult } from "@/domain/occupancy";
 import { explainAll, type Explanation } from "@/domain/recommend";
 import { cheaperShifts, type CheaperShift } from "@/domain/cheaper";
+import { discountTargets, feeAnomalies, type FeeAnomaly } from "@/domain/fee-check";
 import { kstYmd, parseOffsetIso } from "@/lib/time";
 import { HOLIDAY_COVERAGE_MAX_AGE_DAYS } from "@/collector/holidays";
 
-export const SORTS = ["free_first", "price_asc", "distance_asc", "availability_desc"] as const;
+export const SORTS = ["free_first", "price_asc", "distance_asc", "availability_desc", "value_asc"] as const;
+/** 가성비 정렬: 걸어가는 거리 100m를 이 금액(원)으로 환산해 예상 요금에 더함 — 임시값(OPEN_ISSUES), 화면에 기준 표시 */
+export const WALK_WON_PER_100M = 200;
 export type Sort = (typeof SORTS)[number];
 export type TypeFilter = "on_street" | "off_street" | "all";
 
@@ -107,6 +110,10 @@ export interface LotItem {
   fee: FeeView; operating: OperatingStatus; operatingAssumed: boolean; occupancy: OccupancyResult;
   source: { name: string; url: string | null; updatedAt: string | null; collectedAt: string; freshness: "FRESH" | "STALE"; notInLatestSync: boolean };
   isMock: boolean; qualityFlags: string[]; feeNote: string | null;
+  /** 원천 요금 이상치(있으면 경고, 최저가 강조 제외) */
+  feeWarnings: FeeAnomaly[];
+  /** 특기사항의 감면·할인 대상(안내만, 금액 미반영) */
+  discounts: string[];
   explanation: Explanation;
   /** 같은 시설일 가능성이 높아 이 항목 아래로 묶인 다른 레코드(삭제·병합 아님, 상세에서 개별 확인 가능) */
   similar: Array<{ id: number; name: string; distanceMeters: number; status: "MERGED" | "PENDING"; source: string }>;
@@ -171,7 +178,8 @@ async function evaluateLot(db: Db, lot: LotRow, p: Pick<SearchParams, "startAt" 
   const operatingAssumed = operating !== "UNKNOWN" && operatingUsesAssumed(sched, p.startAt.getTime(), p.endAt.getTime(), holidays);
   const occupancy = pre && !pre.occMaybe.has(lot.id) ? evaluateOccupancy({ totalSpaces: null, availableSpaces: null, observedAt: null }, now) : await occupancyFor(db, lot.id, now);
   const stale = (now.getTime() - Date.parse(lot.source_updated_at ?? lot.collected_at)) / 86400_000 > staleDaysFor(lot.source_name);
-  return { fee, operating, operatingAssumed, occupancy, freshness: (stale ? "STALE" : "FRESH") as "FRESH" | "STALE", rules, sched };
+  const feeWarnings = rules === "UNSUPPORTED" ? [] : feeAnomalies(rules);
+  return { fee, operating, operatingAssumed, occupancy, freshness: (stale ? "STALE" : "FRESH") as "FRESH" | "STALE", rules, sched, feeWarnings };
 }
 
 export interface SearchResponse {
@@ -208,7 +216,7 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
       latitude: here.lat, longitude: here.lng, distanceMeters: Math.round(dist), totalSpaces: lot.total_spaces,
       fee: ev.fee, operating: ev.operating, operatingAssumed: ev.operatingAssumed, occupancy: ev.occupancy,
       source: { name: lot.source_name, url: lot.source_url, updatedAt: lot.source_updated_at, collectedAt: lot.collected_at, freshness: ev.freshness, notInLatestSync: notInLatestSync(lot, syncStarts) },
-      isMock: NON_PRODUCTION_SOURCES.includes(lot.source_name), qualityFlags: lot.quality_flags ? JSON.parse(lot.quality_flags) : [], feeNote: lot.fee_note,
+      isMock: NON_PRODUCTION_SOURCES.includes(lot.source_name), qualityFlags: lot.quality_flags ? JSON.parse(lot.quality_flags) : [], feeNote: lot.fee_note, feeWarnings: ev.feeWarnings, discounts: discountTargets(lot.fee_note),
       explanation: { highlights: [], cautions: [] }, similar: [],
     });
   }
@@ -282,6 +290,7 @@ function comparator(sort: Sort) {
     if (sort === "distance_asc") return byDist(a, b);
     if (sort === "price_asc") return price(a) - price(b) || byDist(a, b);
     if (sort === "availability_desc") return avail(b) - avail(a) || byDist(a, b);
+    if (sort === "value_asc") { const v = (i: LotItem) => price(i) + (i.distanceMeters / 100) * WALK_WON_PER_100M; return v(a) - v(b) || byDist(a, b); }
     const free = (i: LotItem) => (i.fee.status === "OK" && i.fee.isFree ? 0 : 1); // free_first
     return free(a) - free(b) || price(a) - price(b) || byDist(a, b);
   };
@@ -301,6 +310,8 @@ export async function getLotDetail(db: Db, id: number, period: { startAt: Date; 
     const ev = await evaluateLot(db, lot, period, holidays, now);
     fee = ev.fee; operating = ev.operating; operatingAssumed = ev.operatingAssumed;
   }
+  const detailRules = toFeeRules(feeRules);
+  const feeWarnings = detailRules === "UNSUPPORTED" ? [] : feeAnomalies(detailRules);
   const engineRules = toFeeRules(feeRules);
   // 이용 시간별 요금 곡선(1~12시간): 요청 시작 시각 기준. 계산 불가 구간은 null(0원으로 그리지 않음)
   let feeCurve: Array<{ hours: number; fee: number | null; capped: boolean }> | null = null;
@@ -335,7 +346,7 @@ export async function getLotDetail(db: Db, id: number, period: { startAt: Date; 
     operatingSchedules: schedules.map((s) => ({ dayType: s.day_type, openTime: s.open_time, closeTime: s.close_time, allDay: s.all_day_flag === 1, closed: s.closed_flag === 1, assumed: s.holiday_policy === "SUNDAY_ASSUMED" })),
     occupancy, fee, operating, operatingAssumed, holidayDataAvailable,
     requestedPeriod: period ? { startAt: period.startAt.toISOString(), endAt: period.endAt.toISOString(), timezone: "Asia/Seoul" } : null,
-    feeCurve, timer, cheaper,
+    feeCurve, timer, cheaper, feeWarnings, discounts: discountTargets(lot.fee_note),
   };
 }
 export const FEE_CURVE_HOURS = 12;

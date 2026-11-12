@@ -1,4 +1,6 @@
 // 데이터 품질·운영 점검 리포트 (docs/ADMIN_DATA.md). 관리자 화면 대신 CLI(`npm run quality`)로 사용.
+import { feeAnomalies } from "@/domain/fee-check";
+import type { FeeRule } from "@/domain/fee";
 // 읽기 전용. 개인정보(사용자 위치 등)는 다루지 않는다.
 import type { Db } from "./db";
 import { feeView, loadHolidays, toFeeRules } from "./search";
@@ -115,6 +117,12 @@ export async function buildQualityReport(db: Db, now = new Date()): Promise<Qual
   if ((flags.SOURCE_KEY_COLLISION ?? 0) > 0) alerts.push({ code: "SOURCE_KEY_COLLISION", level: "INFO", message: `원천 관리번호가 한 번의 수집에서 반복된 시설 ${flags.SOURCE_KEY_COLLISION}곳 — 같은 장소의 다른 버전은 기준일이 최신인 행만 반영, 다른 장소는 별도 시설로 보존` });
   const pending = await one("SELECT COUNT(*) c FROM duplicate_candidates WHERE status='PENDING'");
   if (pending > 0) alerts.push({ code: "DUPLICATES_PENDING", level: "INFO", message: `중복 후보 ${pending}건 검토 대기(자동 병합 없음)` });
+  // 원천 요금 이상치(입력 오류로 보이는 값) — 화면에 '확인 필요' 경고, 최저가 강조 제외
+  const feeRows = await db.all<{ id: number; t: string; a: number | null; m: number | null; d: string }>(`SELECT f.parking_lot_id id, f.rule_type t, f.amount a, f.duration_minutes m, f.valid_day_type d FROM fee_rules f JOIN parking_lots l ON l.id=f.parking_lot_id WHERE l.${live} AND f.rule_type IN ('BASE','ADDITIONAL','DAILY_MAX')`);
+  const byLot = new Map<number, FeeRule[]>();
+  for (const r of feeRows) { const a = byLot.get(r.id) ?? []; a.push({ ruleType: r.t as FeeRule["ruleType"], amount: r.a, durationMinutes: r.m, dayType: r.d as FeeRule["dayType"] }); byLot.set(r.id, a); }
+  const suspect = [...byLot.values()].filter((rs) => feeAnomalies(rs).length > 0).length;
+  if (suspect > 0) alerts.push({ code: "FEE_SUSPECT", level: "INFO", message: `원천 요금 값이 이상해 보이는 시설 ${suspect}곳(시간당 2만 원 초과·추가단가 급등·일 최대 < 1시간 요금) — 화면에 확인 필요 경고` });
   const reports = Number((await db.get<{ c: number }>("SELECT COUNT(*) AS c FROM lot_reports WHERE status='NEW'"))?.c ?? 0);
   if (reports > 0) alerts.push({ code: "REPORTS_PENDING", level: "INFO", message: `이용자 정보 오류 신고 ${reports}건 검토 대기(npm run reports)` });
 

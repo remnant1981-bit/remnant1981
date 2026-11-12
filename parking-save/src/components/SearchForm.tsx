@@ -80,7 +80,7 @@ export function SearchForm({ defaults = {}, places = PLACES }: { defaults?: Form
         <div><label htmlFor="sort" className="block text-sm">정렬</label>
           <select id="sort" name="sort" defaultValue={defaults.sort ?? "free_first"} className={field}>
             <option value="free_first">무료 우선</option><option value="price_asc">요금 낮은 순</option>
-            <option value="distance_asc">거리 가까운 순</option><option value="availability_desc">실시간 여유 순</option>
+            <option value="distance_asc">거리 가까운 순</option><option value="value_asc">요금+거리(가성비)</option><option value="availability_desc">실시간 여유 순</option>
           </select></div>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="freeOnly" value="true" defaultChecked={defaults.freeOnly} /> 무료만</label>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="realtimeOnly" value="true" defaultChecked={defaults.realtimeOnly} /> 실시간 잔여면수 확인 가능만</label>

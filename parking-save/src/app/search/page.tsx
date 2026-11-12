@@ -3,7 +3,7 @@ import Link from "next/link";
 import { SearchForm } from "@/components/SearchForm";
 import { LotCard } from "@/components/LotCard";
 import { getAppDb } from "@/server/app-db";
-import { parseSearchParams, searchLots } from "@/server/search";
+import { WALK_WON_PER_100M, parseSearchParams, searchLots } from "@/server/search";
 import { MOCK_PLACES, mockEnabled } from "@/server/mock";
 import { kstLocalToIso, formatKst } from "@/lib/time";
 import { headers } from "next/headers";
@@ -11,6 +11,7 @@ import { clientKey, searchLimiter } from "@/server/rate-limit";
 import { TooManyRequests } from "@/components/TooManyRequests";
 import { ResultsMap, type MapItem } from "@/components/ResultsMap";
 import { ShareButton } from "@/components/ShareButton";
+import { CompareTray } from "@/components/CompareControls";
 import { RecentSearchRecorder } from "@/components/RecentSearchRecorder";
 import { feeText, won } from "@/lib/labels";
 
@@ -82,7 +83,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         <nav className="flex gap-2" aria-label="결과 보기 방식">{tab("list", "목록")}{tab("map", "지도")}</nav>
         <ShareButton title={`${res.searchCenter.label} 주변 주차장 요금 비교`} />
       </div>
-      <p className="mt-2 text-xs text-gray-600">거리는 직선거리이며 실제 이동 거리와 다릅니다.</p>
+      <p className="mt-2 text-xs text-gray-600">거리는 직선거리이며 실제 이동 거리와 다릅니다.{parsed.params.sort === "value_asc" && ` 가성비 순: 걸어가는 거리 100m를 ${WALK_WON_PER_100M.toLocaleString("ko-KR")}원으로 환산해 예상 요금에 더한 순서이며, 요금 계산 불가 시설은 뒤로 보냅니다.`}</p>
       {res.warnings.filter((w) => !w.startsWith("MOCK_DATA") && !w.startsWith("EMPTY")).map((w) => (
         <p key={w} className="mt-2 rounded border border-amber-400 bg-amber-50 p-2 text-sm" role="note">{w.slice(w.indexOf(":") + 1).trim()}</p>
       ))}
@@ -97,6 +98,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       ) : (
         <ul className="mt-4 space-y-3">{res.items.map((i) => <LotCard key={i.id} item={i} query={detailQuery} />)}</ul>
       )}
+      <CompareTray query={`${detailQuery}&lat=${res.searchCenter.lat.toFixed(4)}&lng=${res.searchCenter.lng.toFixed(4)}`} />
     </>
   );
 }

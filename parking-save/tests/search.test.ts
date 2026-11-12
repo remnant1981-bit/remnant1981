@@ -239,3 +239,21 @@ describe("상세: 이용 시간별 요금 곡선·타이머 데이터", () => {
     expect(noPeriod.feeCurve).toBeNull();
   });
 });
+
+describe("가성비 정렬·요금 이상치·감면", () => {
+  it("가성비 순: 예상 요금 + 거리(100m당 환산액) 오름차순, 계산 불가는 뒤", async () => {
+    const { WALK_WON_PER_100M } = await import("@/server/search");
+    const r = await run({ sort: "value_asc", limit: "100", radiusMeters: "3000" });
+    const v = (i: (typeof r.items)[number]) => (i.fee.status === "OK" ? i.fee.amount! : Infinity) + (i.distanceMeters / 100) * WALK_WON_PER_100M;
+    for (let k = 1; k < r.items.length; k++) expect(v(r.items[k])).toBeGreaterThanOrEqual(v(r.items[k - 1]));
+    expect(r.items.every((i) => Array.isArray(i.feeWarnings) && Array.isArray(i.discounts))).toBe(true);
+  });
+  it("요금 이상치 시설은 '최저' 강조에서 빠지고 유의점 표시", async () => {
+    const { explainAll } = await import("@/domain/recommend");
+    const mk = (id: number, amount: number, feeWarnings: string[] = []) => ({ id, distanceMeters: 100 * id, fee: { status: "OK" as const, amount, isFree: false }, operating: "OPERATING" as const, occupancy: { status: "UNAVAILABLE" as const }, ownershipType: "PUBLIC" as const, feeWarnings });
+    const ex = explainAll([mk(1, 100, ["HOURLY_TOO_HIGH"]), mk(2, 2000), mk(3, 3000)]);
+    expect(ex.get(1)!.highlights.some((h) => h.includes("최저"))).toBe(false);
+    expect(ex.get(1)!.cautions.some((c) => c.includes("원천 요금 값이 이상"))).toBe(true);
+    expect(ex.get(2)!.highlights.some((h) => h.includes("최저"))).toBe(true);
+  });
+});
