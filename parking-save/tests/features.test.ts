@@ -27,8 +27,21 @@ describe("즐겨찾기·최근 검색", () => {
     expect(s.getFavorites().length).toBe(s.MAX_FAVORITES);
   });
 
+  it("최근 검색: 켜기 전에는 기록하지 않음, 끄면 기록 삭제", async () => {
+    const s = await import("@/lib/saved");
+    s.recordSearch({ query: "q=off", label: "L", period: "p" });
+    expect(s.getRecent()).toEqual([]);
+    s.setRecentEnabled(true);
+    s.recordSearch({ query: "q=on", label: "L", period: "p" });
+    expect(s.getRecent().length).toBe(1);
+    s.setRecentEnabled(false);
+    expect(s.getRecent()).toEqual([]);
+    expect(s.isRecentEnabled()).toBe(false);
+  });
+
   it("최근 검색: 같은 조건은 맨 앞으로, 최대 5개, 지우기", async () => {
     const s = await import("@/lib/saved");
+    s.setRecentEnabled(true);
     for (let i = 0; i < 7; i++) s.recordSearch({ query: `q=${i}`, label: `L${i}`, period: "p" });
     expect(s.getRecent().map((r) => r.query)).toEqual(["q=6", "q=5", "q=4", "q=3", "q=2"]);
     s.recordSearch({ query: "q=3", label: "L3", period: "p" });

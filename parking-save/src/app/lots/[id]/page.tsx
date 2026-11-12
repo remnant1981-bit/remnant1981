@@ -15,6 +15,7 @@ import { ShareButton } from "@/components/ShareButton";
 import type { DayBreakdown } from "@/domain/fee";
 import { FeeCurve } from "@/components/FeeCurve";
 import { ParkingTimerPanel } from "@/components/ParkingTimer";
+import { ReportForm } from "@/components/ReportForm";
 
 export const dynamic = "force-dynamic";
 type SP = Record<string, string | string[] | undefined>;
@@ -86,6 +87,19 @@ export default async function LotPage({ params, searchParams }: { params: Promis
                 </table>
               </div>
             )}
+            {d.cheaper.length > 0 && (
+              <div className="mt-2 rounded border border-green-700 bg-green-50 p-2 text-sm" role="note">
+                <p className="font-semibold text-green-900">시간을 조금 옮기면 더 쌉니다</p>
+                <ul className="mt-1 space-y-0.5">
+                  {d.cheaper.map((c) => {
+                    const q = new URLSearchParams(sp as Record<string, string>); q.set("startAt", c.startAt); q.set("endAt", c.endAt);
+                    const label = `${Math.abs(c.shiftMinutes) >= 60 ? `${Math.abs(c.shiftMinutes) / 60}시간` : `${Math.abs(c.shiftMinutes)}분`} ${c.shiftMinutes > 0 ? "늦게" : "일찍"}`;
+                    return <li key={c.shiftMinutes}><Link href={`/lots/${lot.id}?${q.toString()}`} className="underline">{label} ({formatKst(c.startAt)} ~ {formatKst(c.endAt)})</Link>: {c.fee === 0 ? "무료" : won(c.fee)} <span className="text-green-900">· {won(c.saving)} 절약</span></li>;
+                  })}
+                </ul>
+                <p className="mt-1 text-xs text-gray-700">같은 이용 시간 기준이며, 요금·운영 여부가 모두 확인된 경우만 보여줍니다.</p>
+              </div>
+            )}
             {d.feeCurve && <FeeCurve points={d.feeCurve} highlightHours={stayHours} />}
             {d.operating && <p className="mt-1 text-sm">운영 상태(이용 시간 전체 기준): {OPERATING_LABEL[d.operating]}{d.operatingAssumed && <span className="text-amber-800"> (일요일은 공휴일 규칙 적용 · 추정)</span>}</p>}
           </>
@@ -116,6 +130,7 @@ export default async function LotPage({ params, searchParams }: { params: Promis
         {d.source.notInLatestSync && <p role="status" className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-900">최근 수집에서 이 시설이 확인되지 않았습니다. 폐쇄되었거나 정보가 바뀌었을 수 있으니 현장 확인이 필요합니다.</p>}
         {d.holidayDataAvailable === false && <p className="text-xs text-amber-800">입력 기간의 공휴일 데이터가 없어 요일별 규칙은 적용하지 않았습니다.</p>}
       </section>
+      <ReportForm lotId={lot.id} />
     </>
   );
 }

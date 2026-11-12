@@ -115,6 +115,8 @@ export async function buildQualityReport(db: Db, now = new Date()): Promise<Qual
   if ((flags.SOURCE_KEY_COLLISION ?? 0) > 0) alerts.push({ code: "SOURCE_KEY_COLLISION", level: "INFO", message: `원천 관리번호가 한 번의 수집에서 반복된 시설 ${flags.SOURCE_KEY_COLLISION}곳 — 같은 장소의 다른 버전은 기준일이 최신인 행만 반영, 다른 장소는 별도 시설로 보존` });
   const pending = await one("SELECT COUNT(*) c FROM duplicate_candidates WHERE status='PENDING'");
   if (pending > 0) alerts.push({ code: "DUPLICATES_PENDING", level: "INFO", message: `중복 후보 ${pending}건 검토 대기(자동 병합 없음)` });
+  const reports = Number((await db.get<{ c: number }>("SELECT COUNT(*) AS c FROM lot_reports WHERE status='NEW'"))?.c ?? 0);
+  if (reports > 0) alerts.push({ code: "REPORTS_PENDING", level: "INFO", message: `이용자 정보 오류 신고 ${reports}건 검토 대기(npm run reports)` });
 
   return {
     generatedAt: now.toISOString(), sources, totals, flags,

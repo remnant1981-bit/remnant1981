@@ -5,7 +5,7 @@ import { useSyncExternalStore } from "react";
 export interface FavoriteLot { id: number; name: string; address: string | null; savedAt: string }
 export interface RecentSearch { query: string; label: string; period: string; savedAt: string }
 
-const KEYS = { favorites: "parkingsave:favorites:v1", recent: "parkingsave:recent:v1" } as const;
+const KEYS = { favorites: "parkingsave:favorites:v1", recent: "parkingsave:recent:v1", recentOn: "parkingsave:recent-enabled:v1" } as const;
 export const MAX_FAVORITES = 30;
 export const MAX_RECENT = 5;
 
@@ -50,8 +50,20 @@ export function toggleFavorite(lot: { id: number; name: string; address: string 
 }
 export function removeFavorite(id: number) { write(KEYS.favorites, getFavorites().filter((f) => f.id !== id)); }
 
-/** 같은 조건(쿼리)은 맨 앞으로 올리고 최대 5개 유지 */
+/**
+ * 최근 검색 기록은 사용자가 켠 경우에만 남긴다(docs/SECURITY_PRIVACY.md: 검색 기록 저장은 기본 비활성 또는 명시적 동의).
+ * 끄면 기존 기록도 지운다.
+ */
+export function isRecentEnabled(): boolean { return readRaw(KEYS.recentOn) === "1"; }
+export function setRecentEnabled(on: boolean) {
+  try { if (on) window.localStorage.setItem(KEYS.recentOn, "1"); else { window.localStorage.removeItem(KEYS.recentOn); window.localStorage.removeItem(KEYS.recent); } } catch { /* 저장 불가 */ }
+  listeners.forEach((l) => l());
+}
+export const useRecentEnabled = () => useSyncExternalStore(subscribe, isRecentEnabled, () => false);
+
+/** 같은 조건(쿼리)은 맨 앞으로 올리고 최대 5개 유지. 기록 저장을 켜지 않았으면 아무것도 하지 않음 */
 export function recordSearch(s: Omit<RecentSearch, "savedAt">, now = new Date()) {
+  if (!isRecentEnabled()) return;
   const list = getRecent().filter((r) => r.query !== s.query);
   write(KEYS.recent, [{ ...s, query: s.query.slice(0, 500), label: s.label.slice(0, 100), savedAt: now.toISOString() }, ...list].slice(0, MAX_RECENT));
 }

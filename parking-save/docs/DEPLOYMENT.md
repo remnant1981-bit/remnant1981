@@ -147,11 +147,13 @@ curl -s https://<도메인>/api/health
 |---|---|
 | `sudo parking-update` | 최신 이미지로 교체(main 머지 후 Actions 완료 → 실행). 데이터 볼륨 유지, 헬스체크 실패 시 종료 코드 1 |
 | `sudo parking-sync <job>` | 수동 수집(`standard-parking`·`holidays`·`seoul-occupancy`). 결과는 `/var/log/parking-save-sync.log` |
+| `sudo parking-reports` | 이용자 정보 오류 신고 검토 대기 목록. `parking-reports reviewed <id> <이름>` / `dismiss <id> <이름>`로 처리(원천 데이터 수정은 별도). `npm run quality`에도 대기 건수 표시 |
 | `sudo parking-backup` | 즉시 백업 → `/var/backups/parking-save/parking-YYYY-MM-DD.sqlite`(14일 보관, 매일 03:37 자동) |
 | `docker logs --tail 100 parking-save` | 앱 로그 |
 
 - 백업은 같은 서버 디스크에 있음 → 서버 장애 대비로 주 1회 이상 PC나 오브젝트 스토리지로 옮길 것(관리자 승인한 중복 후보·감사로그는 재수집으로 복구되지 않음).
 - 관리자 API는 서버 안에서만 호출됨(nginx가 외부 차단). 앱은 nginx 1단계 뒤이므로 `TRUSTED_PROXY_COUNT=1`.
+- nginx 접속 로그는 쿼리 문자열(검색 좌표·시간)을 남기지 않는 형식(`parkingsave_noquery`)으로 `/var/log/nginx/parking-save.access.log`에 기록 — 처리방침(`/privacy`)과 일치. 로그 순환·보관 기간은 Ubuntu 기본 logrotate(일 단위 14일) 적용 — 정책 확정 시 조정.
 
 ### 9-6. 검증 기록 (2026-11-12, 이 세션)
 

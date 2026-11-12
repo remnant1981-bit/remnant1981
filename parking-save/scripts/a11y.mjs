@@ -18,6 +18,9 @@ const PAGES = [
   ["상세(주차 타이머 진행)", "/lots/1?startAt=2026-11-09T10:00:00%2B09:00&endAt=2026-11-09T12:00:00%2B09:00", async (page) => { const b = page.getByRole("button", { name: "여기 주차 시작" }); if (await b.count()) await b.click(); await page.waitForTimeout(300); }],
   ["홈(즐겨찾기·최근 검색·타이머)", "/"],
   ["오프라인 안내", "/offline"],
+  ["이용약관", "/terms"],
+  ["개인정보·위치정보 처리방침", "/privacy"],
+  ["상세(오류 신고 열기)", "/lots/1?startAt=2026-11-09T17:00:00%2B09:00&endAt=2026-11-09T19:00:00%2B09:00", async (page) => { await page.getByText("정보가 틀렸나요? 알려 주세요").click(); }],
   ["404", "/lots/9999"],
 ];
 const browser = await chromium.launch();

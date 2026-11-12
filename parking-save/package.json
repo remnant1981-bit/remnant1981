@@ -20,7 +20,8 @@
     "profile": "tsx scripts/profile.ts",
     "duplicates": "tsx scripts/duplicates.ts",
     "a11y": "node scripts/a11y.mjs",
-    "demo:build": "tsx scripts/demo/build.ts"
+    "demo:build": "tsx scripts/demo/build.ts",
+    "reports": "tsx scripts/reports.ts"
   },
   "dependencies": {
     "leaflet": "1.9.4",

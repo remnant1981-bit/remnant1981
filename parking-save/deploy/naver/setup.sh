@@ -68,6 +68,7 @@ fi
 echo "== 7. 정기 수집·백업 (cron, KST)"
 install -m 755 "$HERE/parking-sync.sh" /usr/local/bin/parking-sync
 install -m 755 "$HERE/parking-backup.sh" /usr/local/bin/parking-backup
+install -m 755 "$HERE/parking-reports.sh" /usr/local/bin/parking-reports
 cat > /etc/cron.d/parking-save <<'EOT'
 # 파킹세이브 정기 작업 (시간대: Asia/Seoul)
 SHELL=/bin/bash
