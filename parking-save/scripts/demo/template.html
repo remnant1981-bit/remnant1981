@@ -1,0 +1,413 @@
+<title>파킹세이브 데모</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* 레이아웃: 한 열 모바일 앱(최대 720px). 위 검색 패널 → 요약 → 결과 카드. 주차 표지판의 파랑을 강조색으로, 아스팔트 회색 중립색 */
+:root {
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --ink: #18202c;
+  --muted: #586273;
+  --line: #d8dde6;
+  --accent: #1d4ed8;
+  --accent-ink: #ffffff;
+  --accent-soft: #e6edfc;
+  --free: #11724b;
+  --free-soft: #e3f4ec;
+  --warn: #8a5300;
+  --warn-soft: #fdf2df;
+  --bad: #a3262a;
+  --font-display: "Black Han Sans", "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141b; --surface: #171e28; --ink: #e8edf4; --muted: #a2adbd; --line: #2b3544;
+    --accent: #6b9bff; --accent-ink: #0b1220; --accent-soft: #1b2a47;
+    --free: #5fd39b; --free-soft: #12301f; --warn: #f2b45a; --warn-soft: #33260f; --bad: #ff8a8a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141b; --surface: #171e28; --ink: #e8edf4; --muted: #a2adbd; --line: #2b3544;
+  --accent: #6b9bff; --accent-ink: #0b1220; --accent-soft: #1b2a47;
+  --free: #5fd39b; --free-soft: #12301f; --warn: #f2b45a; --warn-soft: #33260f; --bad: #ff8a8a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 720px; margin: 0 auto; padding-block: 20px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 16px; }
+header { display: grid; gap: 6px; }
+.brand { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sign { width: 36px; height: 36px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-family: var(--font-display); font-size: 24px; line-height: 1; }
+h1 { font-family: var(--font-display); font-weight: 400; font-size: 28px; margin: 0; letter-spacing: 0.01em; }
+.tag { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--warn); background: var(--warn-soft); border-radius: 999px; padding: 2px 10px; }
+.lede { margin: 0; color: var(--muted); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 14px; }
+fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; min-width: 0; }
+legend { font-weight: 700; padding: 0; margin-bottom: 4px; }
+label { font-size: 13px; color: var(--muted); }
+input, select { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; width: 100%; min-width: 0; }
+input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button { font: inherit; cursor: pointer; }
+.row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 6px 12px; font-size: 13px; }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.place { position: relative; }
+.suggest { list-style: none; margin: 4px 0 0; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); display: grid; gap: 2px; max-height: 260px; overflow: auto; }
+.suggest button { width: 100%; text-align: left; background: none; border: 0; border-radius: 6px; padding: 8px; color: var(--ink); }
+.suggest button:hover, .suggest button:focus-visible { background: var(--accent-soft); }
+.suggest small { display: block; color: var(--muted); }
+.center { font-size: 13px; color: var(--muted); }
+.center b { color: var(--ink); }
+.checks { display: flex; flex-wrap: wrap; gap: 16px; font-size: 14px; }
+.checks label { color: var(--ink); font-size: 14px; display: flex; align-items: center; gap: 6px; }
+.checks input { width: auto; }
+.go { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 10px; padding: 13px; font-weight: 700; font-size: 16px; }
+.summary { display: grid; gap: 6px; }
+.summary h2 { margin: 0; font-size: 18px; text-wrap: balance; }
+.summary p { margin: 0; font-size: 13px; color: var(--muted); }
+.stats { display: flex; flex-wrap: wrap; gap: 6px; }
+.stat { font-size: 12.5px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; background: var(--surface); font-variant-numeric: tabular-nums; }
+.note { font-size: 13px; border-radius: 8px; padding: 8px 12px; background: var(--warn-soft); color: var(--warn); }
+.results { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
+.card-top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.card h3 { margin: 0; font-size: 16.5px; line-height: 1.35; min-width: 0; overflow-wrap: anywhere; }
+.dist { font-size: 13px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.addr { margin: -6px 0 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.fee { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.fee .amt { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.fee.free .amt { color: var(--free); }
+.fee.unknown .amt { font-size: 16px; color: var(--muted); }
+.fee .sub { font-size: 12.5px; color: var(--muted); }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.facts div { min-width: 0; }
+.facts dt { font-size: 11.5px; color: var(--muted); letter-spacing: 0.02em; }
+.facts dd { margin: 0; font-size: 13.5px; font-weight: 500; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.pill { font-size: 12px; border-radius: 6px; padding: 3px 8px; }
+.pill.good { background: var(--free-soft); color: var(--free); }
+.pill.caution { background: var(--warn-soft); color: var(--warn); }
+.mixed { font-size: 12.5px; background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 8px 10px; }
+.meta { font-size: 12px; color: var(--muted); }
+.meta b { color: var(--warn); font-weight: 600; }
+details.more > summary { cursor: pointer; font-size: 13px; color: var(--accent); font-weight: 600; list-style: none; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more[open] > summary { margin-bottom: 8px; }
+.detail { display: grid; gap: 10px; font-size: 13px; }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { color: var(--muted); font-weight: 500; }
+.links { display: flex; flex-wrap: wrap; gap: 8px; }
+.links a { font-size: 13px; color: var(--accent); }
+.similar { font-size: 12.5px; color: var(--muted); }
+.empty { background: var(--surface); border: 1px dashed var(--line); border-radius: 12px; padding: 20px; text-align: center; color: var(--muted); }
+footer { font-size: 12.5px; color: var(--muted); display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 14px; }
+footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (max-width: 420px) { .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .fee .amt { font-size: 20px; } }
+@media (prefers-reduced-motion: no-preference) { .card { transition: border-color .15s; } .card:hover { border-color: var(--accent); } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="brand"><span class="sign" aria-hidden="true">P</span><h1>파킹세이브</h1><span class="tag">데모</span></div>
+    <p class="lede">주차하기 전에 주차비부터 비교하세요. 전국 공영주차장의 예상 요금을 이용 시간 기준으로 계산합니다.</p>
+  </header>
+
+  <form class="panel" id="form" aria-label="주차장 검색" novalidate>
+    <fieldset>
+      <legend>어디 근처에 주차할까요?</legend>
+      <div class="chips" id="presets" role="group" aria-label="주요 장소"></div>
+      <div class="place">
+        <label for="q">주차장 이름·주소로 찾기</label>
+        <input id="q" type="search" autocomplete="off" placeholder="예: 송정역, 해운대, 중앙시장" aria-controls="suggest">
+        <ul class="suggest" id="suggest" hidden></ul>
+      </div>
+      <p class="center" id="centerLabel" aria-live="polite"></p>
+    </fieldset>
+
+    <fieldset>
+      <legend>언제 주차하나요? (한국 시간)</legend>
+      <div class="row">
+        <div><label for="start">시작 일시</label><input id="start" type="datetime-local" required></div>
+        <div><label for="end">종료 일시</label><input id="end" type="datetime-local" required></div>
+      </div>
+      <div class="chips" role="group" aria-label="빠른 주차 시간 선택">
+        <button type="button" class="chip" data-h="1">1시간</button>
+        <button type="button" class="chip" data-h="2">2시간</button>
+        <button type="button" class="chip" data-h="3">3시간</button>
+        <button type="button" class="chip" data-h="12">12시간</button>
+      </div>
+    </fieldset>
+
+    <details class="more" id="opts"><summary>조건: 반경·시설 유형·정렬·무료만</summary>
+    <fieldset>
+      <legend class="sr">조건</legend>
+      <div class="row">
+        <div><label for="radius">검색 반경</label>
+          <select id="radius"><option value="500">500m</option><option value="1000" selected>1km</option><option value="2000">2km</option><option value="3000">3km</option></select></div>
+        <div><label for="type">시설 유형</label>
+          <select id="type"><option value="all">전체</option><option value="off">노외</option><option value="on">노상</option></select></div>
+        <div><label for="sort">정렬</label>
+          <select id="sort"><option value="free_first">무료 우선</option><option value="price_asc">요금 낮은 순</option><option value="distance_asc">거리 가까운 순</option></select></div>
+      </div>
+      <div class="checks"><label><input type="checkbox" id="freeOnly"> 무료만</label></div>
+    </fieldset>
+    </details>
+    <p class="note" id="formError" role="alert" hidden></p>
+    <button class="go" type="submit">주차장 비교하기</button>
+  </form>
+
+  <section class="summary" id="summary" aria-live="polite"></section>
+  <ul class="results" id="results"></ul>
+
+  <footer>
+    <strong>데모 안내</strong>
+    <ul>
+      <li>주차장 정보: <span id="srcInfo"></span>. 서버 없이 이 페이지 안에서 앱과 같은 요금·운영 판정 엔진으로 계산합니다.</li>
+      <li id="holInfo"></li>
+      <li>실시간 잔여면수는 데모에 포함되지 않아 모든 시설이 ‘실시간 확인 불가’로 표시됩니다.</li>
+      <li>주요 장소 버튼의 좌표는 대략값이며, 거리는 직선거리입니다. 요금은 원천 데이터 기준 예상 금액이므로 현장 요금과 다를 수 있습니다.</li>
+    </ul>
+  </footer>
+</div>
+
+<script>/*ENGINE*/</script>
+<script id="data" type="application/json">/*DATA*/</script>
+<script>
+(() => {
+  "use strict";
+  const D = JSON.parse(document.getElementById("data").textContent);
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const won = (n) => n.toLocaleString("ko-KR") + "원";
+  const dist = (m) => (m >= 1000 ? (m / 1000).toFixed(1) + "km" : m + "m");
+
+  // 공휴일: 빌드 시 DB의 holidays/holiday_coverage에서 가져옴. 보장 범위 밖 기간은 공휴일 판정 불가(앱과 동일 원칙)
+  const HOL = D.holidays; // { source, from, to, dates } | null
+  const holidaysFor = (s, e) => (HOL && PS.kstYmd(s.getTime()) >= HOL.from && PS.kstYmd(e.getTime() - 1) <= HOL.to ? new Set(HOL.dates) : null);
+  $("holInfo").textContent = !HOL
+    ? "공휴일: 데이터가 없어 평일·주말·공휴일 규칙이 있는 시설은 요금·운영을 판정하지 않습니다(실서비스는 한국천문연구원 특일 정보로 자동 수집)."
+    : HOL.source === "DEMO_HOLIDAYS"
+      ? `공휴일: ${HOL.from}~${HOL.to} 법정공휴일을 데모용으로 직접 입력했습니다. 그래서 주차 일시는 ${HOL.to}까지만 고를 수 있습니다(실서비스는 한국천문연구원 특일 정보로 자동 수집).`
+      : `공휴일: 한국천문연구원 특일 정보 ${HOL.from}~${HOL.to} 기준. 이 범위 밖 일시는 요일별 규칙을 판정하지 않습니다.`;
+
+  const PRESETS = [
+    ["서울시청", 37.5663, 126.9779], ["강남역", 37.4979, 127.0276], ["수원역", 37.2659, 127.0001],
+    ["대전역", 36.3326, 127.4342], ["대구 동성로", 35.8690, 128.5960], ["부산역", 35.1151, 129.0414],
+    ["광주 송정역", 35.1378, 126.7934], ["전주 한옥마을", 35.8150, 127.1530], ["안동 중앙시장", 36.5651, 128.7247], ["제주시청", 33.4996, 126.5312],
+  ];
+
+  // 원천 행 → 엔진 입력
+  const RULES = D.rules.map((rs) => rs.map((r, i) => ({ id: i, ruleType: r[0], amount: r[1], durationMinutes: r[2], dayType: r[3], startTime: r[4], endTime: r[5], dailyMaxBasis: r[6] })));
+  const SCHEDS = D.scheds.map((ss) => ss.map((s) => ({ dayType: s[0], openTime: s[1], closeTime: s[2], allDay: s[3] === 1, closed: s[4] === 1, assumed: s[5] === 1 })));
+  const LOTS = D.lots.map((l, i) => ({ i, name: l[0], addr: l[1], type: ["OFF_STREET", "ON_STREET", "UNKNOWN"][l[2]], lat: l[3], lng: l[4], spaces: l[5], date: l[6], rules: RULES[l[7]], rawRules: D.rules[l[7]], sched: SCHEDS[l[8]], flags: D.flags[l[9]], note: l[10], pub: l[11] === 1, operator: l[12], phone: l[13] }));
+  const DUP = new Map();
+  for (const [a, b, merged] of D.dup) { for (const [x, y] of [[a, b], [b, a]]) { if (!DUP.has(x)) DUP.set(x, new Map()); DUP.get(x).set(y, merged ? "MERGED" : "PENDING"); } }
+  const norm = (s) => String(s ?? "").replace(/\s+/g, "").toLowerCase();
+  const SEARCH = LOTS.map((l) => [norm(l.name), norm(l.addr)]);
+
+  $("srcInfo").textContent = `${D.source} 전국 ${LOTS.length.toLocaleString("ko-KR")}곳 (좌표 없는 ${D.noCoord}곳 제외, ${D.collected ? D.collected.slice(0, 10) : "-"} 수집)`;
+
+  let center = { lat: PRESETS[0][1], lng: PRESETS[0][2], label: PRESETS[0][0] };
+
+  // 프리셋 칩
+  const presetsEl = $("presets");
+  presetsEl.innerHTML = PRESETS.map((p, k) => `<button type="button" class="chip" data-k="${k}" aria-pressed="${k === 0}">${esc(p[0])}</button>`).join("");
+  const setCenter = (c, presetIdx) => {
+    center = c;
+    presetsEl.querySelectorAll(".chip").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.k) === presetIdx)));
+    $("centerLabel").innerHTML = `검색 중심: <b>${esc(c.label)}</b>`;
+  };
+  presetsEl.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-k]"); if (!b) return;
+    const p = PRESETS[Number(b.dataset.k)];
+    setCenter({ lat: p[1], lng: p[2], label: p[0] }, Number(b.dataset.k));
+    $("q").value = ""; hideSuggest(); run();
+  });
+
+  // 주차장 이름·주소 검색 → 그 시설을 중심으로
+  const sug = $("suggest");
+  const hideSuggest = () => { sug.hidden = true; sug.innerHTML = ""; };
+  $("q").addEventListener("input", () => {
+    const q = norm($("q").value);
+    if (q.length < 2) { hideSuggest(); return; }
+    const hits = [];
+    for (let i = 0; i < SEARCH.length && hits.length < 40; i++) {
+      const [n, a] = SEARCH[i];
+      const s = n.startsWith(q) ? 0 : n.includes(q) ? 1 : a.includes(q) ? 2 : -1;
+      if (s >= 0) hits.push([s, i]);
+    }
+    hits.sort((x, y) => x[0] - y[0]);
+    const top = hits.slice(0, 8);
+    sug.innerHTML = top.length ? top.map(([, i]) => `<li><button type="button" data-i="${i}">${esc(LOTS[i].name)}<small>${esc(LOTS[i].addr ?? "주소 없음")}</small></button></li>`).join("")
+      : `<li><span class="center" style="display:block;padding:8px">일치하는 주차장이 없습니다. 다른 이름이나 동 이름으로 찾아보세요.</span></li>`;
+    sug.hidden = false;
+  });
+  sug.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-i]"); if (!b) return;
+    const l = LOTS[Number(b.dataset.i)];
+    setCenter({ lat: l.lat, lng: l.lng, label: l.name }, -1);
+    $("q").value = l.name; hideSuggest(); run();
+  });
+
+  // 시간 입력: 내일 10:00~12:00 기본, 2026년 말까지
+  const startEl = $("start"), endEl = $("end");
+  const nowMs = Date.now();
+  const tomorrow10 = Date.parse(PS.kstYmd(nowMs + 86400000) + "T10:00:00+09:00");
+  const minLocal = PS.toKstLocalInput(Math.ceil(nowMs / 900000) * 900000);
+  startEl.min = minLocal;
+  if (HOL) { startEl.max = HOL.to + "T23:00"; endEl.max = HOL.to + "T23:59"; }
+  startEl.value = PS.toKstLocalInput(tomorrow10); endEl.value = PS.toKstLocalInput(tomorrow10 + 2 * 3600000);
+  endEl.min = startEl.value;
+  startEl.addEventListener("change", () => { endEl.min = startEl.value; });
+  document.querySelectorAll("[data-h]").forEach((b) => b.addEventListener("click", () => {
+    const s = Date.parse(startEl.value + ":00+09:00"); if (Number.isNaN(s)) return;
+    endEl.value = PS.toKstLocalInput(s + Number(b.dataset.h) * 3600000); run();
+  }));
+
+  const FEE_REASON = {
+    NO_RULES: "확인된 요금 규칙이 없음 (무료 아님)", HOLIDAY_DATA_MISSING: "공휴일 데이터가 없어 계산 불가",
+    RULE_DAYTYPE_UNKNOWN: "요금 규칙이 불명확해 계산 불가", INCOMPLETE_RULE: "요금 규칙이 불완전해 계산 불가",
+    RULE_CONFLICT: "요금 규칙이 충돌해 계산 불가", UNSUPPORTED_RULE: "지원되지 않는 요금 규칙 — 계산 불가",
+    UNSUPPORTED_RATE_CHANGE: "기간 중 요금 단가가 달라져 계산 불가", UNSUPPORTED_DAILY_MAX_BASIS: "일일 최대요금 기준 미확인 — 계산 불가",
+    INVALID_RULE: "요금 규칙 형식 오류 — 계산 불가", INVALID_PERIOD: "주차 기간 오류",
+  };
+  const OPER = { OPERATING: "운영", OUTSIDE: "운영 외 시간", UNKNOWN: "운영 확인 불가" };
+  const TYPE = { ON_STREET: "노상", OFF_STREET: "노외", UNKNOWN: "유형 미확인" };
+  const DAY = { WEEKDAY: "평일", SATURDAY: "토요일", SUNDAY: "일요일", HOLIDAY: "공휴일", EVERYDAY: "매일", UNKNOWN: "미상" };
+  const RULE = { BASE: "기본요금", ADDITIONAL: "추가요금", DAILY_MAX: "일일 최대요금(1일권)", FREE: "무료" };
+
+  function search(p) {
+    const dLat = p.radius / 111320, dLng = p.radius / (111320 * Math.cos((p.center.lat * Math.PI) / 180));
+    const holidays = holidaysFor(p.start, p.end);
+    const s = p.start.getTime(), e = p.end.getTime();
+    let items = [];
+    for (const l of LOTS) {
+      if (l.lat < p.center.lat - dLat || l.lat > p.center.lat + dLat || l.lng < p.center.lng - dLng || l.lng > p.center.lng + dLng) continue;
+      if (p.type === "on" && l.type !== "ON_STREET") continue;
+      if (p.type === "off" && l.type !== "OFF_STREET") continue;
+      const d = PS.distanceMeters(p.center, l);
+      if (d > p.radius) continue;
+      const fee = PS.calculateFee({ startAt: p.start, endAt: p.end, rules: l.rules, holidays });
+      const operating = PS.operatingForStay(l.sched, s, e, holidays);
+      const operatingAssumed = operating !== "UNKNOWN" && PS.operatingUsesAssumed(l.sched, s, e, holidays);
+      const stale = l.date ? (Date.now() - Date.parse(l.date + "T00:00:00+09:00")) / 86400000 > 365 : false;
+      items.push({ id: l.i, lot: l, distanceMeters: Math.round(d), fee, operating, operatingAssumed, occupancy: { status: "UNAVAILABLE" }, ownershipType: l.pub ? "PUBLIC" : "UNKNOWN", stale, similar: [] });
+    }
+    const candidates = items.length;
+    if (p.freeOnly) items = items.filter((i) => i.fee.status === "OK" && i.fee.isFree);
+    const price = (i) => (i.fee.status === "OK" ? i.fee.amount : Infinity);
+    const byDist = (a, b) => a.distanceMeters - b.distanceMeters || a.id - b.id;
+    const free = (i) => (i.fee.status === "OK" && i.fee.isFree ? 0 : 1);
+    items.sort(p.sort === "distance_asc" ? byDist : p.sort === "price_asc" ? (a, b) => price(a) - price(b) || byDist(a, b) : (a, b) => free(a) - free(b) || price(a) - price(b) || byDist(a, b));
+    // 동일 시설 후보 묶음(앱과 같은 기준: 승인 또는 점수 1.0)
+    const kept = [];
+    for (const it of items) {
+      const head = kept.find((k) => DUP.get(k.id)?.has(it.id));
+      if (head) head.similar.push({ it, status: DUP.get(head.id).get(it.id) }); else kept.push(it);
+    }
+    items = kept.slice(0, 50);
+    const why = PS.explainAll(items);
+    for (const i of items) i.explanation = why.get(i.id);
+    return { items, candidates, holidays };
+  }
+
+  function feeHtml(f) {
+    if (f.status === "OK") {
+      if (f.isFree) return `<div class="fee free"><span class="amt">무료</span><span class="sub">시설 규칙상 입력 시간 전체 무료</span></div>`;
+      return `<div class="fee"><span class="amt">${won(f.amount)}</span><span class="sub">예상 요금${f.assumptions.length ? " · 1일권 요금 상한 적용(추정)" : ""}</span></div>`;
+    }
+    return `<div class="fee unknown"><span class="amt">요금 정보 없음</span><span class="sub">${esc(FEE_REASON[f.reason] ?? "정확한 요금 계산 불가")}</span></div>`;
+  }
+  const hm = (r) => (r[4] || r[5] ? `${r[4] ?? ""}~${r[5] ?? ""}` : "종일");
+  function ruleRow(r) {
+    const amt = r[1] == null ? "미확인" : won(r[1]);
+    const val = r[0] === "FREE" ? "무료" : r[0] === "DAILY_MAX" ? amt : `${r[2] ?? "?"}분 ${amt}`;
+    return `<tr><td>${esc(RULE[r[0]] ?? r[0])}</td><td>${esc(DAY[r[3]] ?? r[3])}</td><td>${esc(hm(r))}</td><td>${esc(val)}</td></tr>`;
+  }
+  function schedRow(s) {
+    const t = s.closed ? "휴무" : s.allDay ? "24시간" : `${s.openTime}~${s.closeTime}`;
+    return `<tr><td>${esc(DAY[s.dayType] ?? s.dayType)}${s.assumed ? " (추정)" : ""}</td><td>${esc(t)}</td></tr>`;
+  }
+
+  function card(it, dest) {
+    const l = it.lot, ex = it.explanation;
+    const pills = [...ex.highlights.map((t) => `<li class="pill good"><span class="sr">장점: </span>${esc(t)}</li>`), ...ex.cautions.map((t) => `<li class="pill caution"><span class="sr">유의: </span>${esc(t)}</li>`)].join("");
+    const mixed = it.fee.status !== "OK" && l.flags.includes("FEE_MIXED")
+      ? `<p class="mixed">무료·유료 혼합 시설: 어느 시간대·구간이 무료인지 데이터에 없어 요금을 계산하지 않았습니다.${l.note ? ` 원천 특기사항: “${esc(l.note)}”` : ""}</p>` : "";
+    const q = encodeURIComponent(`${l.name} ${l.addr ?? ""}`.trim());
+    const links = PS.buildNaverLinks({ lot: { lat: l.lat, lng: l.lng, name: l.name }, destination: dest, appname: "https://claude.ai" });
+    const sim = it.similar.length ? `<p class="similar">같은 시설일 가능성이 있는 다른 기록 ${it.similar.length}건: ${it.similar.map((s) => `${esc(s.it.lot.name)} (${dist(s.it.distanceMeters)}, ${s.status === "MERGED" ? "동일 시설로 승인됨" : "미확정"})`).join(", ")}</p>` : "";
+    return `<li class="card">
+      <div class="card-top"><h3>${esc(l.name)}</h3><span class="dist">${dist(it.distanceMeters)} <span class="sr">직선거리</span></span></div>
+      <p class="addr">${esc(l.addr ?? "주소 정보 없음")} · ${TYPE[l.type]} · ${l.pub ? "공영" : "공영 여부 미확인"}</p>
+      ${feeHtml(it.fee)}
+      <dl class="facts">
+        <div><dt>운영</dt><dd>${OPER[it.operating]}${it.operatingAssumed ? " (추정)" : ""}</dd></div>
+        <div><dt>주차면수</dt><dd>${l.spaces != null ? l.spaces + "면" : "정보 없음"}</dd></div>
+        <div><dt>실시간 잔여</dt><dd>실시간 확인 불가</dd></div>
+      </dl>
+      ${pills ? `<ul class="pills" aria-label="이 시설의 특징과 유의점">${pills}</ul>` : ""}
+      ${mixed}${sim}
+      <details class="more"><summary>요금 규칙·운영시간 보기</summary>
+        <div class="detail">
+          ${l.rawRules.length ? `<div class="tbl"><table><thead><tr><th>구분</th><th>요일</th><th>시간대</th><th>요금</th></tr></thead><tbody>${l.rawRules.map(ruleRow).join("")}</tbody></table></div>` : `<p>요금 규칙 정보 없음 (무료 아님)</p>`}
+          ${l.sched.length ? `<div class="tbl"><table><thead><tr><th>요일</th><th>운영시간</th></tr></thead><tbody>${l.sched.map(schedRow).join("")}</tbody></table></div>` : `<p>운영시간 정보 없음 (24시간으로 간주하지 않음)</p>`}
+          ${it.fee.status === "OK" && it.fee.assumptions.length ? `<p class="mixed">${esc(it.fee.assumptions[0])}</p>` : ""}
+          ${l.operator || l.phone ? `<p>관리기관: ${esc(l.operator ?? "-")}${l.phone ? ` · 전화 <span style="user-select:all">${esc(l.phone)}</span>` : ""}</p>` : ""}
+          <div class="links">
+            <a href="https://map.naver.com/p/search/${q}" target="_blank" rel="noopener">네이버 지도 웹에서 보기</a>
+            ${links.car ? `<a href="${esc(links.car.scheme)}">네이버 지도 앱 길찾기</a>` : ""}
+          </div>
+        </div>
+      </details>
+      <p class="meta">출처: ${esc(D.source)} · 기준일 ${esc(l.date ?? "미확인")}${it.stale ? " <b>· 오래된 데이터</b>" : ""}</p>
+    </li>`;
+  }
+
+  function run() {
+    const errEl = $("formError");
+    const s = Date.parse(startEl.value + ":00+09:00"), e = Date.parse(endEl.value + ":00+09:00");
+    const fail = (m) => { errEl.textContent = m; errEl.hidden = false; };
+    errEl.hidden = true;
+    if (Number.isNaN(s) || Number.isNaN(e)) return fail("시작·종료 일시를 입력하세요.");
+    if (e <= s) return fail("종료 일시는 시작 일시보다 늦어야 합니다.");
+    if (e - s > 31 * 86400000) return fail("주차 기간은 최대 31일입니다.");
+    const p = { center, start: new Date(s), end: new Date(e), radius: Number($("radius").value), type: $("type").value, sort: $("sort").value, freeOnly: $("freeOnly").checked };
+    const t0 = performance.now();
+    const r = search(p);
+    const ms = Math.round(performance.now() - t0);
+    const ok = r.items.filter((i) => i.fee.status === "OK").length;
+    const freeN = r.items.filter((i) => i.fee.status === "OK" && i.fee.isFree).length;
+    const cheapest = r.items.filter((i) => i.fee.status === "OK" && !i.fee.isFree).reduce((m, i) => Math.min(m, i.fee.amount), Infinity);
+    const fmt = (x) => PS.formatKst(x);
+    $("summary").innerHTML = `
+      <h2>${esc(center.label)} 반경 ${dist(p.radius)} · ${fmt(p.start)} ~ ${fmt(p.end)}</h2>
+      <div class="stats">
+        <span class="stat">${r.candidates > r.items.length ? `후보 ${r.candidates}곳 중 ` : ""}${r.items.length}곳 표시</span>
+        <span class="stat">무료 ${freeN}곳</span>
+        <span class="stat">요금 계산 가능 ${ok}곳</span>
+        ${Number.isFinite(cheapest) ? `<span class="stat">유료 최저 ${won(cheapest)}</span>` : ""}
+        <span class="stat">${ms}ms</span>
+      </div>
+      ${r.holidays ? "" : `<p class="note">입력 기간이 공휴일 데이터 범위를 벗어나 요일별 규칙이 있는 시설은 요금·운영을 판정하지 않았습니다.</p>`}
+      <p>거리는 직선거리입니다. 요금을 계산할 수 없는 시설은 0원으로 보지 않고 비교에서 제외합니다.</p>`;
+    const dest = { lat: center.lat, lng: center.lng, name: center.label };
+    $("results").innerHTML = r.items.length ? r.items.map((it) => card(it, dest)).join("")
+      : `<li class="empty">조건에 맞는 주차장이 없습니다. 반경을 넓히거나 ‘무료만’을 해제해 보세요.</li>`;
+  }
+
+  $("form").addEventListener("submit", (e) => { e.preventDefault(); hideSuggest(); run(); });
+  ["radius", "type", "sort", "freeOnly"].forEach((id) => $(id).addEventListener("change", run));
+  setCenter(center, 0);
+  run();
+})();
+</script>
