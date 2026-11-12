@@ -3,30 +3,40 @@ import "./globals.css";
 import { MockBanner } from "@/components/MockBanner";
 import { mockEnabled } from "@/server/mock";
 import { PwaRegister } from "@/components/PwaRegister";
+import { LangSwitch } from "@/components/LangSwitch";
 import Link from "next/link";
+import { getLang } from "@/i18n/server";
+import { dict } from "@/i18n/dict";
 
-export const metadata: Metadata = {
-  title: { default: "파킹세이브 - 공영주차장 요금 비교", template: "%s | 파킹세이브" },
-  description: "주차하기 전에, 주차비부터 아끼자! 전국 공영주차장 통합 검색·주차비 비교.",
-  icons: { icon: "/icons/icon.svg", apple: "/icons/apple-touch-icon.png" },
-  appleWebApp: { capable: true, title: "파킹세이브", statusBarStyle: "default" },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = dict(await getLang()).layout;
+  const name = t.title.split(" - ")[0];
+  return {
+    title: { default: t.title, template: `%s | ${name}` },
+    description: t.desc,
+    icons: { icon: "/icons/icon.svg", apple: "/icons/apple-touch-icon.png" },
+    appleWebApp: { capable: true, title: name, statusBarStyle: "default" },
+  };
+}
 export const viewport: Viewport = { themeColor: "#1d4ed8" };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const lang = await getLang();
+  const t = dict(lang);
   return (
-    <html lang="ko">
+    <html lang={lang}>
       <body>
-        <a href="#main" className="skip-link">본문으로 건너뛰기</a>
-        {mockEnabled() && <MockBanner />}
+        <a href="#main" className="skip-link">{t.layout.skip}</a>
+        {mockEnabled() && <MockBanner lang={lang} />}
         <PwaRegister />
-        <main id="main" className="mx-auto max-w-2xl px-4 py-8">{children}</main>
+        <div className="mx-auto flex max-w-2xl justify-end px-4 pt-3"><LangSwitch to={t.layout.langSwitchLang} label={t.layout.langSwitch} aria={t.layout.langLabel} /></div>
+        <main id="main" className="mx-auto max-w-2xl px-4 pb-8 pt-3">{children}</main>
         <footer className="mx-auto max-w-2xl px-4 pb-8 text-xs text-gray-600">
-          <nav aria-label="서비스 정보" className="flex flex-wrap gap-x-4 gap-y-1">
-            <Link href="/terms" className="underline">이용약관</Link>
-            <Link href="/privacy" className="underline">개인정보·위치정보 처리방침</Link>
+          <nav aria-label={t.layout.footerNav} className="flex flex-wrap gap-x-4 gap-y-1">
+            <Link href="/terms" className="underline">{t.layout.terms}</Link>
+            <Link href="/privacy" className="underline">{t.layout.privacy}</Link>
           </nav>
-          <p className="mt-1">주차장 정보: 공공데이터포털 전국주차장정보표준데이터 · 요금은 예상 금액이며 현장 안내가 우선합니다.</p>
+          <p className="mt-1">{t.layout.footerNote}</p>
         </footer>
       </body>
     </html>

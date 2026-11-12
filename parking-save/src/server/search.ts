@@ -28,6 +28,8 @@ export interface SearchParams {
   center: LatLng; centerLabel: string; centerKind: "current_location" | "destination";
   radiusMeters: number; startAt: Date; endAt: Date; sort: Sort; type: TypeFilter;
   freeOnly: boolean; realtimeOnly: boolean; operatingOnly: boolean; limit: number;
+  /** 추천 사유 문구 언어(화면 언어). 없으면 한국어 */
+  lang?: "ko" | "en";
 }
 export type ParseResult = { ok: true; params: SearchParams } | { ok: false; code: string; message: string };
 const bad = (code: string, message: string): ParseResult => ({ ok: false, code, message });
@@ -63,7 +65,7 @@ export function parseSearchParams(q: URLSearchParams): ParseResult {
   const limit = q.get("limit") ? Number(q.get("limit")) : 50;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) return bad("INVALID_LIMIT", "limit은 1~100입니다.");
   const flag = (k: string) => q.get(k) === "true" || q.get(k) === "1" || q.get(k) === "on";
-  return { ok: true, params: { center, centerLabel: label, centerKind: kind, radiusMeters: rad, startAt, endAt, sort, type, freeOnly: flag("freeOnly"), realtimeOnly: flag("realtimeOnly"), operatingOnly: flag("operatingOnly"), limit } };
+  return { ok: true, params: { center, centerLabel: label, centerKind: kind, radiusMeters: rad, startAt, endAt, sort, type, freeOnly: flag("freeOnly"), realtimeOnly: flag("realtimeOnly"), operatingOnly: flag("operatingOnly"), limit, lang: q.get("lang") === "en" ? "en" : "ko" } };
 }
 
 interface LotRow {
@@ -234,7 +236,7 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
   items.sort(comparator(p.sort));
   items = await groupSimilar(db, items);
   items = items.slice(0, p.limit);
-  const why = explainAll(items); // 표시되는 시설 집합 기준 설명(정렬에는 영향 없음)
+  const why = explainAll(items, p.lang ?? "ko"); // 표시되는 시설 집합 기준 설명(정렬에는 영향 없음)
   for (const i of items) i.explanation = why.get(i.id)!;
 
   const warnings: string[] = [];

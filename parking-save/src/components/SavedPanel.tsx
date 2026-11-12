@@ -1,21 +1,24 @@
 "use client";
 import Link from "next/link";
+import type { Lang } from "@/i18n";
+import { dict } from "@/i18n/dict";
 import { clearRecent, removeFavorite, setRecentEnabled, useFavorites, useRecent, useRecentEnabled } from "@/lib/saved";
 
 /** 홈: 즐겨찾는 주차장·최근 검색. 저장된 것이 없으면 아무것도 표시하지 않음 */
-export function SavedPanel() {
+export function SavedPanel({ lang = "ko" }: { lang?: Lang }) {
+  const t = dict(lang).saved;
   const favs = useFavorites(), recent = useRecent(), recentOn = useRecentEnabled();
   return (
     <div className="mt-8 space-y-6">
       <label className="flex items-center gap-2 text-sm text-gray-700">
         <input type="checkbox" checked={recentOn} onChange={(e) => setRecentEnabled(e.target.checked)} />
-        최근 검색 기록 남기기 <span className="text-xs text-gray-600">(이 기기에만 저장, 끄면 기록 삭제)</span>
+        {t.recentToggle} <span className="text-xs text-gray-600">{t.recentToggleNote}</span>
       </label>
       {recent.length > 0 && (
         <section aria-labelledby="recent-h">
           <div className="flex items-center justify-between gap-2">
-            <h2 id="recent-h" className="font-semibold">최근 검색</h2>
-            <button type="button" onClick={clearRecent} className="text-xs text-gray-700 underline">기록 지우기</button>
+            <h2 id="recent-h" className="font-semibold">{t.recent}</h2>
+            <button type="button" onClick={clearRecent} className="text-xs text-gray-700 underline">{t.clear}</button>
           </div>
           <ul className="mt-2 space-y-1 text-sm">
             {recent.map((r) => (
@@ -26,16 +29,16 @@ export function SavedPanel() {
       )}
       {favs.length > 0 && (
         <section aria-labelledby="fav-h">
-          <h2 id="fav-h" className="font-semibold">즐겨찾는 주차장</h2>
+          <h2 id="fav-h" className="font-semibold">{t.favs}</h2>
           <ul className="mt-2 space-y-1 text-sm">
             {favs.map((f) => (
               <li key={f.id} className="flex items-baseline justify-between gap-2">
                 <span className="min-w-0"><Link href={`/lots/${f.id}`} className="underline">{f.name}</Link>{f.address && <span className="block truncate text-xs text-gray-600">{f.address}</span>}</span>
-                <button type="button" onClick={() => removeFavorite(f.id)} className="shrink-0 text-xs text-gray-700 underline" aria-label={`${f.name} 즐겨찾기 해제`}>삭제</button>
+                <button type="button" onClick={() => removeFavorite(f.id)} className="shrink-0 text-xs text-gray-700 underline" aria-label={t.removeAria(f.name)}>{t.remove}</button>
               </li>
             ))}
           </ul>
-          <p className="mt-1 text-xs text-gray-600">즐겨찾기·최근 검색은 이 기기의 브라우저에만 저장되며 서버로 보내지 않습니다.</p>
+          <p className="mt-1 text-xs text-gray-600">{t.note}</p>
         </section>
       )}
     </div>

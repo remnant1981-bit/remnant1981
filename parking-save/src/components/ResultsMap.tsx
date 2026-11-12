@@ -4,6 +4,9 @@
 import "leaflet/dist/leaflet.css";
 import { useEffect, useRef } from "react";
 import { clusterLabel, clusterPoints } from "@/domain/cluster";
+import type { Lang } from "@/i18n";
+import { dict } from "@/i18n/dict";
+
 
 export const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 export const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
@@ -49,7 +52,8 @@ function popupEl(item: MapItem): HTMLElement {
   return box;
 }
 
-export function ResultsMap({ center, radiusMeters, items }: { center: { lat: number; lng: number; label: string }; radiusMeters: number; items: MapItem[] }) {
+export function ResultsMap({ center, radiusMeters, items, lang = "ko" }: { center: { lat: number; lng: number; label: string }; radiusMeters: number; items: MapItem[]; lang?: Lang }) {
+  const t = dict(lang).map;
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let disposed = false;
@@ -61,7 +65,7 @@ export function ResultsMap({ center, radiusMeters, items }: { center: { lat: num
       L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTRIBUTION }).addTo(map);
       L.circle([center.lat, center.lng], { radius: radiusMeters, color: "#1d4ed8", weight: 1, fillOpacity: 0.04 }).addTo(map);
       L.circleMarker([center.lat, center.lng], { radius: 7, color: "#ffffff", weight: 2, fillColor: "#1d4ed8", fillOpacity: 1 })
-        .addTo(map).bindTooltip(`검색 중심: ${center.label}`.replace(/[<>&]/g, ""));
+        .addTo(map).bindTooltip(`${t.center}: ${center.label}`.replace(/[<>&]/g, ""));
       const pts: Array<[number, number]> = [[center.lat, center.lng], ...items.map((it) => [it.lat, it.lng] as [number, number])];
       if (pts.length > 1) map.fitBounds(L.latLngBounds(pts), { padding: [28, 28], maxZoom: 17 });
       else map.setView([center.lat, center.lng], 16);
@@ -78,9 +82,9 @@ export function ResultsMap({ center, radiusMeters, items }: { center: { lat: num
               .addTo(layer).bindPopup(popupEl(it));
             continue;
           }
-          const label = clusterLabel(c.items);
+          const label = clusterLabel(c.items, lang);
           const at = m.layerPointToLatLng([c.x, c.y]);
-          const mk = L.marker(at, { icon: L.divIcon({ html: pinEl({ tone: "paid", feeLabel: label }, true), className: "", iconSize: [0, 0] }), keyboard: true, title: `${label} — 눌러서 확대` }).addTo(layer);
+          const mk = L.marker(at, { icon: L.divIcon({ html: pinEl({ tone: "paid", feeLabel: label }, true), className: "", iconSize: [0, 0] }), keyboard: true, title: `${label} — ${t.zoom}` }).addTo(layer);
           const bounds = L.latLngBounds(c.items.map((it) => [it.lat, it.lng] as [number, number]));
           if (m.getZoom() >= m.getMaxZoom() - 1 || bounds.getNorthEast().equals(bounds.getSouthWest())) mk.bindPopup(clusterPopupEl(c.items));
           else mk.on("click", () => m.fitBounds(bounds, { padding: [40, 40], maxZoom: m.getMaxZoom() }));
@@ -90,12 +94,12 @@ export function ResultsMap({ center, radiusMeters, items }: { center: { lat: num
       map.on("zoomend", draw);
     })();
     return () => { disposed = true; map?.remove(); };
-  }, [center.lat, center.lng, center.label, radiusMeters, items]);
+  }, [center.lat, center.lng, center.label, radiusMeters, items, lang, t.center, t.zoom]);
 
   return (
     <div className="mt-4">
-      <div ref={ref} className="h-[60vh] min-h-[320px] w-full rounded-lg border border-gray-300" role="region" aria-label="검색 결과 지도 (아래 목록과 같은 결과)" />
-      <p className="mt-1 text-xs text-gray-600">핀의 금액은 입력한 시간 기준 예상 요금입니다. ‘?’는 요금을 계산할 수 없는 시설입니다. 지도는 목록과 같은 결과를 보여줍니다.</p>
+      <div ref={ref} className="h-[60vh] min-h-[320px] w-full rounded-lg border border-gray-300" role="region" aria-label={t.aria} />
+      <p className="mt-1 text-xs text-gray-600">{t.note}</p>
     </div>
   );
 }

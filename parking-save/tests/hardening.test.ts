@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 
 let ip = "198.18.0.1";
-vi.mock("next/headers", () => ({ headers: async () => new Headers({ "x-forwarded-for": ip }) }));
+vi.mock("next/headers", () => ({ headers: async () => new Headers({ "x-forwarded-for": ip }), cookies: async () => ({ get: () => undefined }) }));
 
 describe("보안 헤더(CSP)", () => {
   const cspFor = async (env: string) => {

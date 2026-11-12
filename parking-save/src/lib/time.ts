@@ -35,8 +35,8 @@ export function kstLocalToIso(s: string | undefined | null): string | null {
 export function toKstLocalInput(ms: number): string {
   return new Date(ms + KST_OFFSET_MS).toISOString().slice(0, 16);
 }
-export function formatKst(iso: string | number | Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(iso));
+export function formatKst(iso: string | number | Date, lang: "ko" | "en" = "ko"): string {
+  return new Intl.DateTimeFormat(lang === "en" ? "en-US" : "ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(iso));
 }
 
 /** 검색 폼 기본값: 다음 15분 단위 시각부터 2시간 (KST datetime-local 값) */

@@ -5,7 +5,8 @@ import { getLotDetail } from "@/server/search";
 import { MapLinks } from "@/components/MapLinks";
 import { buildNaverLinks } from "@/domain/map-link";
 import { isValidCoord } from "@/domain/geo";
-import { DAY_LABEL, OPERATING_LABEL, OWNERSHIP_LABEL, RULE_LABEL, TYPE_LABEL, feeText, occupancyText, sourceLabel, won } from "@/lib/labels";
+import { labelsFor } from "@/lib/labels";
+import { getLang } from "@/i18n/server";
 import { formatKst, parseOffsetIso } from "@/lib/time";
 import { headers } from "next/headers";
 import { clientKey, searchLimiter } from "@/server/rate-limit";
@@ -16,7 +17,6 @@ import type { DayBreakdown } from "@/domain/fee";
 import { FeeCurve } from "@/components/FeeCurve";
 import { ParkingTimerPanel } from "@/components/ParkingTimer";
 import { ReportForm } from "@/components/ReportForm";
-import { FEE_ANOMALY_LABEL } from "@/domain/fee-check";
 
 export const dynamic = "force-dynamic";
 type SP = Record<string, string | string[] | undefined>;
@@ -25,8 +25,11 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 export default async function LotPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<SP> }) {
   const { id } = await params;
   if (!/^\d{1,9}$/.test(id)) notFound();
+  const lang = await getLang();
+  const { t, feeText, occupancyText, sourceLabel, discountLabel, domainText } = labelsFor(lang);
+  const D = t.detail, won = t.money;
   const rl = searchLimiter.check(clientKey(await headers()));
-  if (!rl.ok) return <TooManyRequests retryAfterSec={rl.retryAfterSec} />;
+  if (!rl.ok) return <TooManyRequests lang={lang} retryAfterSec={rl.retryAfterSec} />;
   const sp = await searchParams;
   const s = parseOffsetIso(one(sp.startAt)), e = parseOffsetIso(one(sp.endAt));
   const period = s && e && e > s ? { startAt: s, endAt: e } : null;
@@ -48,111 +51,112 @@ export default async function LotPage({ params, searchParams }: { params: Promis
   const stayMin = d.requestedPeriod ? (Date.parse(d.requestedPeriod.endAt) - Date.parse(d.requestedPeriod.startAt)) / 60000 : 0;
   const stayHours = stayMin > 0 && stayMin % 60 === 0 && stayMin / 60 <= 12 ? stayMin / 60 : null;
   const days = (d.fee?.status === "OK" ? (d.fee.days ?? []) : []) as DayBreakdown[];
-  const hhmm = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}시간${m % 60 ? ` ${m % 60}분` : ""}` : `${m}분`);
-  const hm = (r: { startTime: string | null; endTime: string | null }) => (r.startTime ? `${r.startTime}~${r.endTime}` : "종일");
+  const hhmm = t.hhmm;
+  const hm = (r: { startTime: string | null; endTime: string | null }) => (r.startTime ? `${r.startTime}~${r.endTime}` : D.allDay);
   const ruleText = (r: (typeof d.feeRules)[number]) =>
-    r.ruleType === "FREE" ? "무료" : r.amount == null ? "금액 미확인" : r.ruleType === "DAILY_MAX" ? won(r.amount) : `${r.durationMinutes ?? "?"}분당 ${won(r.amount)}`;
+    r.ruleType === "FREE" ? t.fee.free : r.amount == null ? D.amountUnknown : r.ruleType === "DAILY_MAX" ? won(r.amount) : D.per(r.durationMinutes ?? "?", won(r.amount));
+  const sep = lang === "ko" ? "·" : ", ";
   return (
     <>
-      <p><Link href="/" className="text-sm underline">← 처음으로</Link></p>
+      <p><Link href="/" className="text-sm underline">{D.home}</Link></p>
       <div className="mt-2 flex flex-wrap items-start justify-between gap-2">
-        <h1 className="text-xl font-bold">{lot.name}</h1>
-        <span className="flex flex-wrap items-center gap-2"><FavoriteButton id={lot.id} name={lot.name} address={addr || null} /><ShareButton title={`${lot.name} 주차 요금`} /></span>
+        <h1 className="text-xl font-bold" lang="ko">{lot.name}</h1>
+        <span className="flex flex-wrap items-center gap-2"><FavoriteButton lang={lang} id={lot.id} name={lot.name} address={addr || null} /><ShareButton lang={lang} title={D.shareTitle(lot.name)} /></span>
       </div>
-      <p className="text-sm text-gray-700">{TYPE_LABEL[lot.parkingType]} · {OWNERSHIP_LABEL[lot.ownershipType]}{lot.operatorName ? ` · ${lot.operatorName}` : ""}</p>
+      <p className="text-sm text-gray-700">{t.type[lot.parkingType]} · {t.ownership[lot.ownershipType]}{lot.operatorName ? <> · <span lang="ko">{lot.operatorName}</span></> : ""}</p>
 
-      <section className="mt-4" aria-labelledby="loc"><h2 id="loc" className="font-semibold">주소 및 위치</h2>
-        <p className="text-sm">{addr || "주소 정보 없음"}</p>
-        {coord && <p className="text-xs text-gray-700">좌표 {coord}</p>}
-        {lot.phone && <p className="text-sm">전화 {lot.phone}</p>}
-        <MapLinks links={links} addressText={addr} coordText={coord} />
+      <section className="mt-4" aria-labelledby="loc"><h2 id="loc" className="font-semibold">{D.loc}</h2>
+        <p className="text-sm" lang={addr ? "ko" : undefined}>{addr || t.card.noAddress}</p>
+        {coord && <p className="text-xs text-gray-700">{D.coord} {coord}</p>}
+        {lot.phone && <p className="text-sm">{D.phone} {lot.phone}</p>}
+        <MapLinks lang={lang} links={links} addressText={addr} coordText={coord} />
       </section>
 
-      <section className="mt-4" aria-labelledby="fee"><h2 id="fee" className="font-semibold">예상 요금</h2>
+      <section className="mt-4" aria-labelledby="fee"><h2 id="fee" className="font-semibold">{D.fee}</h2>
         {fee && d.requestedPeriod ? (
           <>
-            <p className="text-sm text-gray-700">{formatKst(d.requestedPeriod.startAt)} ~ {formatKst(d.requestedPeriod.endAt)}</p>
+            <p className="text-sm text-gray-700">{formatKst(d.requestedPeriod.startAt, lang)} ~ {formatKst(d.requestedPeriod.endAt, lang)}</p>
             <p className="text-lg font-bold">{fee.main}</p>{fee.sub && <p className="text-sm text-gray-700">{fee.sub}</p>}
             {d.fee?.status !== "OK" && d.lot.qualityFlags.includes("FEE_MIXED") && (
-              <p className="mt-1 rounded border border-amber-400 bg-amber-50 p-2 text-sm">무료·유료 혼합 시설: 어느 시간대·구간이 무료인지 데이터에 없어 요금을 계산하지 않았습니다.{d.lot.feeNote && <> 원천 특기사항: “{d.lot.feeNote}”</>} 현장 안내를 확인하세요.</p>
+              <p className="mt-1 rounded border border-amber-400 bg-amber-50 p-2 text-sm">{t.card.mixed}{d.lot.feeNote && <> {t.card.sourceNote} “<span lang="ko">{d.lot.feeNote}</span>”</>} {t.card.checkSite}</p>
             )}
-            {d.fee?.status === "OK" && d.fee.assumptions?.map((a) => <p key={a} className="mt-1 rounded border border-amber-400 bg-amber-50 p-2 text-sm">{a}</p>)}
-            {d.fee?.status === "OK" && d.fee.notes && <ul className="mt-1 list-disc pl-5 text-xs text-gray-600">{d.fee.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
+            {d.fee?.status === "OK" && d.fee.assumptions?.map((a) => <p key={a} className="mt-1 rounded border border-amber-400 bg-amber-50 p-2 text-sm">{domainText(a)}</p>)}
+            {d.fee?.status === "OK" && d.fee.notes && <ul className="mt-1 list-disc pl-5 text-xs text-gray-600">{d.fee.notes.map((n) => <li key={n}>{domainText(n)}</li>)}</ul>}
             {days.length > 0 && (days.length > 1 || days.some((x) => x.freeMinutes > 0 || x.capped)) && (
               <div className="mt-2 overflow-x-auto">
-                <table className="w-full text-sm tabular-nums"><caption className="text-left text-xs text-gray-600">날짜별 요금 내역 (한국 시간 기준, 단위 시간 올림은 전체 이용 시간 누적 기준)</caption>
-                  <thead><tr className="text-left text-gray-600"><th scope="col">날짜</th><th scope="col">구분</th><th scope="col">이용</th><th scope="col">무료</th><th scope="col">요금</th></tr></thead>
+                <table className="w-full text-sm tabular-nums"><caption className="text-left text-xs text-gray-600">{D.dayCaption}</caption>
+                  <thead><tr className="text-left text-gray-600">{D.dayCols.map((c) => <th key={c} scope="col">{c}</th>)}</tr></thead>
                   <tbody>{days.map((x) => (
-                    <tr key={x.date}><td>{x.date.slice(5).replace("-", "/")}</td><td>{DAY_LABEL[x.dayType]}</td><td>{hhmm(x.minutes)}</td><td>{x.freeMinutes > 0 ? hhmm(x.freeMinutes) : "-"}</td>
-                      <td>{won(x.fee)}{x.capped && <span className="text-xs text-amber-800"> (일 최대 적용)</span>}</td></tr>))}</tbody>
+                    <tr key={x.date}><td>{x.date.slice(5).replace("-", "/")}</td><td>{t.day[x.dayType]}</td><td>{hhmm(x.minutes)}</td><td>{x.freeMinutes > 0 ? hhmm(x.freeMinutes) : "-"}</td>
+                      <td>{won(x.fee)}{x.capped && <span className="text-xs text-amber-800">{D.capped}</span>}</td></tr>))}</tbody>
                 </table>
               </div>
             )}
             {d.feeWarnings.length > 0 && (
               <div className="mt-2 rounded border border-amber-400 bg-amber-50 p-2 text-sm text-amber-900" role="note">
-                <p className="font-semibold">원천 요금 값이 이상해 보입니다 — 현장 요금을 확인하세요</p>
-                <ul className="list-disc pl-5">{d.feeWarnings.map((w) => <li key={w}>{FEE_ANOMALY_LABEL[w]}</li>)}</ul>
-                <p className="text-xs">입력 오류일 수 있어 다른 시설과의 최저가 비교에서 강조하지 않습니다. 틀렸다면 아래 &lsquo;정보가 틀렸나요?&rsquo;로 알려 주세요.</p>
+                <p className="font-semibold">{D.feeWarnTitle}</p>
+                <ul className="list-disc pl-5">{d.feeWarnings.map((w) => <li key={w}>{t.anomaly[w]}</li>)}</ul>
+                <p className="text-xs">{D.feeWarnNote}</p>
               </div>
             )}
             {d.cheaper.length > 0 && (
               <div className="mt-2 rounded border border-green-700 bg-green-50 p-2 text-sm" role="note">
-                <p className="font-semibold text-green-900">시간을 조금 옮기면 더 쌉니다</p>
+                <p className="font-semibold text-green-900">{D.cheaperTitle}</p>
                 <ul className="mt-1 space-y-0.5">
                   {d.cheaper.map((c) => {
                     const q = new URLSearchParams(sp as Record<string, string>); q.set("startAt", c.startAt); q.set("endAt", c.endAt);
-                    const label = `${Math.abs(c.shiftMinutes) >= 60 ? `${Math.abs(c.shiftMinutes) / 60}시간` : `${Math.abs(c.shiftMinutes)}분`} ${c.shiftMinutes > 0 ? "늦게" : "일찍"}`;
-                    return <li key={c.shiftMinutes}><Link href={`/lots/${lot.id}?${q.toString()}`} className="underline">{label} ({formatKst(c.startAt)} ~ {formatKst(c.endAt)})</Link>: {c.fee === 0 ? "무료" : won(c.fee)} <span className="text-green-900">· {won(c.saving)} 절약</span></li>;
+                    const label = D.shift(c.shiftMinutes);
+                    return <li key={c.shiftMinutes}><Link href={`/lots/${lot.id}?${q.toString()}`} className="underline">{label} ({formatKst(c.startAt, lang)} ~ {formatKst(c.endAt, lang)})</Link>: {c.fee === 0 ? t.fee.free : won(c.fee)} <span className="text-green-900">{D.save(won(c.saving))}</span></li>;
                   })}
                 </ul>
-                <p className="mt-1 text-xs text-gray-700">같은 이용 시간 기준이며, 요금·운영 여부가 모두 확인된 경우만 보여줍니다.</p>
+                <p className="mt-1 text-xs text-gray-700">{D.cheaperNote}</p>
               </div>
             )}
-            {d.feeCurve && <FeeCurve points={d.feeCurve} highlightHours={stayHours} />}
-            {d.operating && <p className="mt-1 text-sm">운영 상태(이용 시간 전체 기준): {OPERATING_LABEL[d.operating]}{d.operatingAssumed && <span className="text-amber-800"> (일요일은 공휴일 규칙 적용 · 추정)</span>}</p>}
+            {d.feeCurve && <FeeCurve lang={lang} points={d.feeCurve} highlightHours={stayHours} />}
+            {d.operating && <p className="mt-1 text-sm">{D.operating} {t.operating[d.operating]}{d.operatingAssumed && <span className="text-amber-800">{D.sundayAssumed}</span>}</p>}
           </>
-        ) : <p className="text-sm">주차 시작·종료 일시를 지정해 검색하면 예상 요금을 계산합니다.</p>}
-        <h3 className="mt-3 text-sm font-semibold">요금 규칙</h3>
-        {d.feeRules.length === 0 ? <p className="text-sm">요금 규칙 정보 없음 (무료 아님)</p> : (
-          <table className="mt-1 w-full text-sm"><caption className="sr-only">요금 규칙</caption>
-            <thead><tr className="text-left text-gray-600"><th scope="col">구분</th><th scope="col">적용</th><th scope="col">시간대</th><th scope="col">내용</th></tr></thead>
-            <tbody>{d.feeRules.map((r, i) => <tr key={i}><td>{RULE_LABEL[r.ruleType] ?? r.ruleType}</td><td>{DAY_LABEL[r.dayType]}</td><td>{hm(r)}</td><td>{ruleText(r)}</td></tr>)}</tbody>
+        ) : <p className="text-sm">{D.needPeriod}</p>}
+        <h3 className="mt-3 text-sm font-semibold">{D.rules}</h3>
+        {d.feeRules.length === 0 ? <p className="text-sm">{D.noRules}</p> : (
+          <table className="mt-1 w-full text-sm"><caption className="sr-only">{D.rules}</caption>
+            <thead><tr className="text-left text-gray-600">{D.ruleCols.map((c) => <th key={c} scope="col">{c}</th>)}</tr></thead>
+            <tbody>{d.feeRules.map((r, i) => <tr key={i}><td>{t.rule[r.ruleType] ?? r.ruleType}</td><td>{t.day[r.dayType]}</td><td>{hm(r)}</td><td>{ruleText(r)}</td></tr>)}</tbody>
           </table>)}
       </section>
 
       {d.monthlyPass != null && (
-        <section className="mt-4" aria-labelledby="pass-h"><h2 id="pass-h" className="font-semibold">월 정기권</h2>
-          <p className="text-sm">{won(d.monthlyPass)} <span className="text-xs text-gray-600">(원천 기준, 판매 여부·자격·대기 여부 미확인 — 관리기관 확인)</span></p>
-          {d.passHint && <p className="mt-1 rounded bg-blue-50 p-2 text-sm">{d.passHint.kind === "CHEAPER" ? `입력한 기간의 예상 요금(${won(d.passHint.fee)})보다 월 정기권이 쌀 수 있습니다.` : "입력한 기간은 요금을 계산할 수 없어, 장기 이용이면 월 정기권도 확인해 보세요."}</p>}
+        <section className="mt-4" aria-labelledby="pass-h"><h2 id="pass-h" className="font-semibold">{D.pass}</h2>
+          <p className="text-sm">{won(d.monthlyPass)} <span className="text-xs text-gray-600">{D.passNote}</span></p>
+          {d.passHint && <p className="mt-1 rounded bg-blue-50 p-2 text-sm">{d.passHint.kind === "CHEAPER" ? D.passCheaper(won(d.passHint.fee)) : D.passCheck}</p>}
         </section>
       )}
       {d.discounts.length > 0 && (
-        <section className="mt-4" aria-labelledby="disc-h"><h2 id="disc-h" className="font-semibold">감면·할인 안내</h2>
-          <p className="text-sm">대상: {d.discounts.join("·")}</p>
-          {d.lot.feeNote && <p className="mt-1 text-sm text-gray-700">원천 특기사항: &ldquo;{d.lot.feeNote}&rdquo;</p>}
-          <p className="mt-1 text-xs text-gray-600">예상 요금에는 반영하지 않았습니다. 감면 비율·조건·증빙은 시설마다 다르니 현장이나 관리기관에 확인하세요.</p>
+        <section className="mt-4" aria-labelledby="disc-h"><h2 id="disc-h" className="font-semibold">{D.disc}</h2>
+          <p className="text-sm">{D.discTarget} {d.discounts.map(discountLabel).join(sep)}</p>
+          {d.lot.feeNote && <p className="mt-1 text-sm text-gray-700">{t.card.sourceNote} &ldquo;<span lang="ko">{d.lot.feeNote}</span>&rdquo;</p>}
+          <p className="mt-1 text-xs text-gray-600">{D.discNote}</p>
         </section>
       )}
 
-      <ParkingTimerPanel lotId={lot.id} name={lot.name} rules={d.timer?.rules ?? null} holidays={d.timer?.holidays ?? null} />
+      <ParkingTimerPanel lang={lang} lotId={lot.id} name={lot.name} rules={d.timer?.rules ?? null} holidays={d.timer?.holidays ?? null} />
 
-      <section className="mt-4" aria-labelledby="op"><h2 id="op" className="font-semibold">운영시간</h2>
-        {d.operatingSchedules.length === 0 ? <p className="text-sm">운영시간 정보 없음 (24시간 운영 아님)</p> : (
-          <ul className="text-sm">{d.operatingSchedules.map((o, i) => <li key={i}>{DAY_LABEL[o.dayType]}: {o.closed ? "휴무" : o.allDay ? "24시간" : `${o.openTime ?? "?"} ~ ${o.closeTime ?? "?"}`}{o.assumed && <span className="text-amber-800"> (공휴일 규칙 적용 · 추정)</span>}</li>)}</ul>)}
+      <section className="mt-4" aria-labelledby="op"><h2 id="op" className="font-semibold">{D.hours}</h2>
+        {d.operatingSchedules.length === 0 ? <p className="text-sm">{D.noHours}</p> : (
+          <ul className="text-sm">{d.operatingSchedules.map((o, i) => <li key={i}>{t.day[o.dayType]}: {o.closed ? D.closed : o.allDay ? D.h24 : `${o.openTime ?? "?"} ~ ${o.closeTime ?? "?"}`}{o.assumed && <span className="text-amber-800">{D.holidayAssumed}</span>}</li>)}</ul>)}
       </section>
 
-      <section className="mt-4" aria-labelledby="sp"><h2 id="sp" className="font-semibold">주차면수</h2>
-        <p className="text-sm">전체 {lot.totalSpaces != null ? `${lot.totalSpaces}면` : "정보 없음"}</p>
-        <p className="text-sm">실시간: {occ.main}{occ.sub ? ` (${occ.sub})` : ""}</p>
+      <section className="mt-4" aria-labelledby="sp"><h2 id="sp" className="font-semibold">{D.spaces}</h2>
+        <p className="text-sm">{D.total(lot.totalSpaces != null ? t.spaces(lot.totalSpaces) : t.card.noInfo)}</p>
+        <p className="text-sm">{D.live} {occ.main}{occ.sub ? ` (${occ.sub})` : ""}</p>
       </section>
 
-      <section className="mt-4" aria-labelledby="src"><h2 id="src" className="font-semibold">데이터 출처</h2>
+      <section className="mt-4" aria-labelledby="src"><h2 id="src" className="font-semibold">{D.src}</h2>
         <p className="text-sm">{sourceLabel(d.source.name)}</p>
-        <p className="text-xs text-gray-600">원천 기준일 {d.source.updatedAt ? formatKst(d.source.updatedAt) : "미확인"} · 수집 {formatKst(d.source.collectedAt)}</p>
-        {d.source.notInLatestSync && <p role="status" className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-900">최근 수집에서 이 시설이 확인되지 않았습니다. 폐쇄되었거나 정보가 바뀌었을 수 있으니 현장 확인이 필요합니다.</p>}
-        {d.holidayDataAvailable === false && <p className="text-xs text-amber-800">입력 기간의 공휴일 데이터가 없어 요일별 규칙은 적용하지 않았습니다.</p>}
+        <p className="text-xs text-gray-600">{D.srcDates(d.source.updatedAt ? formatKst(d.source.updatedAt, lang) : D.unverified, formatKst(d.source.collectedAt, lang))}</p>
+        {d.source.notInLatestSync && <p role="status" className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-900">{D.notInSync}</p>}
+        {d.holidayDataAvailable === false && <p className="text-xs text-amber-800">{D.noHoliday}</p>}
       </section>
-      <ReportForm lotId={lot.id} />
+      <ReportForm lang={lang} lotId={lot.id} />
     </>
   );
 }
