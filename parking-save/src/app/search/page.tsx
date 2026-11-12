@@ -16,6 +16,7 @@ import { RecentSearchRecorder } from "@/components/RecentSearchRecorder";
 import { labelsFor } from "@/lib/labels";
 import { getLang } from "@/i18n/server";
 import { dict } from "@/i18n/dict";
+import { logError } from "@/server/log";
 
 export async function generateMetadata(): Promise<Metadata> { return { title: dict(await getLang()).search.title }; }
 const FIRST_LIMIT = 20, MORE_LIMIT = 50;
@@ -53,7 +54,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   let res;
   try { res = await searchLots(await getAppDb(), parsed.params); }
   catch (e) {
-    console.error("[search page]", e);
+    logError("search_page.error", e);
     return (<><h1 className="mb-4 text-xl font-bold">{S.title}</h1>
       <p role="alert" className="mb-4 rounded border border-red-400 bg-red-50 p-3 text-sm text-red-900">{S.error}</p>{form}</>);
   }

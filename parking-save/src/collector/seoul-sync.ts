@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import type { Db } from "@/server/db";
 import { finishedIso } from "@/lib/time";
 import { SEOUL_SOURCE, SeoulApiError, parseSeoulResponse, seoulOccupancy, type SeoulRow } from "./seoul-parking";
+import { logError } from "../server/log";
 
 export const SEOUL_DEFAULT_BASE = "http://openapi.seoul.go.kr:8088"; // 문서 예시는 http. https 지원 여부 미확인 → 환경변수로 변경 가능
 const PAGE = 1000;                // 문서: 1회 최대 1000건
@@ -107,7 +108,7 @@ export async function syncSeoulOccupancy(db: Db, fetchPage: PageFetcher, now = n
     sum.newCandidates = await generateLinkCandidates(db, lotIds, startedAt);
   } catch (e) {
     fatal = e instanceof SeoulApiError ? `API_${e.code}` : "UNKNOWN_ERROR";
-    console.error("[seoul-sync] failed:", fatal);
+    logError("sync.fatal", fatal, { source: SEOUL_SOURCE });
   }
   sum.status = fatal ? "FAILED" : Object.keys(sum.unavailable).length > 0 ? "PARTIAL" : "SUCCESS";
   await db.run("UPDATE source_sync_logs SET finished_at=?, status=?, records_received=?, records_inserted=?, error_summary=?, source_data_timestamp=? WHERE id=?",

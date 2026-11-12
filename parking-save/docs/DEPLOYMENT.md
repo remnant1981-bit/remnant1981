@@ -149,10 +149,16 @@ curl -s https://<도메인>/api/health
 | `sudo parking-update` | 최신 이미지로 교체(main 머지 후 Actions 완료 → 실행). 데이터 볼륨 유지, 헬스체크 실패 시 종료 코드 1 |
 | `sudo parking-sync <job>` | 수동 수집(`standard-parking`·`holidays`·`seoul-occupancy`). 결과는 `/var/log/parking-save-sync.log` |
 | `sudo parking-reports` | 이용자 정보 오류 신고 검토 대기 목록. `parking-reports reviewed <id> <이름>` / `dismiss <id> <이름>`로 처리(원천 데이터 수정은 별도). `npm run quality`에도 대기 건수 표시 |
-| `sudo parking-backup` | 즉시 백업 → `/var/backups/parking-save/parking-YYYY-MM-DD.sqlite`(14일 보관, 매일 03:37 자동) |
-| `docker logs --tail 100 parking-save` | 앱 로그 |
+| `sudo parking-backup` | 즉시 백업 → `/var/backups/parking-save/parking-YYYY-MM-DD.sqlite`(14일 보관, 매일 03:37 자동). 백업본 `integrity_check` 통과 시에만 보관, 실패 시 알림 |
+| `sudo parking-restore-test [파일]` | 백업 복원 리허설: 최신 백업을 네트워크 없는 임시 컨테이너에서 읽기 전용으로 열어 무결성·외래키·시설 수 확인(매주 일 05:13 자동, 실패 시 알림). 운영 DB는 건드리지 않음 |
+| `sudo parking-alert` | 헬스체크 + 품질 리포트 ERROR 점검 후 `ALERT_WEBHOOK_URL`로 전송(15분마다 자동, 같은 내용은 6시간에 1회). `parking-alert "메시지"`로 즉시 전송. 기록: `/var/log/parking-save-alert.log` |
+| `curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:3000/api/admin/db-check` | DB 무결성 전체 점검(수 초). 이상 시 HTTP 500 |
+| `docker logs --tail 100 parking-save` | 앱 로그(한 줄 JSON: `ts·level·event` + 필드). 좌표·검색어·토큰·인증키는 기록하지 않음(가림 처리). 오류만: `docker logs parking-save 2>&1 \| grep '"level":"error"'` |
 | 관리자 화면 | 외부에서는 404(nginx 차단). PC에서 `ssh -L 3000:127.0.0.1:3000 <서버>` 후 브라우저로 `http://localhost:3000/admin` → `/etc/parking-save/env`의 `ADMIN_API_TOKEN` 입력. 신고·중복 후보 처리, 수집 상태, 품질 리포트 |
 
+- **알림 웹훅**: `/etc/parking-save/env`의 `ALERT_WEBHOOK_URL`에 Slack(Incoming Webhook)·Discord 웹훅 주소 입력(본문에 `text`·`content` 둘 다 넣어 양쪽 호환). 비워 두면 로그 파일에만 기록. 웹훅 주소도 비밀값으로 취급.
+- **헬스체크 응답**: `status`가 `ok`/`degraded`/`error`. `degraded`(마이그레이션 누락·표준데이터 수집 50시간 초과·최근 5분 오류 20건 이상)는 HTTP 200이라 컨테이너를 재시작하지 않고 알림만 보냄. DB를 열 수 없으면 503 → Docker가 재시작.
+- **복원 절차**(실제 장애 시): `sudo parking-restore-test <백업>`으로 먼저 확인 → `docker stop parking-save` → `docker run --rm -v parking-data:/data -v <백업>:/b.sqlite:ro --entrypoint sh <이미지> -c 'cp /b.sqlite /data/parking.sqlite && rm -f /data/parking.sqlite-wal /data/parking.sqlite-shm'` → `sudo parking-update`. 백업 이후 수집분은 다음 수집으로 다시 채워짐(관리자 처리 기록은 백업 시점까지).
 - 백업은 같은 서버 디스크에 있음 → 서버 장애 대비로 주 1회 이상 PC나 오브젝트 스토리지로 옮길 것(관리자 승인한 중복 후보·감사로그는 재수집으로 복구되지 않음).
 - 관리자 API는 서버 안에서만 호출됨(nginx가 외부 차단). 앱은 nginx 1단계 뒤이므로 `TRUSTED_PROXY_COUNT=1`.
 - nginx 접속 로그는 쿼리 문자열(검색 좌표·시간)을 남기지 않는 형식(`parkingsave_noquery`)으로 `/var/log/nginx/parking-save.access.log`에 기록 — 처리방침(`/privacy`)과 일치. 로그 순환·보관 기간은 Ubuntu 기본 logrotate(일 단위 14일) 적용 — 정책 확정 시 조정.
