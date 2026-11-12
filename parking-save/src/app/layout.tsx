@@ -7,13 +7,18 @@ import { LangSwitch } from "@/components/LangSwitch";
 import Link from "next/link";
 import { getLang } from "@/i18n/server";
 import { dict } from "@/i18n/dict";
+import { siteUrl } from "@/lib/site";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const t = dict(await getLang()).layout;
+  const lang = await getLang();
+  const t = dict(lang).layout;
   const name = t.title.split(" - ")[0];
   return {
+    metadataBase: new URL(siteUrl()),
     title: { default: t.title, template: `%s | ${name}` },
     description: t.desc,
+    openGraph: { type: "website", siteName: name, title: t.title, description: t.desc, locale: lang === "en" ? "en_US" : "ko_KR" },
+    twitter: { card: "summary_large_image" },
     icons: { icon: "/icons/icon.svg", apple: "/icons/apple-touch-icon.png" },
     appleWebApp: { capable: true, title: name, statusBarStyle: "default" },
   };

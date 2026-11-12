@@ -7,6 +7,9 @@ import { buildNaverLinks } from "@/domain/map-link";
 import { isValidCoord } from "@/domain/geo";
 import { labelsFor } from "@/lib/labels";
 import { getLang } from "@/i18n/server";
+import { dict } from "@/i18n/dict";
+import { lotSummary } from "@/server/area";
+import type { Metadata } from "next";
 import { formatKst, parseOffsetIso } from "@/lib/time";
 import { headers } from "next/headers";
 import { clientKey, searchLimiter } from "@/server/rate-limit";
@@ -21,6 +24,18 @@ import { ReportForm } from "@/components/ReportForm";
 export const dynamic = "force-dynamic";
 type SP = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+
+/** 검색·공유용 메타데이터: 이름·주소·유형·대표 요금(요금 계산 없이). canonical은 기간 매개변수 없는 주소 */
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  if (!/^\d{1,9}$/.test(id)) return {};
+  const s = await lotSummary(await getAppDb(), Number(id));
+  if (!s) return {};
+  const d = dict(await getLang());
+  const fee = s.fee.kind === "FREE" ? d.area.free : s.fee.kind === "PAID" && s.fee.base ? d.area.base(s.fee.base.minutes, d.money(s.fee.base.amount)) : d.fee.unknown;
+  const description = [s.address, d.type[s.parkingType], `${d.area.cols[2]}: ${fee}`].filter(Boolean).join(" · ");
+  return { title: s.name, description, alternates: { canonical: `/lots/${id}` }, openGraph: { title: s.name, description, url: `/lots/${id}` } };
+}
 
 export default async function LotPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<SP> }) {
   const { id } = await params;
