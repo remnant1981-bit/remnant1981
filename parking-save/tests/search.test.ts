@@ -224,3 +224,18 @@ describe("운영 중인 곳만 보기", () => {
     expect(all.items.filter((i) => i.operating === "OPERATING").every((i) => onlyIds.has(i.id))).toBe(true);
   });
 });
+
+describe("상세: 이용 시간별 요금 곡선·타이머 데이터", () => {
+  it("1~12시간 곡선은 단조 증가(계산 가능 구간), 계산 불가는 null로 남김", async () => {
+    const base = await run();
+    const id = base.items.find((i) => i.fee.status === "OK" && !i.fee.isFree)!.id;
+    const d = (await getLotDetail(db, id, { startAt: new Date("2026-11-09T10:00:00+09:00"), endAt: new Date("2026-11-09T11:00:00+09:00") }, NOW))!;
+    expect(d.feeCurve).toHaveLength(12);
+    const known = d.feeCurve!.filter((p) => p.fee != null).map((p) => p.fee!);
+    expect(known.length).toBeGreaterThan(0);
+    for (let i = 1; i < known.length; i++) expect(known[i]).toBeGreaterThanOrEqual(known[i - 1]);
+    expect(d.timer?.rules.length).toBeGreaterThan(0);
+    const noPeriod = (await getLotDetail(db, id, null, NOW))!;
+    expect(noPeriod.feeCurve).toBeNull();
+  });
+});

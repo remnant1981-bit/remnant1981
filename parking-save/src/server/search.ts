@@ -300,6 +300,23 @@ export async function getLotDetail(db: Db, id: number, period: { startAt: Date; 
     const ev = await evaluateLot(db, lot, period, holidays, now);
     fee = ev.fee; operating = ev.operating; operatingAssumed = ev.operatingAssumed;
   }
+  const engineRules = toFeeRules(feeRules);
+  // 이용 시간별 요금 곡선(1~12시간): 요청 시작 시각 기준. 계산 불가 구간은 null(0원으로 그리지 않음)
+  let feeCurve: Array<{ hours: number; fee: number | null; capped: boolean }> | null = null;
+  if (period && engineRules !== "UNSUPPORTED") {
+    const s = period.startAt.getTime();
+    const hol = await loadHolidays(db, period.startAt, new Date(s + FEE_CURVE_HOURS * 3600_000), now);
+    feeCurve = Array.from({ length: FEE_CURVE_HOURS }, (_, k) => {
+      const r = calculateFee({ startAt: period.startAt, endAt: new Date(s + (k + 1) * 3600_000), rules: engineRules, holidays: hol });
+      return { hours: k + 1, fee: r.status === "OK" ? r.amount : null, capped: r.status === "OK" && r.days.some((d) => d.capped) };
+    });
+  }
+  // 주차 타이머: 기기에서 같은 요금 엔진으로 계산하도록 규칙과 공휴일(오늘부터 3일)을 함께 전달
+  const timerHolidays = await loadHolidays(db, now, new Date(now.getTime() + 3 * 86400_000), now);
+  const timer = engineRules === "UNSUPPORTED" ? null : {
+    rules: engineRules,
+    holidays: timerHolidays ? { from: kstYmd(now.getTime()), to: kstYmd(now.getTime() + 3 * 86400_000), dates: [...timerHolidays] } : null,
+  };
   return {
     lot: {
       id: lot.id, name: lot.name, operatorName: lot.operator_name, parkingType: lot.parking_type, ownershipType: lot.ownership_type, address: lot.address, roadAddress: lot.road_address,
@@ -311,5 +328,7 @@ export async function getLotDetail(db: Db, id: number, period: { startAt: Date; 
     operatingSchedules: schedules.map((s) => ({ dayType: s.day_type, openTime: s.open_time, closeTime: s.close_time, allDay: s.all_day_flag === 1, closed: s.closed_flag === 1, assumed: s.holiday_policy === "SUNDAY_ASSUMED" })),
     occupancy, fee, operating, operatingAssumed, holidayDataAvailable,
     requestedPeriod: period ? { startAt: period.startAt.toISOString(), endAt: period.endAt.toISOString(), timezone: "Asia/Seoul" } : null,
+    feeCurve, timer,
   };
 }
+export const FEE_CURVE_HOURS = 12;

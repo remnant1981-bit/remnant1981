@@ -1,5 +1,60 @@
 @import "tailwindcss";
-body { background: #fff; color: #111; font-family: system-ui, "Noto Sans KR", sans-serif; }
+
+/* 화면 기본 토큰(라이트). 다크 모드는 아래에서 같은 이름을 다시 정의한다 */
+:root {
+  --page-bg: #ffffff;
+  --page-ink: #111111;
+  --focus: #1d4ed8;
+  /* 요금 그래프(단일 계열) — 팔레트 검증: 막대 #2563eb(라이트) / #5b8cff(다크, 배경 #111827) 모두 통과 */
+  --chart-bar: #2563eb;
+  --chart-grid: #e5e7eb;
+  --chart-muted: #4b5563;
+  --chart-ink: #111827;
+}
+
+/*
+ * 다크 모드: 기기 설정(prefers-color-scheme)을 따른다. 컴포넌트마다 dark: 클래스를 붙이지 않고,
+ * 앱이 쓰는 Tailwind 색 변수(--color-*)를 어두운 배경에 맞는 값으로 다시 정의해 한 곳에서 관리한다.
+ * 버튼의 bg-blue-700·bg-green-700 + 흰 글자는 다크에서도 대비가 충분해 그대로 둔다.
+ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page-bg: #111827;
+    --page-ink: #e8edf4;
+    --focus: #7aa2ff;
+    --chart-bar: #5b8cff;
+    --chart-grid: #2b3544;
+    --chart-muted: #a2adbd;
+    --chart-ink: #e8edf4;
+
+    --color-white: #111827;
+    --color-gray-300: #374151;
+    --color-gray-400: #4b5563;
+    --color-gray-500: #6b7280;
+    --color-gray-600: #a2adbd;
+    --color-gray-700: #c3cad6;
+    --color-gray-800: #d7dce4;
+    --color-gray-900: #eef1f5;
+    --color-amber-50: #33260f;
+    --color-amber-400: #8a6d2b;
+    --color-amber-600: #b58a35;
+    --color-amber-800: #f2c27a;
+    --color-amber-900: #f6d49b;
+    --color-red-50: #3a1416;
+    --color-red-400: #a8484c;
+    --color-red-900: #ffb4b4;
+    --color-green-50: #12301f;
+    --color-green-800: #7fe0ae;
+    --color-green-900: #a6ecc6;
+    --color-blue-50: #15223d;
+    --color-blue-300: #34508a;
+  }
+  /* 버튼 글자(text-white)는 배경을 바꾼 --color-white와 분리해 항상 흰색 유지 */
+  .text-white { color: #ffffff; }
+}
+
+body { background: var(--page-bg); color: var(--page-ink); font-family: system-ui, "Noto Sans KR", sans-serif; }
 .skip-link { position: absolute; left: -999px; }
-.skip-link:focus { left: 8px; top: 8px; background: #fff; padding: 8px; z-index: 10; }
-:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
+.skip-link:focus { left: 8px; top: 8px; background: var(--page-bg); padding: 8px; z-index: 10; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
