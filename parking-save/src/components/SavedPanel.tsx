@@ -1,13 +1,16 @@
 "use client";
 import Link from "next/link";
-import { clearRecent, removeFavorite, useFavorites, useRecent } from "@/lib/saved";
+import { clearRecent, removeFavorite, setRecentEnabled, useFavorites, useRecent, useRecentEnabled } from "@/lib/saved";
 
 /** 홈: 즐겨찾는 주차장·최근 검색. 저장된 것이 없으면 아무것도 표시하지 않음 */
 export function SavedPanel() {
-  const favs = useFavorites(), recent = useRecent();
-  if (favs.length === 0 && recent.length === 0) return null;
+  const favs = useFavorites(), recent = useRecent(), recentOn = useRecentEnabled();
   return (
     <div className="mt-8 space-y-6">
+      <label className="flex items-center gap-2 text-sm text-gray-700">
+        <input type="checkbox" checked={recentOn} onChange={(e) => setRecentEnabled(e.target.checked)} />
+        최근 검색 기록 남기기 <span className="text-xs text-gray-600">(이 기기에만 저장, 끄면 기록 삭제)</span>
+      </label>
       {recent.length > 0 && (
         <section aria-labelledby="recent-h">
           <div className="flex items-center justify-between gap-2">

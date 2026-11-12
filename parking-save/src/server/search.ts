@@ -6,6 +6,7 @@ import { distanceMeters, isValidCoord, type LatLng } from "@/domain/geo";
 import { operatingForStay, operatingUsesAssumed, type OperatingStatus, type ScheduleRow } from "@/domain/operating";
 import { evaluateOccupancy, occupancyConfigFor, type OccupancyResult } from "@/domain/occupancy";
 import { explainAll, type Explanation } from "@/domain/recommend";
+import { cheaperShifts, type CheaperShift } from "@/domain/cheaper";
 import { kstYmd, parseOffsetIso } from "@/lib/time";
 import { HOLIDAY_COVERAGE_MAX_AGE_DAYS } from "@/collector/holidays";
 
@@ -311,6 +312,12 @@ export async function getLotDetail(db: Db, id: number, period: { startAt: Date; 
       return { hours: k + 1, fee: r.status === "OK" ? r.amount : null, capped: r.status === "OK" && r.days.some((d) => d.capped) };
     });
   }
+  // 더 싼 시간대: 같은 이용 시간을 30·60분 앞뒤로 옮겼을 때(요금·운영 모두 확인된 경우만)
+  let cheaper: CheaperShift[] = [];
+  if (period && engineRules !== "UNSUPPORTED" && fee?.status === "OK" && !fee.isFree) {
+    const hol = await loadHolidays(db, new Date(period.startAt.getTime() - 3600_000), new Date(period.endAt.getTime() + 3600_000), now);
+    cheaper = cheaperShifts({ rules: engineRules, schedules: toSchedules(schedules), holidays: hol, startAt: period.startAt, endAt: period.endAt, now, baseFee: fee.amount! });
+  }
   // 주차 타이머: 기기에서 같은 요금 엔진으로 계산하도록 규칙과 공휴일(오늘부터 3일)을 함께 전달
   const timerHolidays = await loadHolidays(db, now, new Date(now.getTime() + 3 * 86400_000), now);
   const timer = engineRules === "UNSUPPORTED" ? null : {
@@ -328,7 +335,7 @@ export async function getLotDetail(db: Db, id: number, period: { startAt: Date; 
     operatingSchedules: schedules.map((s) => ({ dayType: s.day_type, openTime: s.open_time, closeTime: s.close_time, allDay: s.all_day_flag === 1, closed: s.closed_flag === 1, assumed: s.holiday_policy === "SUNDAY_ASSUMED" })),
     occupancy, fee, operating, operatingAssumed, holidayDataAvailable,
     requestedPeriod: period ? { startAt: period.startAt.toISOString(), endAt: period.endAt.toISOString(), timezone: "Asia/Seoul" } : null,
-    feeCurve, timer,
+    feeCurve, timer, cheaper,
   };
 }
 export const FEE_CURVE_HOURS = 12;
