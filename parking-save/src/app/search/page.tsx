@@ -9,6 +9,10 @@ import { kstLocalToIso, formatKst } from "@/lib/time";
 import { headers } from "next/headers";
 import { clientKey, searchLimiter } from "@/server/rate-limit";
 import { TooManyRequests } from "@/components/TooManyRequests";
+import { ResultsMap, type MapItem } from "@/components/ResultsMap";
+import { ShareButton } from "@/components/ShareButton";
+import { RecentSearchRecorder } from "@/components/RecentSearchRecorder";
+import { feeText, won } from "@/lib/labels";
 
 export const metadata: Metadata = { title: "검색 결과" };
 export const dynamic = "force-dynamic";
@@ -48,19 +52,43 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   }
   const detailQuery = dq.toString();
   const cov = res.dataCoverage;
+  // 목록/지도 전환: 같은 검색 조건에 view만 바꾼 링크(공유·뒤로가기에도 유지)
+  const view = g("view") === "map" ? "map" : "list";
+  const pageQs = new URLSearchParams();
+  for (const k of ["destination", "lat", "lng", "start", "end", "radiusMeters", "sort", "type", "freeOnly", "realtimeOnly"]) { const v = g(k); if (v) pageQs.set(k, v); }
+  const viewHref = (v: "list" | "map") => { const q = new URLSearchParams(pageQs); if (v === "map") q.set("view", "map"); return `/search?${q.toString()}`; };
+  const periodText = `${formatKst(res.requestedPeriod.startAt)} ~ ${formatKst(res.requestedPeriod.endAt)}`;
+  const mapItems: MapItem[] = res.items.map((i) => {
+    const f = feeText(i.fee);
+    return { id: i.id, name: i.name, lat: i.latitude, lng: i.longitude, href: `/lots/${i.id}?${detailQuery}`,
+      feeLabel: i.fee.status === "OK" ? (i.fee.isFree ? "무료" : won(i.fee.amount!)) : "?", tone: f.tone,
+      distanceLabel: i.distanceMeters >= 1000 ? `${(i.distanceMeters / 1000).toFixed(1)}km` : `${i.distanceMeters}m` };
+  });
+  const tab = (v: "list" | "map", label: string) => (
+    <Link href={viewHref(v)} aria-current={view === v ? "page" : undefined}
+      className={`rounded px-3 py-1.5 text-sm ${view === v ? "bg-blue-700 font-semibold text-white" : "border border-gray-400 text-gray-800"}`}>{label}</Link>
+  );
   return (
     <>
       <h1 className="text-xl font-bold">{res.searchCenter.label} 주변 주차장</h1>
-      <p className="mt-1 text-sm text-gray-700">{formatKst(res.requestedPeriod.startAt)} ~ {formatKst(res.requestedPeriod.endAt)} (한국 시간) · 반경 {parsed.params.radiusMeters >= 1000 ? `${parsed.params.radiusMeters / 1000}km` : `${parsed.params.radiusMeters}m`}</p>
+      <RecentSearchRecorder query={pageQs.toString()} label={res.searchCenter.label} period={periodText} />
+      <p className="mt-1 text-sm text-gray-700">{periodText} (한국 시간) · 반경 {parsed.params.radiusMeters >= 1000 ? `${parsed.params.radiusMeters / 1000}km` : `${parsed.params.radiusMeters}m`}</p>
       <details className="my-4 rounded border border-gray-300 p-3"><summary className="cursor-pointer font-semibold">검색 조건 변경</summary><div className="mt-3">{form}</div></details>
 
       <p className="text-sm" role="status">
         {cov.candidates > cov.returned ? `후보 ${cov.candidates}곳 중 ` : ""}{cov.returned}곳 · 요금 계산 가능 {cov.feeCalculable}곳 · 요금 정보 없음/계산 불가 {cov.feeUnknown}곳 · 실시간 잔여면수 {cov.withValidRealtime}곳
       </p>
-      <p className="mt-1 text-xs text-gray-600">지도 보기는 준비 중입니다(목록만 제공). 거리는 직선거리이며 실제 이동 거리와 다릅니다.</p>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <nav className="flex gap-2" aria-label="결과 보기 방식">{tab("list", "목록")}{tab("map", "지도")}</nav>
+        <ShareButton title={`${res.searchCenter.label} 주변 주차장 요금 비교`} />
+      </div>
+      <p className="mt-2 text-xs text-gray-600">거리는 직선거리이며 실제 이동 거리와 다릅니다.</p>
       {res.warnings.filter((w) => !w.startsWith("MOCK_DATA") && !w.startsWith("EMPTY")).map((w) => (
         <p key={w} className="mt-2 rounded border border-amber-400 bg-amber-50 p-2 text-sm" role="note">{w.slice(w.indexOf(":") + 1).trim()}</p>
       ))}
+      {view === "map" && res.items.length > 0 && (
+        <ResultsMap center={{ lat: res.searchCenter.lat, lng: res.searchCenter.lng, label: res.searchCenter.label }} radiusMeters={parsed.params.radiusMeters} items={mapItems} />
+      )}
       {res.items.length === 0 ? (
         <div className="mt-6 rounded border border-gray-300 p-4" role="status">
           <p className="font-semibold">조건에 맞는 주차장이 없습니다.</p>

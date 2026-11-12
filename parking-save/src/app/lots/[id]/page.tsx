@@ -10,6 +10,9 @@ import { formatKst, parseOffsetIso } from "@/lib/time";
 import { headers } from "next/headers";
 import { clientKey, searchLimiter } from "@/server/rate-limit";
 import { TooManyRequests } from "@/components/TooManyRequests";
+import { FavoriteButton } from "@/components/FavoriteButton";
+import { ShareButton } from "@/components/ShareButton";
+import type { DayBreakdown } from "@/domain/fee";
 
 export const dynamic = "force-dynamic";
 type SP = Record<string, string | string[] | undefined>;
@@ -37,13 +40,18 @@ export default async function LotPage({ params, searchParams }: { params: Promis
   const links = lot.latitude != null && lot.longitude != null
     ? buildNaverLinks({ lot: { lat: lot.latitude, lng: lot.longitude, name: lot.name }, destination, appname: process.env.SITE_URL || "http://localhost:3000" })
     : { car: null, walk: null, place: null };
+  const days = (d.fee?.status === "OK" ? (d.fee.days ?? []) : []) as DayBreakdown[];
+  const hhmm = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}시간${m % 60 ? ` ${m % 60}분` : ""}` : `${m}분`);
   const hm = (r: { startTime: string | null; endTime: string | null }) => (r.startTime ? `${r.startTime}~${r.endTime}` : "종일");
   const ruleText = (r: (typeof d.feeRules)[number]) =>
     r.ruleType === "FREE" ? "무료" : r.amount == null ? "금액 미확인" : r.ruleType === "DAILY_MAX" ? won(r.amount) : `${r.durationMinutes ?? "?"}분당 ${won(r.amount)}`;
   return (
     <>
       <p><Link href="/" className="text-sm underline">← 처음으로</Link></p>
-      <h1 className="mt-2 text-xl font-bold">{lot.name}</h1>
+      <div className="mt-2 flex flex-wrap items-start justify-between gap-2">
+        <h1 className="text-xl font-bold">{lot.name}</h1>
+        <span className="flex flex-wrap items-center gap-2"><FavoriteButton id={lot.id} name={lot.name} address={addr || null} /><ShareButton title={`${lot.name} 주차 요금`} /></span>
+      </div>
       <p className="text-sm text-gray-700">{TYPE_LABEL[lot.parkingType]} · {OWNERSHIP_LABEL[lot.ownershipType]}{lot.operatorName ? ` · ${lot.operatorName}` : ""}</p>
 
       <section className="mt-4" aria-labelledby="loc"><h2 id="loc" className="font-semibold">주소 및 위치</h2>
@@ -63,7 +71,17 @@ export default async function LotPage({ params, searchParams }: { params: Promis
             )}
             {d.fee?.status === "OK" && d.fee.assumptions?.map((a) => <p key={a} className="mt-1 rounded border border-amber-400 bg-amber-50 p-2 text-sm">{a}</p>)}
             {d.fee?.status === "OK" && d.fee.notes && <ul className="mt-1 list-disc pl-5 text-xs text-gray-600">{d.fee.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
-            {d.operating && <p className="mt-1 text-sm">운영 상태(입·출차 시각 기준): {OPERATING_LABEL[d.operating]}{d.operatingAssumed && <span className="text-amber-800"> (일요일은 공휴일 규칙 적용 · 추정)</span>}</p>}
+            {days.length > 0 && (days.length > 1 || days.some((x) => x.freeMinutes > 0 || x.capped)) && (
+              <div className="mt-2 overflow-x-auto">
+                <table className="w-full text-sm tabular-nums"><caption className="text-left text-xs text-gray-600">날짜별 요금 내역 (한국 시간 기준, 단위 시간 올림은 전체 이용 시간 누적 기준)</caption>
+                  <thead><tr className="text-left text-gray-600"><th scope="col">날짜</th><th scope="col">구분</th><th scope="col">이용</th><th scope="col">무료</th><th scope="col">요금</th></tr></thead>
+                  <tbody>{days.map((x) => (
+                    <tr key={x.date}><td>{x.date.slice(5).replace("-", "/")}</td><td>{DAY_LABEL[x.dayType]}</td><td>{hhmm(x.minutes)}</td><td>{x.freeMinutes > 0 ? hhmm(x.freeMinutes) : "-"}</td>
+                      <td>{won(x.fee)}{x.capped && <span className="text-xs text-amber-800"> (일 최대 적용)</span>}</td></tr>))}</tbody>
+                </table>
+              </div>
+            )}
+            {d.operating && <p className="mt-1 text-sm">운영 상태(이용 시간 전체 기준): {OPERATING_LABEL[d.operating]}{d.operatingAssumed && <span className="text-amber-800"> (일요일은 공휴일 규칙 적용 · 추정)</span>}</p>}
           </>
         ) : <p className="text-sm">주차 시작·종료 일시를 지정해 검색하면 예상 요금을 계산합니다.</p>}
         <h3 className="mt-3 text-sm font-semibold">요금 규칙</h3>

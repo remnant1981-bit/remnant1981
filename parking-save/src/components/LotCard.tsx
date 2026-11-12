@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { LotItem } from "@/server/search";
 import { OPERATING_LABEL, OWNERSHIP_LABEL, TYPE_LABEL, distLabel, feeText, occupancyText, sourceLabel } from "@/lib/labels";
 import { formatKst } from "@/lib/time";
+import { FavoriteButton } from "./FavoriteButton";
 
 export function LotCard({ item, query }: { item: LotItem; query: string }) {
   const fee = feeText(item.fee);
@@ -11,7 +12,8 @@ export function LotCard({ item, query }: { item: LotItem; query: string }) {
     <li className="rounded-lg border border-gray-300 p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h2 className="text-lg font-semibold"><Link href={`/lots/${item.id}?${query}`} className="underline">{item.name}</Link></h2>
-        <span className="text-sm text-gray-700">{distLabel(item.distanceMeters)} <span className="text-xs">(직선거리)</span></span>
+        <span className="flex items-center gap-2"><span className="text-sm text-gray-700">{distLabel(item.distanceMeters)} <span className="text-xs">(직선거리)</span></span>
+          <FavoriteButton id={item.id} name={item.name} address={item.address} /></span>
       </div>
       <p className="mt-1 text-sm text-gray-700">{item.address ?? "주소 정보 없음"}</p>
       <p className="mt-1 text-xs text-gray-700">{TYPE_LABEL[item.parkingType]} · {OWNERSHIP_LABEL[item.ownershipType]}{item.isMock ? " · 목업" : ""}</p>
