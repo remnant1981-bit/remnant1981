@@ -112,8 +112,17 @@ th { color: var(--muted); font-weight: 500; }
 .saved { display: grid; gap: 10px; }
 .saved h2 { margin: 0; font-size: 15px; }
 .saved ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-.saved .row-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.saved .row-h, .compare .row-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .cheaper { font-size: 12.5px; background: var(--free-soft); color: var(--free); border-radius: 8px; padding: 8px 10px; }
+.warnbox { font-size: 12.5px; background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn); border-radius: 8px; padding: 8px 10px; }
+.warnbox ul { margin: 4px 0 0; padding-left: 16px; }
+.pass { font-size: 12.5px; background: var(--accent-soft); color: var(--ink); border-radius: 8px; padding: 6px 10px; }
+.disc { font-size: 12.5px; color: var(--ink); }
+.cmpbtn { font: inherit; font-size: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 6px; padding: 3px 8px; white-space: nowrap; }
+.cmpbtn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.compare { display: grid; gap: 8px; }
+.compare h2 { font-size: 16px; margin: 0; }
+.compare table th[scope="row"] { white-space: nowrap; color: var(--muted); font-weight: 600; }
 .cheaper ul { margin: 4px 0 0; padding-left: 16px; }
 .curve { width: 100%; max-width: 420px; height: auto; }
 .curve .bar { fill: var(--accent); }
@@ -186,7 +195,7 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
         <div><label for="type">시설 유형</label>
           <select id="type"><option value="all">전체</option><option value="off">노외</option><option value="on">노상</option></select></div>
         <div><label for="sort">정렬</label>
-          <select id="sort"><option value="free_first">무료 우선</option><option value="price_asc">요금 낮은 순</option><option value="distance_asc">거리 가까운 순</option></select></div>
+          <select id="sort"><option value="free_first">무료 우선</option><option value="price_asc">요금 낮은 순</option><option value="distance_asc">거리 가까운 순</option><option value="value_asc">요금+거리(가성비)</option></select></div>
       </div>
       <div class="checks"><label><input type="checkbox" id="freeOnly"> 무료만</label><label><input type="checkbox" id="operatingOnly"> 이용 시간 내내 운영 중인 곳만</label></div>
     </fieldset>
@@ -197,6 +206,7 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
 
   <section class="panel saved" id="saved" aria-label="즐겨찾기와 최근 검색" hidden></section>
   <section class="summary" id="summary" aria-live="polite"></section>
+  <section class="panel compare" id="compare" aria-label="주차장 나란히 비교" hidden></section>
   <ul class="results" id="results"></ul>
 
   <footer>
@@ -239,7 +249,8 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
   // 원천 행 → 엔진 입력
   const RULES = D.rules.map((rs) => rs.map((r, i) => ({ id: i, ruleType: r[0], amount: r[1], durationMinutes: r[2], dayType: r[3], startTime: r[4], endTime: r[5], dailyMaxBasis: r[6] })));
   const SCHEDS = D.scheds.map((ss) => ss.map((s) => ({ dayType: s[0], openTime: s[1], closeTime: s[2], allDay: s[3] === 1, closed: s[4] === 1, assumed: s[5] === 1 })));
-  const LOTS = D.lots.map((l, i) => ({ i, name: l[0], addr: l[1], type: ["OFF_STREET", "ON_STREET", "UNKNOWN"][l[2]], lat: l[3], lng: l[4], spaces: l[5], date: l[6], rules: RULES[l[7]], rawRules: D.rules[l[7]], sched: SCHEDS[l[8]], flags: D.flags[l[9]], note: l[10], pub: l[11] === 1, operator: l[12], phone: l[13] }));
+  const LOTS = D.lots.map((l, i) => ({ i, name: l[0], addr: l[1], type: ["OFF_STREET", "ON_STREET", "UNKNOWN"][l[2]], lat: l[3], lng: l[4], spaces: l[5], date: l[6], rules: RULES[l[7]], rawRules: D.rules[l[7]], sched: SCHEDS[l[8]], flags: D.flags[l[9]], note: l[10], pub: l[11] === 1, operator: l[12], phone: l[13], pass: l[14] ?? null }));
+  const ANOM = RULES.map((rs) => PS.feeAnomalies(rs)); // 요금 이상치(원천 입력 오류 의심) — 규칙 묶음 단위로 1회 계산
   const DUP = new Map();
   for (const [a, b, merged] of D.dup) { for (const [x, y] of [[a, b], [b, a]]) { if (!DUP.has(x)) DUP.set(x, new Map()); DUP.get(x).set(y, merged ? "MERGED" : "PENDING"); } }
   const norm = (s) => String(s ?? "").replace(/\s+/g, "").toLowerCase();
@@ -316,22 +327,29 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
   const DAY = { WEEKDAY: "평일", SATURDAY: "토요일", SUNDAY: "일요일", HOLIDAY: "공휴일", EVERYDAY: "매일", UNKNOWN: "미상" };
   const RULE = { BASE: "기본요금", ADDITIONAL: "추가요금", DAILY_MAX: "일일 최대요금(1일권)", FREE: "무료" };
 
+  // 한 시설을 입력 조건으로 평가(검색·비교 공용, 앱 evaluateLot 과 같은 판정)
+  function evalLot(l, p, holidays) {
+    const s = p.start.getTime(), e = p.end.getTime();
+    const fee = PS.calculateFee({ startAt: p.start, endAt: p.end, rules: l.rules, holidays });
+    const operating = PS.operatingForStay(l.sched, s, e, holidays);
+    const operatingAssumed = operating !== "UNKNOWN" && PS.operatingUsesAssumed(l.sched, s, e, holidays);
+    const stale = l.date ? (Date.now() - Date.parse(l.date + "T00:00:00+09:00")) / 86400000 > 365 : false;
+    const passHint = PS.seasonPassHint({ pass: l.pass, stayMinutes: (e - s) / 60000, fee: fee.status === "OK" ? fee.amount : null });
+    return { id: l.i, lot: l, distanceMeters: Math.round(PS.distanceMeters(p.center, l)), fee, operating, operatingAssumed, occupancy: { status: "UNAVAILABLE" }, ownershipType: l.pub ? "PUBLIC" : "UNKNOWN", stale, similar: [],
+      warnings: ANOM[D.lots[l.i][7]], discounts: PS.discountTargets(l.note), passHint };
+  }
+  const WALK_WON_PER_100M = 200; // 앱 가성비 정렬과 같은 환산값
+
   function search(p) {
     const dLat = p.radius / 111320, dLng = p.radius / (111320 * Math.cos((p.center.lat * Math.PI) / 180));
     const holidays = holidaysFor(p.start, p.end);
-    const s = p.start.getTime(), e = p.end.getTime();
     let items = [];
     for (const l of LOTS) {
       if (l.lat < p.center.lat - dLat || l.lat > p.center.lat + dLat || l.lng < p.center.lng - dLng || l.lng > p.center.lng + dLng) continue;
       if (p.type === "on" && l.type !== "ON_STREET") continue;
       if (p.type === "off" && l.type !== "OFF_STREET") continue;
-      const d = PS.distanceMeters(p.center, l);
-      if (d > p.radius) continue;
-      const fee = PS.calculateFee({ startAt: p.start, endAt: p.end, rules: l.rules, holidays });
-      const operating = PS.operatingForStay(l.sched, s, e, holidays);
-      const operatingAssumed = operating !== "UNKNOWN" && PS.operatingUsesAssumed(l.sched, s, e, holidays);
-      const stale = l.date ? (Date.now() - Date.parse(l.date + "T00:00:00+09:00")) / 86400000 > 365 : false;
-      items.push({ id: l.i, lot: l, distanceMeters: Math.round(d), fee, operating, operatingAssumed, occupancy: { status: "UNAVAILABLE" }, ownershipType: l.pub ? "PUBLIC" : "UNKNOWN", stale, similar: [] });
+      if (PS.distanceMeters(p.center, l) > p.radius) continue;
+      items.push(evalLot(l, p, holidays));
     }
     const candidates = items.length;
     if (p.freeOnly) items = items.filter((i) => i.fee.status === "OK" && i.fee.isFree);
@@ -339,7 +357,8 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
     const price = (i) => (i.fee.status === "OK" ? i.fee.amount : Infinity);
     const byDist = (a, b) => a.distanceMeters - b.distanceMeters || a.id - b.id;
     const free = (i) => (i.fee.status === "OK" && i.fee.isFree ? 0 : 1);
-    items.sort(p.sort === "distance_asc" ? byDist : p.sort === "price_asc" ? (a, b) => price(a) - price(b) || byDist(a, b) : (a, b) => free(a) - free(b) || price(a) - price(b) || byDist(a, b));
+    const value = (i) => price(i) + (i.distanceMeters / 100) * WALK_WON_PER_100M;
+    items.sort(p.sort === "value_asc" ? (a, b) => value(a) - value(b) || byDist(a, b) : p.sort === "distance_asc" ? byDist : p.sort === "price_asc" ? (a, b) => price(a) - price(b) || byDist(a, b) : (a, b) => free(a) - free(b) || price(a) - price(b) || byDist(a, b));
     // 동일 시설 후보 묶음(앱과 같은 기준: 승인 또는 점수 1.0)
     const kept = [];
     for (const it of items) {
@@ -458,7 +477,7 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
     const links = PS.buildNaverLinks({ lot: { lat: l.lat, lng: l.lng, name: l.name }, destination: dest, appname: "https://claude.ai" });
     const sim = it.similar.length ? `<p class="similar">같은 시설일 가능성이 있는 다른 기록 ${it.similar.length}건: ${it.similar.map((s) => `${esc(s.it.lot.name)} (${dist(s.it.distanceMeters)}, ${s.status === "MERGED" ? "동일 시설로 승인됨" : "미확정"})`).join(", ")}</p>` : "";
     return `<li class="card">
-      <div class="card-top"><h3>${esc(l.name)}</h3><span class="dist">${dist(it.distanceMeters)} <span class="sr">직선거리</span> <button type="button" class="fav" data-fav="${l.i}" aria-pressed="${isFav(l.i)}">${isFav(l.i) ? "★ 즐겨찾기됨" : "☆ 즐겨찾기"}</button></span></div>
+      <div class="card-top"><h3>${esc(l.name)}</h3><span class="dist">${dist(it.distanceMeters)} <span class="sr">직선거리</span> <button type="button" class="fav" data-fav="${l.i}" aria-pressed="${isFav(l.i)}">${isFav(l.i) ? "★ 즐겨찾기됨" : "☆ 즐겨찾기"}</button> <button type="button" class="cmpbtn" data-cmp="${l.i}" aria-pressed="${cmp.includes(l.i)}">비교</button></span></div>
       <p class="addr">${esc(l.addr ?? "주소 정보 없음")} · ${TYPE[l.type]} · ${l.pub ? "공영" : "공영 여부 미확인"}</p>
       ${feeHtml(it.fee)}
       <dl class="facts">
@@ -467,6 +486,9 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
         <div><dt>실시간 잔여</dt><dd>실시간 확인 불가</dd></div>
       </dl>
       ${pills ? `<ul class="pills" aria-label="이 시설의 특징과 유의점">${pills}</ul>` : ""}
+      ${it.warnings.length ? `<div class="warnbox" role="note"><b>원천 요금 값이 이상해 보입니다 — 현장 요금을 확인하세요</b><ul>${it.warnings.map((w) => `<li>${esc(PS.FEE_ANOMALY_LABEL[w])}</li>`).join("")}</ul></div>` : ""}
+      ${it.passHint ? `<p class="pass">장기 이용: 월 정기권 ${won(it.passHint.pass)}${it.passHint.kind === "CHEAPER" ? "이 예상 요금보다 쌀 수 있습니다" : "도 확인해 보세요(이 기간 요금은 계산 불가)"} · 판매 여부·자격 조건은 현장 확인</p>` : ""}
+      ${it.discounts.length ? `<p class="disc"><b>감면·할인 대상:</b> ${esc(it.discounts.join("·"))} <span style="color:var(--muted)">(예상 요금에는 반영 안 함, 조건은 원천 특기사항 확인)</span></p>` : ""}
       ${mixed}${sim}
       ${cheaperHtml(it.extra.cheaper)}
       <details class="more"><summary>요금 그래프·규칙·운영시간 보기</summary>
@@ -476,6 +498,8 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
           ${l.rawRules.length ? `<div class="tbl"><table><thead><tr><th>구분</th><th>요일</th><th>시간대</th><th>요금</th></tr></thead><tbody>${l.rawRules.map(ruleRow).join("")}</tbody></table></div>` : `<p>요금 규칙 정보 없음 (무료 아님)</p>`}
           ${l.sched.length ? `<div class="tbl"><table><thead><tr><th>요일</th><th>운영시간</th></tr></thead><tbody>${l.sched.map(schedRow).join("")}</tbody></table></div>` : `<p>운영시간 정보 없음 (24시간으로 간주하지 않음)</p>`}
           ${it.fee.status === "OK" && it.fee.assumptions.length ? `<p class="mixed">${esc(it.fee.assumptions[0])}</p>` : ""}
+          ${l.pass != null ? `<p>월 정기권: ${won(l.pass)} (원천 기재 금액 · 판매 여부·자격 조건은 현장 확인)</p>` : ""}
+          ${l.note ? `<p>원천 특기사항: “${esc(l.note)}”</p>` : ""}
           ${l.operator || l.phone ? `<p>관리기관: ${esc(l.operator ?? "-")}${l.phone ? ` · 전화 <span style="user-select:all">${esc(l.phone)}</span>` : ""}</p>` : ""}
           <div class="links">
             <a href="https://map.naver.com/p/search/${q}" target="_blank" rel="noopener">네이버 지도 웹에서 보기</a>
@@ -516,11 +540,56 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
         <span class="stat">${ms}ms</span>
       </div>
       ${r.holidays ? "" : `<p class="note">입력 기간이 공휴일 데이터 범위를 벗어나 요일별 규칙이 있는 시설은 요금·운영을 판정하지 않았습니다.</p>`}
-      <p>거리는 직선거리입니다. 요금을 계산할 수 없는 시설은 0원으로 보지 않고 비교에서 제외합니다.</p>`;
+      <p>거리는 직선거리입니다. 요금을 계산할 수 없는 시설은 0원으로 보지 않고 비교에서 제외합니다.${p.sort === "value_asc" ? ` 가성비 순: 걸어가는 거리 100m를 ${won(WALK_WON_PER_100M)}으로 환산해 예상 요금에 더한 순서이며, 요금 계산 불가 시설은 뒤로 보냅니다.` : ""}</p>`;
+    lastP = p; renderCompare();
     const dest = { lat: center.lat, lng: center.lng, name: center.label };
     $("results").innerHTML = r.items.length ? r.items.map((it) => card(it, dest)).join("")
       : `<li class="empty">조건에 맞는 주차장이 없습니다. 반경을 넓히거나 ‘무료만’·‘운영 중인 곳만’을 해제해 보세요.</li>`;
   }
+
+  // 나란히 비교(최대 3곳): 이 페이지 안에서만 유지. 입력 조건이 바뀌면 같은 조건으로 다시 계산
+  const CMP_MAX = 3;
+  let cmp = [], lastP = null, cmpMsg = "";
+  function renderCompare() {
+    const el = $("compare");
+    if (!cmp.length || !lastP) { el.hidden = true; el.innerHTML = ""; return; }
+    const hol = holidaysFor(lastP.start, lastP.end);
+    const its = cmp.map((i) => evalLot(LOTS[i], lastP, hol));
+    const okFees = its.filter((x) => x.fee.status === "OK").map((x) => x.fee.amount);
+    const minFee = okFees.length > 1 ? Math.min(...okFees) : null;
+    const feeCell = (x) => x.fee.status !== "OK" ? `요금 정보 없음<br><small>${esc(FEE_REASON[x.fee.reason] ?? "계산 불가")}</small>` : x.fee.isFree ? "무료" : `${won(x.fee.amount)}${minFee != null && x.fee.amount === minFee && !x.warnings.length ? " <b>(최저)</b>" : ""}`;
+    const rows = [
+      ["예상 요금", feeCell], ["거리", (x) => `${dist(x.distanceMeters)}<span class="sr"> 직선거리</span>`],
+      ["운영", (x) => `${OPER[x.operating]}${x.operatingAssumed ? " (추정)" : ""}`], ["주차면수", (x) => (x.lot.spaces != null ? x.lot.spaces + "면" : "정보 없음")],
+      ["시설 유형", (x) => TYPE[x.lot.type]], ["월 정기권", (x) => (x.lot.pass != null ? won(x.lot.pass) : "정보 없음")],
+      ["감면·할인", (x) => (x.discounts.length ? esc(x.discounts.join("·")) : "-")], ["요금 값 경고", (x) => (x.warnings.length ? x.warnings.map((w) => esc(PS.FEE_ANOMALY_LABEL[w])).join("<br>") : "-")],
+      ["기준일", (x) => esc(x.lot.date ?? "미확인")],
+    ];
+    el.hidden = false;
+    el.innerHTML = `<div class="row-h"><h2>나란히 비교 (${cmp.length}/${CMP_MAX})</h2><button type="button" class="linkbtn" data-cmpclear>비우기</button></div>
+      ${cmpMsg ? `<p class="note" role="status">${esc(cmpMsg)}</p>` : ""}
+      ${cmp.length < 2 ? `<p class="center" style="margin:0">한 곳 더 담으면 비교표가 나타납니다.</p>` : ""}
+      <div class="tbl"><table><caption class="sr">선택한 주차장 비교 (${esc(PS.formatKst(lastP.start))} ~ ${esc(PS.formatKst(lastP.end))})</caption>
+        <thead><tr><th scope="col"><span class="sr">항목</span></th>${its.map((x) => `<th scope="col">${esc(x.lot.name)} <button type="button" class="linkbtn" data-cmpdel="${x.id}" aria-label="${esc(x.lot.name)} 비교에서 빼기">빼기</button></th>`).join("")}</tr></thead>
+        <tbody>${rows.map(([h, f]) => `<tr><th scope="row">${h}</th>${its.map((x) => `<td>${f(x)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+      <p class="center" style="margin:0">요금 값 경고가 있는 시설은 최저 표시에서 제외합니다. 비교 목록은 이 페이지를 닫으면 사라집니다.</p>`;
+  }
+  $("compare").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.cmpclear != null) cmp = [];
+    else if (b.dataset.cmpdel) cmp = cmp.filter((i) => i !== Number(b.dataset.cmpdel));
+    cmpMsg = ""; renderCompare(); syncCmpButtons();
+  });
+  const syncCmpButtons = () => document.querySelectorAll("button[data-cmp]").forEach((x) => x.setAttribute("aria-pressed", String(cmp.includes(Number(x.dataset.cmp)))));
+  $("results").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-cmp]"); if (!b) return;
+    const i = Number(b.dataset.cmp);
+    cmpMsg = "";
+    if (cmp.includes(i)) cmp = cmp.filter((x) => x !== i);
+    else if (cmp.length >= CMP_MAX) cmpMsg = `최대 ${CMP_MAX}곳까지 비교할 수 있습니다. 하나를 빼고 다시 담으세요.`;
+    else cmp = [...cmp, i];
+    syncCmpButtons(); renderCompare();
+  });
 
   $("form").addEventListener("submit", (e) => { e.preventDefault(); hideSuggest(); run(); });
   ["radius", "type", "sort", "freeOnly", "operatingOnly"].forEach((id) => $(id).addEventListener("change", run));
