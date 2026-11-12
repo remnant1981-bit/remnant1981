@@ -139,6 +139,14 @@ const ko = {
     dist: "거리(직선)", typeSpaces: "유형·면수", noSpaces: "면수 정보 없음", pass: "월 정기권", disc: "감면·할인", warn: "요금 확인 필요", asOf: "출처 기준일",
     note: "요금은 원천 데이터 기준 예상 금액이며 감면·할인은 반영하지 않았습니다. 거리는 직선거리입니다.",
   },
+  area: {
+    title: "지역별 공영주차장", intro: "시·군·구를 고르면 그 지역 공영주차장의 대표 요금을 볼 수 있습니다. 시간에 따른 정확한 요금은 각 주차장 상세나 검색에서 계산하세요.",
+    lots: (n: number) => `${n.toLocaleString("ko-KR")}곳`, heading: (r: string) => `${r} 공영주차장`, desc: (r: string, n: number) => `${r} 공영주차장 ${n}곳의 요금·운영 정보(공공데이터 기준). 무료 주차장과 기본요금·일 최대요금을 비교하세요.`,
+    summary: (n: number, free: number, paid: number) => `${n}곳 · 무료 ${free}곳 · 유료 ${paid}곳 · 요금 정보 없음 ${n - free - paid}곳`,
+    cols: ["주차장", "유형", "대표 요금", "일 최대", "면수"], free: "무료", unknown: "정보 없음", base: (m: number, w: string) => `${m}분 ${w}`,
+    note: "대표 요금은 평일(또는 매일) 기본요금입니다. 시간대·요일별 요금과 무료 시간은 상세에서 확인하세요. ‘정보 없음’은 무료라는 뜻이 아닙니다.",
+    excluded: "주소 표기가 불분명한 시설은 지역 목록에서 빠질 수 있습니다(검색에는 포함).", all: "전체 지역", home: "지역별 공영주차장 보기", search: "이 지역에서 시간 넣고 검색", source: "출처: 공공데이터포털 전국주차장정보표준데이터",
+  },
   misc: {
     tooMany: "요청이 너무 많습니다.", retry: (s: number) => `약 ${s}초 후에 다시 시도해 주세요.`, notFound: "찾을 수 없는 페이지입니다.", error: "일시적인 오류가 발생했습니다.", tryAgain: "다시 시도",
     mockTitle: "목업 데이터 안내", mockBody: " — 표시되는 주차장·요금·면수는 모두 가상이며 실제 정보가 아닙니다. 실제 공공데이터 연동 전 개발 단계입니다.",
@@ -293,6 +301,14 @@ const en: Dict = {
     caption: (n: number) => `Comparison of ${n} lots`, item: "Item", fee: "Estimated fee", operating: "Status", assumed: " (assumed)", stay: (h: number) => `${h} h stay`, capped: " (daily max)",
     dist: "Distance (straight)", typeSpaces: "Type · spaces", noSpaces: "no space count", pass: "Monthly pass", disc: "Discounts", warn: "Check fee", asOf: "Source date",
     note: "Fees are estimates from source data and exclude discounts. Distances are straight-line.",
+  },
+  area: {
+    title: "Public parking by area", intro: "Pick a city or district to see typical fees at its public parking lots. For the exact fee for your time, open a lot or search.",
+    lots: (n: number) => `${n.toLocaleString("en-US")} lots`, heading: (r: string) => `Public parking in ${r}`, desc: (r: string, n: number) => `Fees and hours for ${n} public parking lots in ${r} (public data). Compare free lots, base fees and daily maximums.`,
+    summary: (n: number, free: number, paid: number) => `${n} lots · ${free} free · ${paid} paid · ${n - free - paid} without fee info`,
+    cols: ["Lot", "Type", "Typical fee", "Daily max", "Spaces"], free: "Free", unknown: "No info", base: (m: number, w: string) => `${w} / ${m} min`,
+    note: "Typical fee is the weekday (or every-day) base fee. See each lot for time- and day-specific rates and free periods. ‘No info’ does not mean free.",
+    excluded: "Lots with unclear addresses may be missing from area lists (they are still searchable).", all: "All areas", home: "Browse public parking by area", search: "Search this area with your times", source: "Source: National Parking Lot Standard Data (data.go.kr)",
   },
   misc: {
     tooMany: "Too many requests.", retry: (s: number) => `Please try again in about ${s} seconds.`, notFound: "Page not found.", error: "A temporary error occurred.", tryAgain: "Try again",

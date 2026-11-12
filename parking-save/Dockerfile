@@ -21,6 +21,8 @@ COPY --from=build --chown=node:node /app/.next/static ./.next/static
 COPY --from=build --chown=node:node /app/public ./public
 # 마이그레이션 SQL은 첫 요청 시 process.cwd()/migrations 에서 적용됨
 COPY --from=build --chown=node:node /app/migrations ./migrations
+# 공유 이미지(OG)용 한글 글꼴(서버에서 fs로 읽음 — standalone 추적 대상이 아니라 명시 복사)
+COPY --from=build --chown=node:node /app/assets ./assets
 RUN mkdir -p /data && chown node:node /data
 USER node
 VOLUME ["/data"]

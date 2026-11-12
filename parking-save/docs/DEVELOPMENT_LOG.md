@@ -238,3 +238,11 @@
 - **DB 점검** `src/server/db-check.ts` + `GET /api/admin/db-check`(integrity_check·외래키·마이그레이션 누락·건수).
 - **운영 스크립트**: `parking-alert`(헬스+품질 ERROR → Slack/Discord 웹훅, 6시간 중복 억제, 수집 실패 즉시 알림), `parking-backup` 백업본 무결성 확인 후 보관, `parking-restore-test`(격리 컨테이너 읽기 전용 복원 리허설, 주 1회). cron 등록, env에 `ALERT_WEBHOOK_URL` 추가.
 - 검증: 단위 테스트(로그 가림·오류 집계·DB 점검 3종·헬스 degraded/503), 실데이터 서버에서 알림 스크립트(전송→중복 생략→즉시 전송) 가짜 웹훅으로 확인, 복원 리허설 정상/손상 백업 판정 확인(docker 대역 사용, 실제 docker 미검증).
+
+## SEO·공유 미리보기 (2026-11-12)
+- **지역별 목록** `/area`(시·도 → 시·군·구), `/area/[시도]/[시군구]`(대표 요금 표: 평일/매일 기본요금·일 최대·면수, ItemList JSON-LD, "이 지역에서 시간 넣고 검색" 링크). 주소 → 지역 판별 `src/domain/region.ts`는 확실한 경우만(오타 "전븍"·"경상남동", 읍 단독 등은 제외 — 검색에는 포함). 실데이터 259개 시·군·구.
+- **대표 요금 요약** `summarizeFee`: 시간대 한정·정기권 규칙은 대표값에서 제외, 유료 흔적이 있으면 무료로 단정하지 않음, 규칙 없음 = "정보 없음"(무료 아님).
+- **sitemap.xml**(홈·지역·상세 1.67만 건, 목업·제외 시설·검색 주소 없음), **robots.txt**(검색·비교·관리자·API·언어 전환 제외).
+- **공유 이미지(OG)**: 홈·주차장 상세 1200×630(next/og). 한글은 Pretendard Bold 서브셋(OFL, 350KB, `assets/fonts`) — Dockerfile에 명시 복사. 상세는 이름·주소·유형·면수·대표 요금 배지(무료/유료/정보 없음)·원천 기준일.
+- **메타데이터**: `metadataBase`(SITE_URL), 상세 페이지 제목·설명·canonical(기간 매개변수 없는 주소), og/twitter 카드.
+- 검증: vitest(지역 판별 10건·요약 2건·집계·robots·sitemap), 실데이터 빌드에서 robots·sitemap(16,708 URL)·OG PNG 2종·상세 메타 태그 확인, 지역 페이지 axe 라이트·다크·영어 위반 0건, 지역→검색 이동 확인.

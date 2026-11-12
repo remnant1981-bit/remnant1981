@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SearchForm } from "@/components/SearchForm";
 import { SavedPanel } from "@/components/SavedPanel";
 import { ActiveTimerBanner } from "@/components/ParkingTimer";
@@ -28,6 +29,7 @@ export default async function Home() {
       <ActiveTimerBanner lang={lang} />
       <SearchForm lang={lang} defaults={defaults} places={mockEnabled() ? Object.keys(MOCK_PLACES) : []} />
       <SavedPanel lang={lang} />
+      <p className="mt-6 text-sm"><Link href="/area" className="underline">{t.area.home}</Link></p>
       <HowItWorks lang={lang} dataCollectedAt={collectedAt} />
     </>
   );

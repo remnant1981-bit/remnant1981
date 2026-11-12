@@ -156,6 +156,7 @@ curl -s https://<도메인>/api/health
 | `docker logs --tail 100 parking-save` | 앱 로그(한 줄 JSON: `ts·level·event` + 필드). 좌표·검색어·토큰·인증키는 기록하지 않음(가림 처리). 오류만: `docker logs parking-save 2>&1 \| grep '"level":"error"'` |
 | 관리자 화면 | 외부에서는 404(nginx 차단). PC에서 `ssh -L 3000:127.0.0.1:3000 <서버>` 후 브라우저로 `http://localhost:3000/admin` → `/etc/parking-save/env`의 `ADMIN_API_TOKEN` 입력. 신고·중복 후보 처리, 수집 상태, 품질 리포트 |
 
+- **검색 엔진 등록**: 도메인 연결 후 `SITE_URL`을 실제 주소(https)로 설정해야 sitemap·공유 이미지 주소가 맞음. 네이버 서치어드바이저·구글 서치 콘솔에 `https://<도메인>/sitemap.xml` 제출(사용자 작업).
 - **알림 웹훅**: `/etc/parking-save/env`의 `ALERT_WEBHOOK_URL`에 Slack(Incoming Webhook)·Discord 웹훅 주소 입력(본문에 `text`·`content` 둘 다 넣어 양쪽 호환). 비워 두면 로그 파일에만 기록. 웹훅 주소도 비밀값으로 취급.
 - **헬스체크 응답**: `status`가 `ok`/`degraded`/`error`. `degraded`(마이그레이션 누락·표준데이터 수집 50시간 초과·최근 5분 오류 20건 이상)는 HTTP 200이라 컨테이너를 재시작하지 않고 알림만 보냄. DB를 열 수 없으면 503 → Docker가 재시작.
 - **복원 절차**(실제 장애 시): `sudo parking-restore-test <백업>`으로 먼저 확인 → `docker stop parking-save` → `docker run --rm -v parking-data:/data -v <백업>:/b.sqlite:ro --entrypoint sh <이미지> -c 'cp /b.sqlite /data/parking.sqlite && rm -f /data/parking.sqlite-wal /data/parking.sqlite-shm'` → `sudo parking-update`. 백업 이후 수집분은 다음 수집으로 다시 채워짐(관리자 처리 기록은 백업 시점까지).

@@ -24,6 +24,7 @@ const PAGES = [
   ["개인정보·위치정보 처리방침", "/privacy"],
   ["상세(오류 신고 열기)", "/lots/1?startAt=2026-11-09T17:00:00%2B09:00&endAt=2026-11-09T19:00:00%2B09:00", async (page) => { await page.getByText(/정보가 틀렸나요\? 알려 주세요|Is this information wrong\? Tell us/).click(); }],
   ["404", "/lots/9999"],
+  ["지역 목록", "/area"],
 ];
 const browser = await chromium.launch();
 let total = 0;
