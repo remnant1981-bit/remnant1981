@@ -3,6 +3,7 @@ import type { LotItem } from "@/server/search";
 import { OPERATING_LABEL, OWNERSHIP_LABEL, TYPE_LABEL, distLabel, feeText, occupancyText, sourceLabel } from "@/lib/labels";
 import { formatKst } from "@/lib/time";
 import { FavoriteButton } from "./FavoriteButton";
+import { CompareToggle } from "./CompareControls";
 
 export function LotCard({ item, query }: { item: LotItem; query: string }) {
   const fee = feeText(item.fee);
@@ -13,7 +14,7 @@ export function LotCard({ item, query }: { item: LotItem; query: string }) {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h2 className="text-lg font-semibold"><Link href={`/lots/${item.id}?${query}`} className="underline">{item.name}</Link></h2>
         <span className="flex items-center gap-2"><span className="text-sm text-gray-700">{distLabel(item.distanceMeters)} <span className="text-xs">(직선거리)</span></span>
-          <FavoriteButton id={item.id} name={item.name} address={item.address} /></span>
+          <FavoriteButton id={item.id} name={item.name} address={item.address} /><CompareToggle id={item.id} name={item.name} /></span>
       </div>
       <p className="mt-1 text-sm text-gray-700">{item.address ?? "주소 정보 없음"}</p>
       <p className="mt-1 text-xs text-gray-700">{TYPE_LABEL[item.parkingType]} · {OWNERSHIP_LABEL[item.ownershipType]}{item.isMock ? " · 목업" : ""}</p>
@@ -39,6 +40,9 @@ export function LotCard({ item, query }: { item: LotItem; query: string }) {
             ))}
           </ul>
         </details>
+      )}
+      {item.discounts.length > 0 && (
+        <p className="mt-2 text-xs text-gray-700"><span className="font-semibold">감면·할인 대상:</span> {item.discounts.join("·")} <span className="text-gray-600">(예상 요금에는 반영 안 함, 조건은 상세)</span></p>
       )}
       {item.fee.status !== "OK" && item.qualityFlags.includes("FEE_MIXED") && (
         <p className="mt-2 rounded bg-amber-50 px-3 py-2 text-xs text-amber-900">

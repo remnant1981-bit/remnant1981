@@ -16,6 +16,7 @@ import type { DayBreakdown } from "@/domain/fee";
 import { FeeCurve } from "@/components/FeeCurve";
 import { ParkingTimerPanel } from "@/components/ParkingTimer";
 import { ReportForm } from "@/components/ReportForm";
+import { FEE_ANOMALY_LABEL } from "@/domain/fee-check";
 
 export const dynamic = "force-dynamic";
 type SP = Record<string, string | string[] | undefined>;
@@ -87,6 +88,13 @@ export default async function LotPage({ params, searchParams }: { params: Promis
                 </table>
               </div>
             )}
+            {d.feeWarnings.length > 0 && (
+              <div className="mt-2 rounded border border-amber-400 bg-amber-50 p-2 text-sm text-amber-900" role="note">
+                <p className="font-semibold">원천 요금 값이 이상해 보입니다 — 현장 요금을 확인하세요</p>
+                <ul className="list-disc pl-5">{d.feeWarnings.map((w) => <li key={w}>{FEE_ANOMALY_LABEL[w]}</li>)}</ul>
+                <p className="text-xs">입력 오류일 수 있어 다른 시설과의 최저가 비교에서 강조하지 않습니다. 틀렸다면 아래 &lsquo;정보가 틀렸나요?&rsquo;로 알려 주세요.</p>
+              </div>
+            )}
             {d.cheaper.length > 0 && (
               <div className="mt-2 rounded border border-green-700 bg-green-50 p-2 text-sm" role="note">
                 <p className="font-semibold text-green-900">시간을 조금 옮기면 더 쌉니다</p>
@@ -111,6 +119,14 @@ export default async function LotPage({ params, searchParams }: { params: Promis
             <tbody>{d.feeRules.map((r, i) => <tr key={i}><td>{RULE_LABEL[r.ruleType] ?? r.ruleType}</td><td>{DAY_LABEL[r.dayType]}</td><td>{hm(r)}</td><td>{ruleText(r)}</td></tr>)}</tbody>
           </table>)}
       </section>
+
+      {d.discounts.length > 0 && (
+        <section className="mt-4" aria-labelledby="disc-h"><h2 id="disc-h" className="font-semibold">감면·할인 안내</h2>
+          <p className="text-sm">대상: {d.discounts.join("·")}</p>
+          {d.lot.feeNote && <p className="mt-1 text-sm text-gray-700">원천 특기사항: &ldquo;{d.lot.feeNote}&rdquo;</p>}
+          <p className="mt-1 text-xs text-gray-600">예상 요금에는 반영하지 않았습니다. 감면 비율·조건·증빙은 시설마다 다르니 현장이나 관리기관에 확인하세요.</p>
+        </section>
+      )}
 
       <ParkingTimerPanel lotId={lot.id} name={lot.name} rules={d.timer?.rules ?? null} holidays={d.timer?.holidays ?? null} />
 
