@@ -8,10 +8,12 @@
 3. `docs/DEVELOPMENT_PLAN.md` 순서대로 구현합니다.
 4. 외부 API·네이버 지도 연동은 공식 문서와 실제 응답을 검증한 뒤 구현합니다.
 
-## 현재 상태 (2026-11-08)
-**목업·샘플 데이터로 동작하는 단계**입니다. 실제 공공데이터는 아직 연동·검증되지 않았습니다(API 키 필요). 화면 상단의 "목업 데이터 안내"와 `[목업]` 표기는 실제 정보가 아님을 뜻합니다.
-- 구현됨: 검색·요금 계산·추천 사유·상세(네이버 지도 앱 호출 링크), 수집 어댑터 3종(표준데이터·공휴일·서울 실시간), 데이터 품질 리포트, 관리자 수집 API(인증·감사로그), 요청 제한, CSP
-- 미검증/대기: 실제 API 응답, 실기기 앱 호출, 운영 인프라 — `docs/RELEASE_STATUS.md`, `docs/FIRST_RUN.md`
+## 현재 상태 (2026-11-12)
+**실데이터 검증·배포 준비 완료, 사용자 입력 대기 단계**입니다. 표준데이터 전체(18,994건 → 공영 16,473곳)로 기능·성능·접근성을 검증했고, 운영 인프라는 네이버클라우드 Micro로 결정해 Docker 이미지가 GHCR에 자동 빌드됩니다.
+- 구현됨: 검색·요금 계산(정렬·필터·더 싼 시간대 제안)·지도/목록·상세(요금 그래프·날짜별 내역)·네이버 지도 연결, 즐겨찾기·최근 검색·주차 타이머(기기 저장), 공유·PWA·다크 모드, 정보 오류 신고, 수집 3종·품질 리포트·관리자 화면, 약관·처리방침 초안
+- 남은 것: 공휴일 데이터 신청, 인증키 재발급, 서버·도메인, 법률 검토 등 — `docs/RELEASE_STATUS.md` 5절
+- 공유용 데모(서버 없이 실데이터 계산): `npm run demo:build`
+- 개발 모드에서는 목업 데이터가 켜지며 화면 상단 "목업 데이터 안내"와 `[목업]` 표기는 실제 정보가 아님을 뜻합니다(운영에서는 자동으로 꺼짐).
 
 ## 빠른 시작
 요구사항: Node.js 22 이상 (`node:sqlite` 사용).
@@ -26,11 +28,12 @@ npm run dev          # http://localhost:3000  (처음 실행 시 data/dev.sqlite
 |---|---|
 | `npm run lint` / `typecheck` / `test` / `build` | 품질 검사 (CI와 동일) |
 | `npm run db:migrate` / `db:reset` | 개발 DB 마이그레이션 / 삭제 |
-| `npm run sync:standard` | 표준데이터 수집 — `DATA_GO_KR_SERVICE_KEY` 필요, 실응답 미검증 |
+| `npm run sync:standard` | 표준데이터 수집 — `DATA_GO_KR_SERVICE_KEY` 필요(실응답 검증 완료) |
 | `npm run sync:holidays` | 공휴일 수집 — `DATA_GO_KR_SERVICE_KEY` 필요, 실응답 미검증 |
 | `npm run sync:seoul` | 서울 시영주차장 실시간 수집 — `SEOUL_OPENAPI_KEY` 필요 |
 | `npm run sync -- --fixture <json>` | 픽스처(샘플) 수집 — `tests/fixtures/standard-parking.sample.json` |
 | `npm run duplicates [-- approve\|reject <id> --by 이름]` | 중복·연결 후보 검토/승인 (서울 실시간 연결에 필요) |
+| `npm run reports [-- reviewed\|dismiss <id> --by 이름]` | 이용자 정보 오류 신고 검토 |
 | `npm run quality` | 데이터 품질·운영 알림 리포트 (ERROR 알림이 있으면 종료 코드 1) |
 | `npm run profile [-- <원천명>]` | 수집된 원천의 값 분포 점검 |
 | `npm run demo:build [-- --db <sqlite> --out <html>]` | 수집된 DB로 정적 데모 페이지(단일 HTML, 서버 불필요) 생성 — 기본 출력 `data/demo/parking-save-demo.html` |
@@ -44,7 +47,7 @@ npm run dev          # http://localhost:3000  (처음 실행 시 data/dev.sqlite
 | `docs/DEVELOPMENT_LOG.md` | 단계별 구현 내용과 한계 |
 | `docs/RELEASE_STATUS.md` | 출시 체크리스트 대비 현황 (검증/부분/대기) |
 | `docs/FIRST_RUN.md` | API 키 발급 후 첫 실호출 검증 절차 |
-| `docs/DEPLOYMENT.md` | Docker 배포·정기 수집(cron)·백업·리버스 프록시 조건 (인프라 무관 공통) |
+| `docs/DEPLOYMENT.md` | Docker 배포·정기 수집·백업·리버스 프록시, **네이버클라우드 Micro 설치 절차(9절)**, 관리자 화면 접속 |
 | 그 외 `docs/*.md` | 도메인별 설계 기준(요금 계산, 검색, 실시간, 보안, API 등) |
 
 ## 핵심 원칙

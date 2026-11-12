@@ -1,6 +1,6 @@
 // 정보 오류 신고 저장·검토(자동 반영 없음)
 import type { Db } from "./db";
-import { hashClient } from "./admin";
+import { audit, hashClient } from "./admin";
 
 export const REPORT_CATEGORIES = { FEE: "요금이 달라요", HOURS: "운영시간이 달라요", LOCATION: "위치·주소가 달라요", CLOSED: "폐쇄됐어요/공사 중", OTHER: "기타" } as const;
 export type ReportCategory = keyof typeof REPORT_CATEGORIES;
@@ -38,7 +38,8 @@ export async function listReports(db: Db, status: "NEW" | "REVIEWED" | "DISMISSE
      WHERE r.status = ? ORDER BY r.created_at DESC LIMIT ?`, [status, limit]);
 }
 
-export async function decideReport(db: Db, id: number, status: "REVIEWED" | "DISMISSED", by: string, now = new Date()) {
+export async function decideReport(db: Db, id: number, status: "REVIEWED" | "DISMISSED", by: string, now = new Date(), clientKey?: string) {
   const r = await db.run("UPDATE lot_reports SET status=?, reviewed_by=?, reviewed_at=? WHERE id=? AND status='NEW'", [status, by.slice(0, 60), now.toISOString(), id]);
+  await audit(db, `report:${status === "REVIEWED" ? "review" : "dismiss"}`, r.changes ? "OK" : "REJECTED", clientKey ?? `cli:${by.slice(0, 60)}`, `report ${id}`);
   return r.changes === 1;
 }

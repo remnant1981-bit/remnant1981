@@ -150,6 +150,7 @@ curl -s https://<도메인>/api/health
 | `sudo parking-reports` | 이용자 정보 오류 신고 검토 대기 목록. `parking-reports reviewed <id> <이름>` / `dismiss <id> <이름>`로 처리(원천 데이터 수정은 별도). `npm run quality`에도 대기 건수 표시 |
 | `sudo parking-backup` | 즉시 백업 → `/var/backups/parking-save/parking-YYYY-MM-DD.sqlite`(14일 보관, 매일 03:37 자동) |
 | `docker logs --tail 100 parking-save` | 앱 로그 |
+| 관리자 화면 | 외부에서는 404(nginx 차단). PC에서 `ssh -L 3000:127.0.0.1:3000 <서버>` 후 브라우저로 `http://localhost:3000/admin` → `/etc/parking-save/env`의 `ADMIN_API_TOKEN` 입력. 신고·중복 후보 처리, 수집 상태, 품질 리포트 |
 
 - 백업은 같은 서버 디스크에 있음 → 서버 장애 대비로 주 1회 이상 PC나 오브젝트 스토리지로 옮길 것(관리자 승인한 중복 후보·감사로그는 재수집으로 복구되지 않음).
 - 관리자 API는 서버 안에서만 호출됨(nginx가 외부 차단). 앱은 nginx 1단계 뒤이므로 `TRUSTED_PROXY_COUNT=1`.
