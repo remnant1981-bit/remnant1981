@@ -41,6 +41,11 @@ export function LotCard({ item, query }: { item: LotItem; query: string }) {
           </ul>
         </details>
       )}
+      {item.passHint && (
+        <p className="mt-2 rounded bg-blue-50 px-2 py-1 text-xs text-gray-800">
+          장기 이용: 월 정기권 {item.passHint.pass.toLocaleString("ko-KR")}원{item.passHint.kind === "CHEAPER" ? "이 예상 요금보다 쌀 수 있습니다" : "도 확인해 보세요(이 기간 요금은 계산 불가)"} <span className="text-gray-600">· 판매 여부·자격 조건은 현장 확인</span>
+        </p>
+      )}
       {item.discounts.length > 0 && (
         <p className="mt-2 text-xs text-gray-700"><span className="font-semibold">감면·할인 대상:</span> {item.discounts.join("·")} <span className="text-gray-600">(예상 요금에는 반영 안 함, 조건은 상세)</span></p>
       )}

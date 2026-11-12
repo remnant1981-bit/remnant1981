@@ -120,6 +120,12 @@ export default async function LotPage({ params, searchParams }: { params: Promis
           </table>)}
       </section>
 
+      {d.monthlyPass != null && (
+        <section className="mt-4" aria-labelledby="pass-h"><h2 id="pass-h" className="font-semibold">월 정기권</h2>
+          <p className="text-sm">{won(d.monthlyPass)} <span className="text-xs text-gray-600">(원천 기준, 판매 여부·자격·대기 여부 미확인 — 관리기관 확인)</span></p>
+          {d.passHint && <p className="mt-1 rounded bg-blue-50 p-2 text-sm">{d.passHint.kind === "CHEAPER" ? `입력한 기간의 예상 요금(${won(d.passHint.fee)})보다 월 정기권이 쌀 수 있습니다.` : "입력한 기간은 요금을 계산할 수 없어, 장기 이용이면 월 정기권도 확인해 보세요."}</p>}
+        </section>
+      )}
       {d.discounts.length > 0 && (
         <section className="mt-4" aria-labelledby="disc-h"><h2 id="disc-h" className="font-semibold">감면·할인 안내</h2>
           <p className="text-sm">대상: {d.discounts.join("·")}</p>

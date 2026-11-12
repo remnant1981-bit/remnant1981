@@ -51,6 +51,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
             {HOURS.map((h) => row(`${h}시간 이용`, (d) => { const p = d.feeCurve?.find((x) => x.hours === h); return p ? (p.fee == null ? "계산 불가" : won(p.fee) + (p.capped ? " (일 최대)" : "")) : "-"; }, `h${h}`))}
             {center && row("거리(직선)", (d) => (d.lot.latitude != null && d.lot.longitude != null ? `${Math.round(distanceMeters(center, { lat: d.lot.latitude, lng: d.lot.longitude }))}m` : "-"))}
             {row("유형·면수", (d) => `${TYPE_LABEL[d.lot.parkingType]} · ${d.lot.totalSpaces != null ? `${d.lot.totalSpaces}면` : "면수 정보 없음"}`)}
+            {row("월 정기권", (d) => (d.monthlyPass != null ? won(d.monthlyPass) : "-"))}
             {row("감면·할인", (d) => (d.discounts.length ? d.discounts.join("·") : "-"))}
             {row("요금 확인 필요", (d) => (d.feeWarnings.length ? d.feeWarnings.map((w) => FEE_ANOMALY_LABEL[w]).join(", ") : "-"))}
             {row("출처 기준일", (d) => (d.source.updatedAt ? formatKst(d.source.updatedAt) : "미확인"))}
