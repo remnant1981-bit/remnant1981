@@ -30,6 +30,9 @@ const noCoord = Number(one(`SELECT COUNT(*) AS c FROM parking_lots WHERE source_
 
 const groupBy = (rows: Row[]) => { const m = new Map<number, Row[]>(); for (const r of rows) { const k = Number(r.parking_lot_id); const a = m.get(k); if (a) a.push(r); else m.set(k, [r]); } return m; };
 const fees = groupBy(all("SELECT * FROM fee_rules WHERE rule_type <> 'SEASON_PASS' ORDER BY id")); // 정기권은 시간제 요금과 무관(앱과 동일)
+// 월 정기권 금액(앱과 같이 금액 > 0 인 첫 규칙). 시간제 요금 계산에는 쓰지 않고 장기 이용 안내에만 사용
+const passes = new Map<number, number>();
+for (const r of all("SELECT parking_lot_id, amount FROM fee_rules WHERE rule_type = 'SEASON_PASS' AND amount > 0 ORDER BY id")) if (!passes.has(Number(r.parking_lot_id))) passes.set(Number(r.parking_lot_id), Number(r.amount));
 const scheds = groupBy(all("SELECT * FROM operating_schedules ORDER BY id"));
 
 // 같은 규칙·일정·플래그 묶음이 많아 사전으로 중복 제거(전국 약 1.6만 곳 → 규칙 묶음 수백 개)
@@ -43,7 +46,7 @@ const L = lots.map((l, i) => {
   const flags = l.quality_flags ? JSON.parse(String(l.quality_flags)) : [];
   return [l.name, l.road_address ?? l.address, l.parking_type === "OFF_STREET" ? 0 : l.parking_type === "ON_STREET" ? 1 : 2,
     Number(Number(l.latitude).toFixed(6)), Number(Number(l.longitude).toFixed(6)), l.total_spaces, String(l.source_updated_at ?? "").slice(0, 10) || null,
-    R.idx(rules), S.idx(sc), F.idx(flags), l.fee_note ?? null, l.ownership_type === "PUBLIC" ? 1 : 0, l.operator_name ?? null, l.phone ?? null];
+    R.idx(rules), S.idx(sc), F.idx(flags), l.fee_note ?? null, l.ownership_type === "PUBLIC" ? 1 : 0, l.operator_name ?? null, l.phone ?? null, passes.get(Number(l.id)) ?? null];
 });
 // 동일 시설 후보: 승인(MERGED) 또는 점수 1.0 PENDING (앱 검색 묶음 기준과 동일)
 const dup = all("SELECT lot_a_id AS a, lot_b_id AS b, status FROM duplicate_candidates WHERE status = 'MERGED' OR (status = 'PENDING' AND score >= 1.0)")
@@ -67,4 +70,4 @@ const html = fs.readFileSync(path.join(here, "template.html"), "utf8").replace("
 
 fs.mkdirSync(path.dirname(path.resolve(outPath)), { recursive: true });
 fs.writeFileSync(outPath, html);
-console.log(JSON.stringify({ out: outPath, bytes: Buffer.byteLength(html), lots: L.length, noCoord, ruleSets: R.arr.length, scheduleSets: S.arr.length, duplicates: dup.length, collected, holidays: holidays && { source: holidays.source, from: holidays.from, to: holidays.to, days: holidays.dates.length } }));
+console.log(JSON.stringify({ out: outPath, bytes: Buffer.byteLength(html), lots: L.length, noCoord, ruleSets: R.arr.length, passes: L.filter((x) => x[14] != null).length, scheduleSets: S.arr.length, duplicates: dup.length, collected, holidays: holidays && { source: holidays.source, from: holidays.from, to: holidays.to, days: holidays.dates.length } }));
