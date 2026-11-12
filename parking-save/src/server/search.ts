@@ -4,7 +4,7 @@ import { MOCK_PLACES, NON_PRODUCTION_SOURCES, mockEnabled, refreshMockOccupancy 
 import { calculateFee, type FeeResult, type FeeRule, type DayType } from "@/domain/fee";
 import { distanceMeters, isValidCoord, type LatLng } from "@/domain/geo";
 import { operatingForStay, operatingUsesAssumed, type OperatingStatus, type ScheduleRow } from "@/domain/operating";
-import { evaluateOccupancy, occupancyConfigFor, type OccupancyResult } from "@/domain/occupancy";
+import { evaluateOccupancy, occupancyConfigFor, SEOUL_OCCUPANCY_SOURCE, type OccupancyResult } from "@/domain/occupancy";
 import { explainAll, type Explanation } from "@/domain/recommend";
 import { cheaperShifts, type CheaperShift } from "@/domain/cheaper";
 import { discountTargets, feeAnomalies, type FeeAnomaly } from "@/domain/fee-check";
@@ -23,6 +23,7 @@ export const DEFAULT_RADIUS = 1000;
 export const MAX_RADIUS = 5000;
 export const MAX_STAY_DAYS = 31;
 import { staleDaysFor } from "./freshness";
+import { dayKind, occupancyTrend, TREND_WINDOW_DAYS, type Trend } from "@/domain/occupancy-trend";
 
 export interface SearchParams {
   center: LatLng; centerLabel: string; centerKind: "current_location" | "destination";
@@ -304,6 +305,27 @@ function comparator(sort: Sort) {
   };
 }
 
+/**
+ * 혼잡 경향(평소 이 요일 유형·시간대의 빈자리 비율). 자기 집계 + 관리자 승인(MERGED) 연결 시설의 집계를 함께 사용(occupancyFor와 같은 기준).
+ * 공휴일은 커버리지가 있는 날짜만 판정(커버리지 밖 평일은 제외). 목표 날짜 유형을 모르면 null.
+ */
+export async function occupancyTrendFor(db: Db, lotId: number, startAt: Date, now: Date, cfg = occupancyConfigFor(SEOUL_OCCUPANCY_SOURCE)): Promise<Trend | null> {
+  const fromYmd = kstYmd(now.getTime() - TREND_WINDOW_DAYS * 86400_000), toYmd = kstYmd(Math.max(now.getTime(), startAt.getTime()));
+  const rows = await db.all<{ ymd: string; hour: number; ratio_sum: number; samples: number }>(
+    `SELECT ymd, hour, ratio_sum, samples FROM occupancy_hourly WHERE ymd >= ? AND (parking_lot_id = ? OR parking_lot_id IN (
+       SELECT CASE WHEN lot_a_id = ? THEN lot_b_id ELSE lot_a_id END FROM duplicate_candidates WHERE status = 'MERGED' AND (lot_a_id = ? OR lot_b_id = ?)))`,
+    [fromYmd, lotId, lotId, lotId, lotId]);
+  if (rows.length === 0) return null;
+  const cov = await db.all<{ from_date: string; to_date: string }>("SELECT from_date, to_date FROM holiday_coverage WHERE to_date >= ? AND from_date <= ?", [fromYmd, toYmd]);
+  const hol = new Set((await db.all<{ date: string }>("SELECT date FROM holidays WHERE date BETWEEN ? AND ?", [fromYmd, toYmd])).map((r) => r.date));
+  const holidaysFor = (ymd: string) => (cov.some((c) => c.from_date <= ymd && ymd <= c.to_date) ? hol : null);
+  const ymd = kstYmd(startAt.getTime());
+  const kind = dayKind(ymd, holidaysFor(ymd));
+  if (!kind) return null;
+  const hour = new Date(startAt.getTime() + 9 * 3600_000).getUTCHours();
+  return occupancyTrend(rows.map((r) => ({ ymd: r.ymd, hour: r.hour, ratioSum: r.ratio_sum, samples: r.samples })), { kind, hour }, holidaysFor, cfg);
+}
+
 export async function getLotDetail(db: Db, id: number, period: { startAt: Date; endAt: Date } | null, now = new Date()) {
   if (mockEnabled()) await refreshMockOccupancy(db, now);
   const lot = await db.get<LotRow>("SELECT * FROM parking_lots WHERE id=?", [id]);
@@ -341,7 +363,7 @@ export async function getLotDetail(db: Db, id: number, period: { startAt: Date; 
   // 주차 타이머: 기기에서 같은 요금 엔진으로 계산하도록 규칙과 공휴일(오늘부터 3일)을 함께 전달
   const timerHolidays = await loadHolidays(db, now, new Date(now.getTime() + 3 * 86400_000), now);
   const timer = engineRules === "UNSUPPORTED" ? null : {
-    rules: engineRules,
+    rules: engineRules, schedules: toSchedules(schedules),
     holidays: timerHolidays ? { from: kstYmd(now.getTime()), to: kstYmd(now.getTime() + 3 * 86400_000), dates: [...timerHolidays] } : null,
   };
   return {
@@ -356,6 +378,7 @@ export async function getLotDetail(db: Db, id: number, period: { startAt: Date; 
     occupancy, fee, operating, operatingAssumed, holidayDataAvailable,
     requestedPeriod: period ? { startAt: period.startAt.toISOString(), endAt: period.endAt.toISOString(), timezone: "Asia/Seoul" } : null,
     feeCurve, timer, cheaper, feeWarnings, discounts: discountTargets(lot.fee_note), monthlyPass, passHint,
+    occupancyTrend: period ? await occupancyTrendFor(db, id, period.startAt, now) : null,
   };
 }
 export const FEE_CURVE_HOURS = 12;

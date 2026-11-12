@@ -38,6 +38,7 @@ npm run dev          # http://localhost:3000  (처음 실행 시 data/dev.sqlite
 | `npm run profile [-- <원천명>]` | 수집된 원천의 값 분포 점검 |
 | `npm run demo:build [-- --db <sqlite> --out <html>]` | 수집된 DB로 정적 데모 페이지(단일 HTML, 서버 불필요) 생성 — 기본 출력 `data/demo/parking-save-demo.html` |
 | `npm run a11y` | 접근성 자동 점검(axe) — 앱 실행 중, playwright 별도 필요 |
+| `npm run build && npm run e2e` | E2E(Playwright): 목업 데이터로 운영 빌드를 띄워 주요 흐름·접근성(라이트·다크·영어) 점검. CI에서 매 PR 실행. 최초 1회 `npx playwright install chromium` |
 
 ## 문서 지도
 | 문서 | 내용 |

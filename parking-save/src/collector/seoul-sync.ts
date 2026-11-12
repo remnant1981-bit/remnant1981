@@ -6,6 +6,7 @@ import type { Db } from "@/server/db";
 import { finishedIso } from "@/lib/time";
 import { SEOUL_SOURCE, SeoulApiError, parseSeoulResponse, seoulOccupancy, type SeoulRow } from "./seoul-parking";
 import { logError } from "../server/log";
+import { TREND_WINDOW_DAYS } from "../domain/occupancy-trend";
 
 export const SEOUL_DEFAULT_BASE = "http://openapi.seoul.go.kr:8088"; // 문서 예시는 http. https 지원 여부 미확인 → 환경변수로 변경 가능
 const PAGE = 1000;                // 문서: 1회 최대 1000건
@@ -102,8 +103,17 @@ export async function syncSeoulOccupancy(db: Db, fetchPage: PageFetcher, now = n
         await db.run("INSERT INTO occupancy_snapshots(parking_lot_id,total_spaces,available_spaces,occupied_spaces,observed_at,collected_at,source_name,validity_status) VALUES (?,?,?,?,?,?,?,'OK')",
           [lotId, occ.totalSpaces, occ.availableSpaces, occ.occupiedSpaces, occ.observedAt, startedAt, SEOUL_SOURCE]);
         sum.snapshots++;
+        // 혼잡 경향 집계: 수집 시점 기준 10분 이내 관측만(같은 오래된 값이 5분마다 반복 집계되지 않게)
+        const obsMs = Date.parse(occ.observedAt);
+        if (occ.totalSpaces > 0 && Number.isFinite(obsMs) && Math.abs(now.getTime() - obsMs) <= 10 * 60_000) {
+          const kst = new Date(obsMs + 9 * 3600_000);
+          await db.run(`INSERT INTO occupancy_hourly(parking_lot_id, ymd, hour, ratio_sum, samples) VALUES (?,?,?,?,1)
+            ON CONFLICT(parking_lot_id, ymd, hour) DO UPDATE SET ratio_sum = ratio_sum + excluded.ratio_sum, samples = samples + 1`,
+            [lotId, kst.toISOString().slice(0, 10), kst.getUTCHours(), Math.min(1, Math.max(0, occ.availableSpaces / occ.totalSpaces))]);
+        }
       } else sum.unavailable[occ.reason] = (sum.unavailable[occ.reason] ?? 0) + 1;
     }
+    await db.run("DELETE FROM occupancy_hourly WHERE ymd < ?", [new Date(now.getTime() + 9 * 3600_000 - TREND_WINDOW_DAYS * 86400_000).toISOString().slice(0, 10)]);
     await db.run("DELETE FROM occupancy_snapshots WHERE source_name=? AND collected_at < ?", [SEOUL_SOURCE, new Date(now.getTime() - SNAPSHOT_RETENTION_DAYS * 86400_000).toISOString()]);
     sum.newCandidates = await generateLinkCandidates(db, lotIds, startedAt);
   } catch (e) {
