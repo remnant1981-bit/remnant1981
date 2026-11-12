@@ -3,6 +3,9 @@ import { useState, useSyncExternalStore } from "react";
 import type { NaverLinks, NaverLinkSet } from "@/domain/map-link";
 import { NAVER_MAP_APPSTORE_URL, NAVER_MAP_PLAY_URL } from "@/domain/map-link";
 import { CopyButton } from "./CopyButton";
+import type { Lang } from "@/i18n";
+import { dict } from "@/i18n/dict";
+
 
 type Platform = "android" | "ios" | "other";
 const subscribe = () => () => {};
@@ -12,7 +15,8 @@ const platform = (): Platform => {
 };
 const serverPlatform = (): Platform => "other";
 
-export function MapLinks({ links, addressText, coordText }: { links: NaverLinks; addressText: string; coordText: string | null }) {
+export function MapLinks({ links, addressText, coordText, lang = "ko" }: { links: NaverLinks; addressText: string; coordText: string | null; lang?: Lang }) {
+  const t = dict(lang).links;
   const p = useSyncExternalStore(subscribe, platform, serverPlatform);
   const [failed, setFailed] = useState(false);
 
@@ -35,21 +39,21 @@ export function MapLinks({ links, addressText, coordText }: { links: NaverLinks;
   return (
     <div className="mt-2 space-y-2">
       <div className="flex flex-wrap gap-2">
-        {anchor(links.car, "네이버 지도로 길찾기 (자동차)")}
-        {anchor(links.walk, "주차 후 목적지까지 도보 길찾기")}
-        {anchor(links.place, "네이버 지도에서 위치 보기")}
+        {anchor(links.car, t.car)}
+        {anchor(links.walk, t.walk)}
+        {anchor(links.place, t.place)}
       </div>
-      {p === "other" && <p className="text-xs text-gray-700">네이버 지도 앱 호출은 휴대폰(Android·iOS)에서만 동작합니다. 아래 주소·좌표를 복사해 사용하세요.</p>}
-      {!links.walk && <p className="text-xs text-gray-600">도보 길찾기는 &lsquo;목적지&rsquo;로 검색한 경우에만 제공됩니다.</p>}
+      {p === "other" && <p className="text-xs text-gray-700">{t.desktop}</p>}
+      {!links.walk && <p className="text-xs text-gray-600">{t.walkNote}</p>}
       {failed && (
         <p role="alert" className="rounded border border-amber-400 bg-amber-50 p-2 text-xs">
-          네이버 지도 앱이 열리지 않았습니다. 앱이 설치되어 있지 않다면 <a className="underline" href={NAVER_MAP_APPSTORE_URL}>앱스토어에서 설치</a>하거나, 주소·좌표를 복사해 사용하세요.
+          {t.failed1}<a className="underline" href={NAVER_MAP_APPSTORE_URL}>{t.failedLink}</a>{t.failed2}
         </p>
       )}
-      {p === "android" && <p className="text-xs text-gray-600">앱이 없으면 Google Play로 이동합니다. (<a className="underline" href={NAVER_MAP_PLAY_URL}>직접 열기</a>)</p>}
+      {p === "android" && <p className="text-xs text-gray-600">{t.play1}<a className="underline" href={NAVER_MAP_PLAY_URL}>{t.playLink}</a>{t.play2}</p>}
       <div className="flex flex-wrap gap-2">
-        {addressText && <CopyButton text={addressText} label="주소 복사" />}
-        {coordText && <CopyButton text={coordText} label="좌표 복사" />}
+        {addressText && <CopyButton lang={lang} text={addressText} label={t.copyAddr} />}
+        {coordText && <CopyButton lang={lang} text={coordText} label={t.copyCoord} />}
       </div>
     </div>
   );

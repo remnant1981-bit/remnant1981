@@ -16,11 +16,12 @@ export function clusterPoints<T>(points: Array<ScreenPoint<T>>, radiusPx: number
 }
 
 /** 묶음 라벨: "N곳 · 무료 k · 최저 X원" 중 해당하는 것만 */
-export function clusterLabel(items: Array<{ tone: "free" | "paid" | "unknown"; amount: number | null }>): string {
+export function clusterLabel(items: Array<{ tone: "free" | "paid" | "unknown"; amount: number | null }>, lang: "ko" | "en" = "ko"): string {
   const free = items.filter((i) => i.tone === "free").length;
   const paid = items.filter((i) => i.tone === "paid" && i.amount != null).map((i) => i.amount!);
-  const parts = [`${items.length}곳`];
-  if (free > 0) parts.push(`무료 ${free}`);
-  if (paid.length > 0) parts.push(`최저 ${Math.min(...paid).toLocaleString("ko-KR")}원`);
+  const en = lang === "en";
+  const parts = [en ? `${items.length} lots` : `${items.length}곳`];
+  if (free > 0) parts.push(en ? `${free} free` : `무료 ${free}`);
+  if (paid.length > 0) parts.push(en ? `from ₩${Math.min(...paid).toLocaleString("en-US")}` : `최저 ${Math.min(...paid).toLocaleString("ko-KR")}원`);
   return parts.join(" · ");
 }

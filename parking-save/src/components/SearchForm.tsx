@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
 import { toKstLocalInput } from "@/lib/time";
+import type { Lang } from "@/i18n";
+import { dict } from "@/i18n/dict";
 
 export interface FormDefaults {
   destination?: string; lat?: string; lng?: string; start?: string; end?: string;
@@ -9,7 +11,8 @@ export interface FormDefaults {
 const QUICK = [1, 2, 3] as const;
 const PLACES = ["서울시청", "광화문", "서울역", "을지로입구"];
 
-export function SearchForm({ defaults = {}, places = PLACES }: { defaults?: FormDefaults; places?: string[] }) {
+export function SearchForm({ defaults = {}, places = PLACES, lang = "ko" }: { defaults?: FormDefaults; places?: string[]; lang?: Lang }) {
+  const t = dict(lang), f = t.form;
   const [start, setStart] = useState(defaults.start ?? "");
   const [end, setEnd] = useState(defaults.end ?? "");
   const [coords, setCoords] = useState<{ lat: string; lng: string } | null>(defaults.lat && defaults.lng ? { lat: defaults.lat, lng: defaults.lng } : null);
@@ -22,17 +25,17 @@ export function SearchForm({ defaults = {}, places = PLACES }: { defaults?: Form
     if (!Number.isNaN(ms)) setEnd(toKstLocalInput(ms + h * 3600_000));
   };
   const useLocation = () => {
-    if (!navigator.geolocation) { setGeoMsg("이 브라우저는 위치 조회를 지원하지 않습니다. 목적지를 직접 입력하세요."); return; }
-    setGeoMsg("위치 확인 중…");
+    if (!navigator.geolocation) { setGeoMsg(f.geoUnsupported); return; }
+    setGeoMsg(f.geoLoading);
     navigator.geolocation.getCurrentPosition(
       (p) => { // 정밀도 축소(소수 4자리 ≈ 11m)하여 URL에 담음. 서버에 저장하지 않음
         setCoords({ lat: p.coords.latitude.toFixed(4), lng: p.coords.longitude.toFixed(4) });
         setDest("");
-        setGeoMsg("현재 위치를 사용합니다.");
+        setGeoMsg(f.geoOk);
       },
       (e) => {
         setCoords(null);
-        setGeoMsg(e.code === e.PERMISSION_DENIED ? "위치 권한이 거부되었습니다. 목적지를 직접 입력해 검색하세요." : "위치를 가져오지 못했습니다. 목적지를 직접 입력하세요.");
+        setGeoMsg(e.code === e.PERMISSION_DENIED ? f.geoDenied : f.geoFail);
       },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 },
     );
@@ -40,54 +43,53 @@ export function SearchForm({ defaults = {}, places = PLACES }: { defaults?: Form
 
   const field = "w-full rounded border border-gray-400 px-3 py-2 text-base";
   return (
-    <form action="/search" method="get" className="space-y-4" aria-label="주차장 검색">
+    <form action="/search" method="get" className="space-y-4" aria-label={f.aria}>
       <fieldset className="space-y-2">
-        <legend className="font-semibold">어디에 주차할까요?</legend>
-        <label htmlFor="destination" className="block text-sm">목적지</label>
-        <input id="destination" name="destination" list="places" className={field} value={dest} placeholder={places.length ? `예: ${places[0]}` : "목적지 검색 준비 중 — 아래 '현재 위치 사용'을 눌러 주세요"}
+        <legend className="font-semibold">{f.where}</legend>
+        <label htmlFor="destination" className="block text-sm">{f.destination}</label>
+        <input id="destination" name="destination" list="places" className={field} value={dest} placeholder={f.placeholder(places[0] ?? null)}
           onChange={(e) => { setDest(e.target.value); if (e.target.value) setCoords(null); }} autoComplete="off" />
         <datalist id="places">{places.map((p) => <option key={p} value={p} />)}</datalist>
         <div className="flex flex-wrap items-center gap-3">
-          <button type="button" onClick={useLocation} className="rounded border border-gray-500 px-3 py-2 text-sm">현재 위치 사용</button>
-          <span role="status" aria-live="polite" className="text-sm text-gray-700">{geoMsg}{coords && !geoMsg ? "현재 위치를 사용합니다." : ""}</span>
+          <button type="button" onClick={useLocation} className="rounded border border-gray-500 px-3 py-2 text-sm">{f.useLocation}</button>
+          <span role="status" aria-live="polite" className="text-sm text-gray-700">{geoMsg}{coords && !geoMsg ? f.geoOk : ""}</span>
         </div>
         {coords && (<><input type="hidden" name="lat" value={coords.lat} /><input type="hidden" name="lng" value={coords.lng} /></>)}
       </fieldset>
 
       <fieldset className="space-y-2">
-        <legend className="font-semibold">주차 시간 (한국 시간)</legend>
+        <legend className="font-semibold">{f.when}</legend>
         <div className="grid gap-3 sm:grid-cols-2">
-          <div><label htmlFor="start" className="block text-sm">시작 일시</label>
+          <div><label htmlFor="start" className="block text-sm">{f.start}</label>
             <input id="start" name="start" type="datetime-local" required className={field} value={start} onChange={(e) => setStart(e.target.value)} /></div>
-          <div><label htmlFor="end" className="block text-sm">종료 일시</label>
+          <div><label htmlFor="end" className="block text-sm">{f.end}</label>
             <input id="end" name="end" type="datetime-local" required min={start || undefined} className={field} value={end} onChange={(e) => setEnd(e.target.value)} /></div>
         </div>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="빠른 주차 시간 선택">
-          {QUICK.map((h) => <button key={h} type="button" onClick={() => quick(h)} className="rounded border border-gray-500 px-3 py-1 text-sm">{h}시간</button>)}
+        <div className="flex flex-wrap gap-2" role="group" aria-label={f.quickAria}>
+          {QUICK.map((h) => <button key={h} type="button" onClick={() => quick(h)} className="rounded border border-gray-500 px-3 py-1 text-sm">{t.hours(h)}</button>)}
         </div>
       </fieldset>
 
       <fieldset className="grid gap-3 sm:grid-cols-3">
-        <legend className="font-semibold">조건</legend>
-        <div><label htmlFor="radiusMeters" className="block text-sm">검색 반경</label>
+        <legend className="font-semibold">{f.options}</legend>
+        <div><label htmlFor="radiusMeters" className="block text-sm">{f.radius}</label>
           <select id="radiusMeters" name="radiusMeters" defaultValue={defaults.radiusMeters ?? "1000"} className={field}>
             {[500, 1000, 2000, 3000, 5000].map((r) => <option key={r} value={r}>{r >= 1000 ? `${r / 1000}km` : `${r}m`}</option>)}
           </select></div>
-        <div><label htmlFor="type" className="block text-sm">시설 유형</label>
+        <div><label htmlFor="type" className="block text-sm">{f.type}</label>
           <select id="type" name="type" defaultValue={defaults.type ?? "all"} className={field}>
-            <option value="all">전체</option><option value="off_street">노외</option><option value="on_street">노상</option>
+            <option value="all">{f.all}</option><option value="off_street">{t.type.OFF_STREET}</option><option value="on_street">{t.type.ON_STREET}</option>
           </select></div>
-        <div><label htmlFor="sort" className="block text-sm">정렬</label>
+        <div><label htmlFor="sort" className="block text-sm">{f.sort}</label>
           <select id="sort" name="sort" defaultValue={defaults.sort ?? "free_first"} className={field}>
-            <option value="free_first">무료 우선</option><option value="price_asc">요금 낮은 순</option>
-            <option value="distance_asc">거리 가까운 순</option><option value="value_asc">요금+거리(가성비)</option><option value="availability_desc">실시간 여유 순</option>
+            {(Object.keys(f.sorts) as Array<keyof typeof f.sorts>).map((k) => <option key={k} value={k}>{f.sorts[k]}</option>)}
           </select></div>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="freeOnly" value="true" defaultChecked={defaults.freeOnly} /> 무료만</label>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="realtimeOnly" value="true" defaultChecked={defaults.realtimeOnly} /> 실시간 잔여면수 확인 가능만</label>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="operatingOnly" value="true" defaultChecked={defaults.operatingOnly} /> 이용 시간 내내 운영 중인 곳만</label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="freeOnly" value="true" defaultChecked={defaults.freeOnly} /> {f.freeOnly}</label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="realtimeOnly" value="true" defaultChecked={defaults.realtimeOnly} /> {f.realtimeOnly}</label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="operatingOnly" value="true" defaultChecked={defaults.operatingOnly} /> {f.operatingOnly}</label>
       </fieldset>
 
-      <button type="submit" className="w-full rounded bg-blue-700 px-4 py-3 text-base font-semibold text-white">주차장 검색</button>
+      <button type="submit" className="w-full rounded bg-blue-700 px-4 py-3 text-base font-semibold text-white">{f.submit}</button>
     </form>
   );
 }

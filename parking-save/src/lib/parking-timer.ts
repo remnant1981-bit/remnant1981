@@ -47,7 +47,7 @@ function holidaysFor(t: ParkingTimer, startMs: number, endMs: number): Set<strin
 
 export type TimerStatus =
   | { kind: "OK"; elapsedMin: number; fee: number; next: { at: number; fee: number } | null }
-  | { kind: "UNKNOWN"; elapsedMin: number; reason: string };
+  | { kind: "UNKNOWN"; elapsedMin: number; reason: string; code: string };
 
 /**
  * 지금까지의 예상 요금과 다음 인상 시점(최대 24시간 앞까지 1분 단위 탐색).
@@ -59,7 +59,7 @@ export function timerStatus(t: ParkingTimer, nowMs: number): TimerStatus {
   const elapsedMin = Math.max(0, Math.floor((nowMs - s) / 60_000));
   const at = (e: number) => calculateFee({ startAt: new Date(s), endAt: new Date(e), rules: t.rules, holidays: holidaysFor(t, s, e) });
   const cur = at(end);
-  if (cur.status !== "OK") return { kind: "UNKNOWN", elapsedMin, reason: cur.detail };
+  if (cur.status !== "OK") return { kind: "UNKNOWN", elapsedMin, reason: cur.detail, code: cur.reason };
   let next: { at: number; fee: number } | null = null;
   const base = Math.ceil(end / 60_000) * 60_000;
   for (let m = 1; m <= 24 * 60; m++) {
