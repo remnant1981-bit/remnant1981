@@ -5,6 +5,8 @@ import { getDb } from "@/server/db";
 import { companyPlan, plansEnabled } from "@/server/plans";
 import { PLANS, PLAN_IDS } from "@/domain/plans";
 import { Notice, PageTitle } from "@/components/ui";
+import { PlanSignup } from "@/components/PlanSignup";
+import { billingStatus, paymentInfo } from "@/server/billing";
 
 export const metadata: Metadata = { title: "요금 안내", alternates: { canonical: "/pricing" } };
 
@@ -12,7 +14,10 @@ const won = (n: number) => (n === 0 ? "0원" : `${n.toLocaleString()}원`);
 
 export default async function Page() {
   const v = await getViewer();
-  const plan = v.company ? await companyPlan(await getDb(), v.company.id) : null;
+  const db = await getDb();
+  const plan = v.company ? await companyPlan(db, v.company.id) : null;
+  const billing = v.company && v.session ? await billingStatus(db, v.session.user.id) : null;
+  const pay = paymentInfo();
   return (
     <>
       <PageTitle sub="공고 검색과 맞춤 추천은 계속 무료입니다. 유료 요금제는 신청 업무를 돕는 기능을 제공합니다.">요금 안내</PageTitle>
@@ -32,11 +37,23 @@ export default async function Page() {
           );
         })}
       </div>
-      <section className="card mt-6 grid gap-2 p-5 text-sm">
-        <h2 className="font-bold">도입·체험 문의</h2>
-        <p>유료 요금제는 <strong>14일 무료 체험</strong> 후 계좌이체(세금계산서 발행)로 이용할 수 있습니다. 카드 정기결제는 준비 중입니다.</p>
-        <p>문의: <span className="text-[var(--muted)]">[운영자 연락처 확정 후 표시]</span></p>
-        <p className="text-[var(--muted)]">기간이 끝나도 입력한 기업정보·진행 관리·메모는 유지되며, 무료 한도를 넘는 새 항목만 추가가 제한됩니다. 이용약관·환불 규정은 확정 후 게시합니다.</p>
+      {billing && v.session ? <PlanSignup initial={billing} defaultEmail={v.session.user.email} /> : (
+        <section className="card mt-6 grid gap-2 p-5 text-sm">
+          <h2 className="font-bold">체험·이용 신청</h2>
+          <p>유료 요금제는 <strong>14일 무료 체험</strong>(기업당 1회) 후 계좌이체(세금계산서 발행)로 이용할 수 있습니다. 카드 정기결제는 준비 중입니다.</p>
+          {!v.session ? <p><Link className="underline" href="/login">로그인</Link> 또는 <Link className="underline" href="/register">회원가입</Link> 후 기업 관계 확인이 끝나면 이 화면에서 바로 체험·신청할 수 있습니다.</p>
+            : <p>기업 관계 확인이 끝나면 이 화면에서 바로 체험·신청할 수 있습니다. <Link className="underline" href="/company">기업정보 화면</Link></p>}
+        </section>
+      )}
+      <section className="card mt-4 grid gap-2 p-5 text-sm">
+        <h2 className="font-bold">결제·이용 안내</h2>
+        <ul className="list-disc grid gap-1 pl-5">
+          <li>연 결제는 2개월 할인(10개월 요금)이며, Team 추가 인원도 같은 기준으로 계산합니다. 모든 금액은 부가세 별도입니다.</li>
+          <li>입금 확인 후 이용 기간이 시작됩니다. 같은 요금제를 기간 중에 다시 결제하면 기존 종료일 다음 날부터 이어집니다.</li>
+          <li>기간이 끝나도 입력한 기업정보·진행 관리·메모는 유지되며, 무료 한도를 넘는 새 항목만 추가가 제한됩니다.</li>
+          <li>이용약관·환불 규정은 확정 후 게시합니다.</li>
+        </ul>
+        <p>문의: {pay.contact ?? <span className="text-[var(--muted)]">[운영자 연락처 확정 후 표시]</span>}</p>
         <p><Link className="underline" href="/recommend">우리 기업 공고 보기</Link></p>
       </section>
     </>
