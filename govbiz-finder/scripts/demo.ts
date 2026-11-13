@@ -16,7 +16,6 @@ export const DEMO_ADMIN = { email: "admin@demo.test", password: "DemoAdmin12345"
 process.env.DATABASE_PATH = DB_PATH;
 process.env.DEV_AUTO_APPROVE_COMPANY = "true";
 process.env.DEMO_MODE = "true";
-process.env.PLANS_ENABLED ??= "true"; // 무료 한도(진행 관리 3건)까지 체험
 process.env.BCRYPT_COST ??= "10";
 // 데모 전용 키(운영 키와 섞이지 않도록 항상 덮어씀)
 process.env.APP_HMAC_KEY = "demo-only-hmac-key-not-for-production";

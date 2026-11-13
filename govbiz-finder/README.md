@@ -19,7 +19,7 @@ npm run demo            # data/demo.sqlite 새로 생성 + 데모 계정 + 테�
 npm run demo -- --keep  # 이전 데모 상태 유지
 ```
 - 기업 계정 `demo@demo.test` / `DemoUser12345`, 관리자 `admin@demo.test` / `DemoAdmin12345`(데모 DB 전용).
-- 실제 DB(`data/dev.sqlite`)·운영 키와 분리. 외부 API 호출 없음. 화면 상단에 '데모 모드' 표시. 무료 요금제 한도(진행 관리 3건) 적용 상태.
+- 실제 DB(`data/dev.sqlite`)·운영 키와 분리. 외부 API 호출 없음. 화면 상단에 '데모 모드' 표시. 요금제·한도 없음(모든 기능 무료).
 
 ## 명령
 | 명령 | 설명 |

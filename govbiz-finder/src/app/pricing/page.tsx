@@ -5,12 +5,14 @@ import { getDb } from "@/server/db";
 import { companyPlan, plansEnabled } from "@/server/plans";
 import { PLANS, PLAN_IDS } from "@/domain/plans";
 import { Notice, PageTitle } from "@/components/ui";
+import { notFound } from "next/navigation";
 
 export const metadata: Metadata = { title: "요금 안내", alternates: { canonical: "/pricing" } };
 
 const won = (n: number) => (n === 0 ? "0원" : `${n.toLocaleString()}원`);
 
 export default async function Page() {
+  if (!plansEnabled()) notFound(); // 요금제 미사용(기본) 상태에서는 요금 안내를 노출하지 않음
   const v = await getViewer();
   const plan = v.company ? await companyPlan(await getDb(), v.company.id) : null;
   return (

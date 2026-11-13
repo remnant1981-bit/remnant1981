@@ -7,6 +7,7 @@ import { LogoutButton } from "@/components/LogoutButton";
 import { NavLinks } from "@/components/NavLinks";
 import { getDb } from "@/server/db";
 import { seoulToday } from "@/lib/time";
+import { plansEnabled } from "@/server/plans";
 
 /** 접수 중이며 마감 7일 이내인 관심 공고 수(상단 메뉴 배지) */
 async function soonBookmarkCount(userId: string, companyId: string): Promise<number> {
@@ -66,7 +67,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         </header>
         <main id="main" className="mx-auto max-w-5xl px-4 py-6">{children}</main>
         <footer className="mx-auto max-w-5xl px-4 pb-10 text-xs text-[var(--muted)]">
-          <p className="mb-2"><Link className="underline" href="/pricing">요금 안내</Link></p>
+          {plansEnabled() && <p className="mb-2"><Link className="underline" href="/pricing">요금 안내</Link></p>}
           <p>본 서비스의 정보는 참고용이며 최종 신청 자격·접수 상태는 공식 원문과 담당기관 확인이 기준입니다. 수집 대상으로 연동된 기관의 공고만 제공되며 모든 기관을 포함한다고 보장하지 않습니다.</p>
         </footer>
       </body>

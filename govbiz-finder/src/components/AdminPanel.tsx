@@ -88,7 +88,7 @@ export function AdminPanel() {
             <td><button className="btn btn-ghost" onClick={() => act(api("PUT", `/api/admin/announcements/${a.id}`, { isActive: !a.is_active }))}>{a.is_active ? "비활성화" : "활성화"}</button></td></tr>))}</tbody></table></div>
       </section>
 
-      <section aria-labelledby="sb"><h2 id="sb" className="mb-2 text-lg font-bold">요금제 관리 <span className="text-sm font-normal text-[var(--muted)]">{subs.enabled ? "한도 적용 중(PLANS_ENABLED=true)" : "한도 미적용(판매 전) — 설정만 저장됨"}</span></h2>
+      {subs.enabled && <section aria-labelledby="sb"><h2 id="sb" className="mb-2 text-lg font-bold">요금제 관리 <span className="text-sm font-normal text-[var(--muted)]">{subs.enabled ? "한도 적용 중(PLANS_ENABLED=true)" : "한도 미적용(판매 전) — 설정만 저장됨"}</span></h2>
         <p className="mb-2 text-xs text-[var(--muted)]">입금 확인 후 요금제·이용 종료일을 저장합니다. 체험은 체험 종료일만 넣습니다. 종료일이 지나면 자동으로 무료 한도가 적용되고 데이터는 유지됩니다.</p>
         <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left"><th>기업</th><th>구성원</th><th>현재 적용</th><th>요금제</th><th>인원</th><th>체험 종료</th><th>이용 종료</th><th>메모</th><th></th></tr></thead>
           <tbody>{subs.items.map((r) => (
@@ -103,7 +103,7 @@ export function AdminPanel() {
               <td><input id={`sm-${r.company_id}`} defaultValue={r.memo ?? ""} maxLength={500} className="input !py-1" placeholder="입금일·세금계산서" /></td>
               <td><button className="btn" onClick={() => { const g = (k: string) => (document.getElementById(`${k}-${r.company_id}`) as HTMLInputElement).value; act(api("PUT", "/api/admin/subscriptions", { companyId: r.company_id, plan: g("sp"), seats: g("ss"), trialEndsAt: g("st"), paidUntil: g("su"), memo: g("sm") })); }}>저장</button></td>
             </tr>))}</tbody></table></div>
-      </section>
+      </section>}
       <section aria-labelledby="du"><h2 id="du" className="mb-2 text-lg font-bold">중복 공고 검토</h2>
         {dups.length === 0 ? <p className="text-sm text-[var(--muted)]">복수 원천으로 병합된 공고가 없습니다.</p> : <ul className="list-disc pl-5 text-sm">{dups.map((d) => <li key={d.id}>{d.title} ({d.source_count}개 출처)</li>)}</ul>}
       </section>
