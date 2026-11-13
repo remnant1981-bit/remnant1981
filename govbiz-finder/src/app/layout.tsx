@@ -7,6 +7,7 @@ import { LogoutButton } from "@/components/LogoutButton";
 import { NavLinks } from "@/components/NavLinks";
 import { getDb } from "@/server/db";
 import { seoulToday } from "@/lib/time";
+import { plansEnabled } from "@/server/plans";
 
 /** 접수 중이며 마감 7일 이내인 관심 공고 수(상단 메뉴 배지) */
 async function soonBookmarkCount(userId: string, companyId: string): Promise<number> {
@@ -38,6 +39,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${process.env.NEXT_PUBLIC_ADSENSE_CLIENT}`} />
         )}
         <a href="#main" className="skip-link">본문으로 건너뛰기</a>
+        {process.env.DEMO_MODE === "true" && process.env.NODE_ENV !== "production" && (
+          <div role="note" className="bg-amber-100 px-4 py-1.5 text-center text-xs text-amber-900">
+            <b>데모 모드</b> · 모든 공고는 테스트 데이터
+            {!v.session && <> · 기업 계정 <code>demo@demo.test</code> / <code>DemoUser12345</code> · 관리자 <code>admin@demo.test</code> / <code>DemoAdmin12345</code></>}
+          </div>
+        )}
         <header className="sticky top-0 z-40 border-b border-[var(--line)] bg-white/90 backdrop-blur">
           <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
             <Link href="/" className="flex items-center gap-2 text-lg font-extrabold tracking-tight text-[var(--brand)]">
@@ -60,7 +67,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         </header>
         <main id="main" className="mx-auto max-w-5xl px-4 py-6">{children}</main>
         <footer className="mx-auto max-w-5xl px-4 pb-10 text-xs text-[var(--muted)]">
-          <p className="mb-2"><Link className="underline" href="/pricing">요금 안내</Link></p>
+          {plansEnabled() && <p className="mb-2"><Link className="underline" href="/pricing">요금 안내</Link></p>}
           <p>본 서비스의 정보는 참고용이며 최종 신청 자격·접수 상태는 공식 원문과 담당기관 확인이 기준입니다. 수집 대상으로 연동된 기관의 공고만 제공되며 모든 기관을 포함한다고 보장하지 않습니다.</p>
         </footer>
       </body>
