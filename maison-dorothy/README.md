@@ -1,0 +1,33 @@
+# 메종도로시 주문 페이지
+
+내포 센텀시티 여성복 매장 **메종도로시**의 인스타그램 프로필 링크용 페이지입니다.
+신상 목록 → 사이즈·컬러 선택 → 장바구니 → 주문서(택배/매장 픽업) → 입금 안내까지 한 페이지에서 처리합니다.
+
+- 주소: `https://remnant1981-bit.github.io/remnant1981/maison-dorothy/`
+- 빌드 없음 (정적 HTML/CSS/JS), `main` 병합 시 `.github/workflows/pages.yml`이 자동 게시
+- 로컬 확인: 저장소 루트에서 `python3 -m http.server 8000` → `http://localhost:8000/maison-dorothy/`
+- 테스트: `node --test "tests/maison-dorothy/*.test.js"`
+
+## 파일
+| 파일 | 역할 |
+|---|---|
+| `config.js` | **매장 정보·상품 목록·택배비·주문 접수 주소** — 운영 중 고치는 파일은 이것뿐 |
+| `images/` | 상품 사진 (config.js 의 `img` 에 파일명 입력) |
+| `logic.js` | 장바구니·금액·주문서 검사 (테스트 대상) |
+| `app.js`, `index.html`, `style.css` | 화면 |
+| `order-apps-script.gs` | 주문을 구글 시트에 쌓고 메일 알림 보내는 스크립트 (사장님 구글 계정에 설치, 게시 안 됨) |
+
+## 오픈 전 체크리스트
+1. `config.js` → `store`: 전화번호, 카톡채널 주소, 밴드 주소, 입금 계좌, 사업자 정보(통신판매업 신고번호 포함)
+2. `config.js` → `products`: 실제 상품·가격·실측, 사진은 `images/` 에 넣고 `img` 에 파일명
+3. 구글 시트 + `order-apps-script.gs` 설치 → 웹앱 URL 을 `orderEndpoint` 에 입력
+4. `preview: false` 로 변경, `index.html` 의 `<meta name="robots" content="noindex">` 삭제
+5. 테스트 주문 1건 → 시트·메일 도착 확인 → 인스타 프로필 링크에 주소 등록
+
+## 주문 접수 방식
+- `orderEndpoint` 있음: 주문이 구글 시트 "주문" 탭에 쌓이고 메일 알림. 전송 실패 시 손님에게 카톡 복사 안내
+- `orderEndpoint` 없음: 손님이 주문 내용을 복사해 카톡채널로 보냄
+- 결제는 계좌이체만. 카드결제는 PG 계약이 필요하므로 스마트스토어 연계 등으로 별도 검토
+
+## 개인정보
+주문서에서 성함·연락처·주소를 받으며 수집 동의 체크가 필수입니다. 저장소에는 주문 정보가 남지 않고, 사장님 구글 시트에만 저장됩니다. 계좌·연락처 외의 비밀번호·토큰은 이 저장소(공개)에 넣지 마세요.
