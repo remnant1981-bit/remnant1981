@@ -221,3 +221,26 @@ test('mergeScan: 바코드 판독값 우선, 불일치 표시, URL형 QR 무시'
   m = CW.mergeScan(null, []);
   assert.equal(m.code, ''); assert.equal(m.codeSource, '');
 });
+
+/* ---------- 공유 받기 ---------- */
+test('pickShareImages: 이미지만, 크기·개수 제한', () => {
+  const f = (type, size) => ({ type, size });
+  const r = CW.pickShareImages([f('image/png', 10), f('text/plain', 5), f('image/jpeg', 0), f('image/webp', 21 * 1024 * 1024), f('image/jpeg', 100)]);
+  assert.deepEqual(r.map(x => x.type), ['image/png', 'image/jpeg']);
+  assert.equal(CW.pickShareImages(Array.from({ length: 30 }, () => f('image/png', 1))).length, CW.MAX_SHARE_IMAGES);
+  assert.deepEqual(CW.pickShareImages(null), []);
+  assert.deepEqual(CW.pickShareImages([null, undefined, {}]), []);
+});
+
+test('shareOriginAllowed: 다른 사이트의 POST만 거부', () => {
+  assert.equal(CW.shareOriginAllowed('cross-site'), false);
+  for (const ok of ['none', 'same-origin', 'same-site', null, undefined, '']) assert.equal(CW.shareOriginAllowed(ok), true);
+});
+
+test('isOwnPath: 이 앱 파일만 서비스워커가 처리 (같은 사이트의 다른 앱 제외)', () => {
+  const scope = '/remnant1981/';
+  for (const p of ['/remnant1981/', '/remnant1981/index.html', '/remnant1981/app.js', '/remnant1981/vendor/anthropic-sdk.js']) assert.equal(CW.isOwnPath(p, scope), true, p);
+  for (const p of ['/remnant1981/rnd-budget/', '/remnant1981/rnd-budget/app.js', '/remnant1981/other/x.html', '/elsewhere/app.js']) assert.equal(CW.isOwnPath(p, scope), false, p);
+  assert.equal(CW.isOwnPath('/app.js', '/'), true);
+  assert.equal(CW.isOwnPath('/rnd-budget/index.html', '/'), false);
+});

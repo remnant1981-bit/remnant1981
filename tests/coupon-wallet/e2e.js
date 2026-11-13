@@ -297,6 +297,79 @@ const ICON = path.join(ROOT, 'icon-192.png');
   await p.evaluate(() => { window.__barcodes = undefined; });
   await closeCouponForm();
 
+  /* --- 공유하기로 받기 (Web Share Target) --- */
+  await p.evaluate(() => CWStore.setMeta('apiKey', 'sk-ant-api03-TESTKEY1234'));
+  apiMode = 'ok'; apiCalls.length = 0;
+  const mf = await p.evaluate(async () => (await fetch('manifest.webmanifest')).json());
+  check('매니페스트: share_target(POST·multipart·image/*) 등록', mf.share_target && mf.share_target.method === 'POST' && mf.share_target.enctype === 'multipart/form-data' &&
+    mf.share_target.params.files[0].name === 'image' && mf.share_target.params.files[0].accept.includes('image/*'));
+  // 브라우저가 공유 시 보내는 것과 같은 multipart POST를 서비스워커로 보냄 (303 리다이렉트는 opaqueredirect로 관찰됨)
+  const postShare = ({ n = 0, type = 'image/png', fields = {} }) => p.evaluate(async ({ n, type, fields }) => {
+    const blob = await (await fetch('icon-192.png')).blob();
+    const fd = new FormData();
+    for (let i = 0; i < n; i++) fd.append('image', new File([blob], `g${i}.png`, { type }));
+    for (const [k, v] of Object.entries(fields)) fd.append(k, v);
+    return (await fetch('share-target', { method: 'POST', body: fd, redirect: 'manual' })).type;
+  }, { n, type, fields });
+  // Blob은 evaluate 결과로 직렬화되지 않으므로 페이지 안에서 요약해서 가져옴
+  const pending = () => p.evaluate(async () => { const d = await CWStore.getMeta('pendingShare'); return d ? { items: d.items.map(i => ({ type: i.type, size: i.blob.size, isBlob: i.blob instanceof Blob })), text: d.text } : null; });
+  const formReady = () => p.waitForFunction(() => document.querySelector('#dlg-coupon').open && !document.querySelector('#scan-status').textContent.includes('분석하는 중') && !document.querySelector('#scan-status').hidden);
+  const sharedTitle = () => p.locator('#coupon-form-title').innerText();
+  const saveForm = async () => { await p.click('#form-coupon button[type=submit]'); };
+
+  // 1장: 공유 → 앱이 열리며 자동 인식까지
+  const before = (await db()).coupons.length;
+  check('공유 수신: 서비스워커가 POST를 받아 리다이렉트', (await postShare({ n: 1 })) === 'opaqueredirect');
+  const held = await pending();
+  check('공유 수신: 사진이 IndexedDB에 보관됨', held && held.items.length === 1 && held.items[0].type === 'image/png' && held.items[0].size > 0 && held.items[0].isBlob);
+  await p.goto(base + '?share=image'); await formReady();
+  check('공유 1장: 폼이 열리고 자동 인식·번호·사진 첨부', (await sharedTitle()).includes('공유') && await p.inputValue('#form-coupon [name=brand]') === '스타벅스' &&
+    await p.inputValue('#form-coupon [name=code]') === '123456789012' && await p.locator('#img-preview img').count() === 1 && apiCalls.length === 1);
+  check('공유 1장: 주소의 share 파라미터 제거', !p.url().includes('share='));
+  await saveForm(); await dlgClosed('#dlg-coupon'); await settle();
+  check('공유 1장: 저장 후 대기열 비움', (await db()).coupons.length === before + 1 && (await pending()) === null);
+
+  // 2장: 저장하면 바로 다음 사진
+  await postShare({ n: 2 }); await p.goto(base + '?share=image'); await formReady();
+  check('공유 2장: 첫 폼에 진행 표시(1/2)', (await sharedTitle()).includes('1/2'));
+  await saveForm();
+  await p.waitForFunction(() => document.querySelector('#dlg-coupon').open && document.querySelector('#coupon-form-title').textContent.includes('2/2'));
+  await formReady();
+  check('공유 2장: 저장하면 다음 사진(2/2)이 자동으로 열려 인식', apiCalls.length === 3 && await p.inputValue('#form-coupon [name=brand]') === '스타벅스');
+  await p.click('#dlg-coupon [data-action=close-dialog]'); await dlgClosed('#dlg-coupon'); await settle();
+  check('공유 2장: 마지막 사진을 건너뛰면 대기열 비움·추가 안내 없음', (await db()).coupons.length === before + 2 && (await pending()) === null && !(await text('#toast')).includes('남은 공유 사진'));
+
+  // 건너뛰기 → 이어서 처리 / 앱을 닫았다 열어도 남은 사진 유지
+  await postShare({ n: 2 }); await p.goto(base + '?share=image'); await formReady();
+  await p.click('#dlg-coupon [data-action=close-dialog]'); await dlgClosed('#dlg-coupon'); await settle();
+  await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('남은 공유 사진 1장'));
+  check('건너뛰기: 남은 사진 안내 + 대기열에 1장 유지', (await pending()).items.length === 1);
+  await p.goto(base); await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('처리하지 않은 공유 사진 1장'));
+  await p.click('#toast [data-action=toast-action]'); await formReady();
+  check('앱 재실행 후에도 남은 공유 사진을 이어서 처리', (await sharedTitle()).includes('공유') && await p.inputValue('#form-coupon [name=brand]') === '스타벅스');
+  await saveForm(); await dlgClosed('#dlg-coupon'); await settle();
+  check('이어서 처리 완료: 대기열 비움', (await pending()) === null && (await db()).coupons.length === before + 3);
+
+  // 글만 공유 / 이미지가 아닌 파일 / 차단·오류
+  check('글만 공유: 서비스워커가 보관', (await postShare({ fields: { title: '기프티콘', text: '스타벅스 아메리카노 ~2026-12-31', url: 'https://example.com/g' } })) === 'opaqueredirect');
+  await p.goto(base + '?share=text'); await p.waitForSelector('#dlg-coupon[open]');
+  const memo = await p.inputValue('#form-coupon [name=memo]');
+  check('글만 공유: 메모에 제목·본문·링크를 넣고 직접 입력 안내', memo.includes('기프티콘') && memo.includes('~2026-12-31') && memo.includes('https://example.com/g') && (await text('#toast')).includes('메모에 넣었음') && (await pending()) === null);
+  await closeCouponForm();
+  await postShare({ n: 1, type: 'text/plain' }); await p.goto(base + '?share=none');
+  await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('공유된 내용이 없음'));
+  check('이미지가 아닌 파일만 공유: 보관하지 않고 안내', (await pending()) === null && await p.locator('#dlg-coupon[open]').count() === 0);
+  await p.goto(base + '?share=blocked');
+  await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('공유를 받지 못함'));
+  check('차단·오류 상태: 안내 표시', true);
+
+  // 같은 사이트의 다른 앱(/rnd-budget/)은 서비스워커가 캐시·가로채지 않음
+  await ctx.route('**/rnd-budget/**', r => r.fulfill({ status: 200, headers: { 'content-type': 'text/plain', 'access-control-allow-origin': '*' }, body: 'other-app' }));
+  const other = await p.evaluate(async () => (await fetch('rnd-budget/a.txt')).text());
+  const cachedOther = await p.evaluate(async () => { for (const k of await caches.keys()) for (const r of await (await caches.open(k)).keys()) if (r.url.includes('rnd-budget')) return true; return false; });
+  check('다른 앱 경로(/rnd-budget/): 응답은 그대로, 서비스워커 캐시에 저장 안 됨', other === 'other-app' && !cachedOther);
+  await p.evaluate(() => CWStore.setMeta('apiKey', ''));
+
   /* --- 영속성 --- */
   await settle();
   const countBefore = (await db()).coupons.length;
