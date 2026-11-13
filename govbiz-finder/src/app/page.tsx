@@ -10,12 +10,14 @@ import { Empty, Notice } from "@/components/ui";
 import { formatSeoul } from "@/lib/time";
 import { searchWithMatches } from "@/server/recommend";
 import { AdSlot } from "@/components/AdSlot";
+import { companyPlan } from "@/server/plans";
 import { pipelineStages } from "@/server/pipeline";
 import { InstallApp } from "@/components/InstallApp";
 
 export default async function Home() {
   const db = await getDb();
   const v = await getViewer();
+  const adPlan = await companyPlan(db, v.company?.id);
   const [open, soon, fresh, facets, meta] = await Promise.all([
     searchAnnouncements(db, parseSearchParams({ status: "open", sort: "latest", size: "5" })),
     searchAnnouncements(db, parseSearchParams({ soon: "1", sort: "deadline", size: "5" })),
@@ -93,7 +95,7 @@ export default async function Home() {
       {await section("접수 중 공고", "open", open, "/search?status=open&sort=latest")}
       {await section("마감 임박 (7일 이내)", "soon", soon, "/search?soon=1&sort=deadline")}
       {await section("신규 등록 공고", "new", fresh, "/search?sort=latest")}
-      <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_HOME} className="mt-8" />
+      <AdSlot show={adPlan.limits.ads} slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_HOME} className="mt-8" />
       <p className="sr-only">{facets.organizations.length}개 기관</p>
     </>
   );

@@ -5,7 +5,10 @@ import { nowIso, isValidYmd } from "@/lib/time";
 import { ApiError } from "./auth";
 import type { Db } from "./db";
 import { requireCompanyAccess } from "./company";
-import { STAGE_IDS } from "@/domain/pipeline";
+import { STAGES, STAGE_IDS } from "@/domain/pipeline";
+import { companyPlan, planLimitError } from "./plans";
+
+const DONE = STAGES.filter((s) => s.done).map((s) => s.id) as readonly string[];
 
 const ID = /^[0-9a-f]{32}$/;
 const NOTE_MAX = 2000;
@@ -57,9 +60,19 @@ export async function savePipelineItem(db: Db, userId: string, input: { announce
     if (typeof input.stage !== "string" || !STAGE_IDS.includes(input.stage)) throw new ApiError(400, "invalid_input", "진행 단계 값이 올바르지 않습니다.");
     stage = input.stage;
   }
+  const plan = await companyPlan(db, cid);
+  // 요금제 한도: 진행 중 건수(선정·탈락·포기 제외). 새로 진행 중이 되는 경우에만 검사(기존 건 수정·완료 처리는 항상 허용)
+  const becomesActive = !DONE.includes(stage) && (!cur || DONE.includes(cur.stage));
+  if (becomesActive && Number.isFinite(plan.limits.pipelineActive)) {
+    const n = await db.get<{ n: number }>(`SELECT COUNT(*) AS n FROM pipeline_items WHERE company_id=? AND stage NOT IN (${DONE.map(() => "?").join(",")})`, [cid, ...DONE]);
+    if (Number(n?.n ?? 0) >= plan.limits.pipelineActive) {
+      throw planLimitError(`${plan.label} 요금제는 진행 중인 공고를 ${plan.limits.pipelineActive}건까지 관리할 수 있습니다. 끝난 건을 선정·탈락·포기로 바꾸거나 요금제를 변경해 주세요.`);
+    }
+  }
   let assignee = cur?.assignee_user_id ?? null;
   if (input.assigneeUserId !== undefined) {
     if (input.assigneeUserId === null || input.assigneeUserId === "") assignee = null;
+    else if (!plan.limits.assignees) throw planLimitError("담당자 지정은 Team 요금제에서 사용할 수 있습니다.");
     else {
       // 담당자는 같은 기업의 확인 완료된 구성원만
       const ok = typeof input.assigneeUserId === "string" && (await listMembers(db, cid)).some((m) => m.id === input.assigneeUserId);

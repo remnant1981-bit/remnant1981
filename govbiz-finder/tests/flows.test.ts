@@ -216,6 +216,54 @@ describe("사용자 시나리오 (TEST_PLAN §4)", () => {
     expect(detail).not.toContain("A사 내부 메모");
   });
 
+  it("요금제: 기본은 한도 미적용, PLANS_ENABLED=true 이면 무료 한도·담당자·내보내기 제한, 관리자만 설정", async () => {
+    const c = await member();
+    const ids = ((await c.call("GET", "/api/announcements?size=50")).body.rows as any[]).map((r) => r.id);
+    // 판매 전(기본): 한도 없음
+    for (const id of ids.slice(0, 4)) expect((await c.call("POST", "/api/pipeline", { announcementId: id })).status).toBe(200);
+    for (const id of ids.slice(0, 4)) await c.call("DELETE", "/api/pipeline", { announcementId: id });
+    process.env.PLANS_ENABLED = "true";
+    try {
+      for (const id of ids.slice(0, 3)) expect((await c.call("POST", "/api/pipeline", { announcementId: id })).status).toBe(200);
+      const blocked = await c.call("POST", "/api/pipeline", { announcementId: ids[3] });
+      expect(blocked.status).toBe(403);
+      expect(blocked.body.error).toBe("plan_limit");
+      // 기존 건 수정·완료 처리는 허용, 완료하면 자리가 생김
+      expect((await c.call("POST", "/api/pipeline", { announcementId: ids[0], stage: "preparing" })).status).toBe(200);
+      expect((await c.call("POST", "/api/pipeline", { announcementId: ids[0], stage: "dropped" })).status).toBe(200);
+      expect((await c.call("POST", "/api/pipeline", { announcementId: ids[3] })).status).toBe(200);
+      // 완료 건을 다시 진행 중으로 돌리는 것도 한도 검사
+      expect((await c.call("POST", "/api/pipeline", { announcementId: ids[0], stage: "reviewing" })).status).toBe(403);
+      // 담당자 지정은 Team 전용
+      const me = (await c.call("GET", "/api/pipeline")).body.members[0].id;
+      expect((await c.call("POST", "/api/pipeline", { announcementId: ids[1], assigneeUserId: me })).body.error).toBe("plan_limit");
+      // 내보내기 50건 제한(무료·비회원)
+      const csv = await (await c.call("GET", "/api/export/csv?size=50")).res.text();
+      expect(csv.trim().split("\n").length - 1).toBeLessThanOrEqual(50);
+      // 관리자만 요금제 설정 가능
+      expect((await c.call("GET", "/api/admin/subscriptions")).status).toBe(404); // 일반 사용자에게는 관리자 API 존재 자체를 숨김
+      const admin = await client(handlers);
+      await admin.call("POST", "/api/auth/login", { email: "admin@example.test", password: "AdminPass12345" });
+      await admin.call("GET", "/api/auth/me");
+      const list = (await admin.call("GET", "/api/admin/subscriptions")).body;
+      expect(list.enabled).toBe(true);
+      const cid = list.items[0].company_id;
+      expect((await admin.call("PUT", "/api/admin/subscriptions", { companyId: cid, plan: "gold" })).status).toBe(400);
+      expect((await admin.call("PUT", "/api/admin/subscriptions", { companyId: cid, plan: "team", paidUntil: "2026-02-30" })).status).toBe(400);
+      expect((await admin.call("PUT", "/api/admin/subscriptions", { companyId: cid, plan: "team", seats: 5, trialEndsAt: "2999-12-31" })).body).toMatchObject({ plan: "team", status: "trial" });
+      expect((await db.get<any>("SELECT COUNT(*) n FROM admin_audit_logs WHERE action='subscription.set'")).n).toBe(1);
+      // Team 체험: 한도 해제·담당자 지정 가능
+      expect((await c.call("POST", "/api/pipeline", { announcementId: ids[4] })).status).toBe(200);
+      expect((await c.call("POST", "/api/pipeline", { announcementId: ids[1], assigneeUserId: me })).status).toBe(200);
+      // 기간 만료 → 무료 한도로 복귀, 데이터 유지
+      await admin.call("PUT", "/api/admin/subscriptions", { companyId: cid, plan: "team", paidUntil: "2000-01-01" });
+      expect((await c.call("POST", "/api/pipeline", { announcementId: ids[5] })).status).toBe(403);
+      expect((await c.call("GET", "/api/pipeline")).body.items.length).toBe(5);
+    } finally {
+      delete process.env.PLANS_ENABLED;
+    }
+  });
+
   it("현재 검색 조건으로 CSV/XLSX/PDF 내보내기", async () => {
     const c = await member();
     await c.call("PUT", "/api/company", { region_sido: "경기도", established_at: "2024-01-01" });

@@ -1,5 +1,6 @@
 import { route, json, readJson, type Ctx } from "./api";
 import { guestProfileFromCookie } from "./viewer";
+import { companyPlan, listSubscriptions, plansEnabled, setSubscription } from "./plans";
 import { addPipelineNote, listPipeline, removePipelineItem, removePipelineNote, savePipelineItem } from "./pipeline";
 import { guestChecksFromCookie, loadCompanyChecks, saveCompanyCheck } from "./checks";
 import type { CompanyView } from "./company";
@@ -149,7 +150,8 @@ export const handlers: Record<string, (req: Request, ...a: any[]) => Promise<Res
     if (format !== "csv" && format !== "xlsx" && format !== "pdf") throw new ApiError(404, "not_found", "찾을 수 없습니다.");
     const p = searchOf(req);
     const v = await viewerCompany(c, req); // 회원 기업정보 또는 비회원 본인 브라우저 정보로만 적합성 포함
-    const limit = 2000;
+    const plan = await companyPlan(c.db, v.companyId); // 비회원·미확인 기업은 무료 한도
+    const limit = plan.limits.exportRows;
     let rows;
     if (v.profile && (p.sort === "fit" || p.eligible || p.metOnly)) rows = (await searchWithMatches(c.db, { ...p, page: 1, pageSize: limit }, v.profile)).rows;
     else rows = await attachMatches(c.db, await searchAllForExport(c.db, p, limit), v.profile);
@@ -260,6 +262,8 @@ export const handlers: Record<string, (req: Request, ...a: any[]) => Promise<Res
     await audit(c.db, c.session!.user.id, `claim.${b.decision}`, "company", b.companyId);
     return { ok: true };
   }),
+  "GET /api/admin/subscriptions": route({ auth: "admin" }, async (_req, c) => ({ items: await listSubscriptions(c.db), enabled: plansEnabled() })),
+  "PUT /api/admin/subscriptions": route({ auth: "admin" }, async (req, c) => setSubscription(c.db, c.session!.user.id, await readJson(req))),
   "GET /api/admin/duplicates": route({ auth: "admin" }, async (_req, c) => ({ items: await listDuplicates(c.db) })),
   "GET /api/admin/audit": route({ auth: "admin" }, async (_req, c) => ({
     items: await c.db.all("SELECT id,admin_user_id,action,target_type,target_id,created_at,metadata_redacted_json FROM admin_audit_logs ORDER BY created_at DESC LIMIT 100"),

@@ -17,6 +17,7 @@ import { PrintButton } from "@/components/PrintButton";
 import { seoulToday, formatSeoul } from "@/lib/time";
 import { FormattedText } from "@/components/FormattedText";
 import { AdSlot } from "@/components/AdSlot";
+import { companyPlan } from "@/server/plans";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -50,6 +51,7 @@ export default async function Detail({ params }: Props) {
   const a = await getAnnouncement(db, id);
   if (!a) notFound();
   const [extras, v] = await Promise.all([getAnnouncementExtras(db, a.id), getViewer()]);
+  const adPlan = await companyPlan(db, v.company?.id);
   let match = null;
   let bookmarked = false;
   if (v.profile) match = evaluateMatch((await loadRules(db, [a.id])).get(a.id) ?? [], v.profile, seoulToday(), a.id);
@@ -78,7 +80,7 @@ export default async function Detail({ params }: Props) {
         <div className="mt-3"><Provenance url={a.canonical_url} sourceName={a.source_name} sourceStatus={a.source_status} checkedAt={a.last_checked_at} /></div>
       </header>
 
-      {v.company && v.session && <PipelinePanel announcementId={a.id} me={v.session.user.email} members={await listMembers(db, v.company.id)} item={await getPipelineItem(db, v.company.id, a.id)} />}
+      {v.company && v.session && <PipelinePanel announcementId={a.id} me={v.session.user.email} members={(await companyPlan(db, v.company.id)).limits.assignees ? await listMembers(db, v.company.id) : []} item={await getPipelineItem(db, v.company.id, a.id)} />}
 
       {a.source_status === "mock" && <Notice tone="warn">이 공고는 개발용 <strong>테스트(모의) 데이터</strong>이며 실제 공고가 아닙니다.</Notice>}
       {a.status_basis === "estimated" && a.application_status !== "unknown" && <Notice>접수 상태는 접수 기간 날짜로 <strong>추정</strong>한 값입니다. 정확한 상태는 공식 원문에서 확인하세요.</Notice>}
@@ -127,7 +129,7 @@ export default async function Detail({ params }: Props) {
         <section className="card p-4 text-sm"><h2 className="mb-2 font-bold">동일 공고를 확인한 출처</h2>
           <ul className="list-disc pl-5">{extras.sources.map((s) => <li key={s.source_id + s.url}>{s.name} · <a className="underline" href={s.url} target="_blank" rel="noopener noreferrer nofollow">원문</a> · 최초 확인 {formatSeoul(s.first_seen_at)}</li>)}</ul></section>
       )}
-      <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_DETAIL} />
+      <AdSlot show={adPlan.limits.ads} slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_DETAIL} />
       <p className="text-xs text-[var(--muted)]">분야: {a.category_ids?.split(",").map(categoryName).join(", ")} · 최초 수집 {formatSeoul(a.first_collected_at)}</p>
     </article>
   );

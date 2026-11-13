@@ -11,6 +11,7 @@ import { SearchForm } from "@/components/SearchForm";
 import { Empty, Notice, PageTitle } from "@/components/ui";
 import { Pager } from "@/components/Pager";
 import { AdSlot } from "@/components/AdSlot";
+import { companyPlan } from "@/server/plans";
 import { Fragment } from "react";
 
 export const metadata: Metadata = { title: "공고 검색", alternates: { canonical: "/search" } };
@@ -20,6 +21,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   const p = parseSearchParams(sp);
   const db = await getDb();
   const v = await getViewer();
+  const adPlan = await companyPlan(db, v.company?.id);
   const [res, facets, total] = await Promise.all([
     searchWithMatches(db, p, v.profile),
     listFacets(db),
@@ -52,7 +54,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         ) : res.rows.map((r, i) => (
           <Fragment key={r.id}>
             <AnnouncementCard r={r} canBookmark={!!v.company} bookmarked={marks.has(r.id)} stage={stages.get(r.id)} />
-            {i === 4 && <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_LIST} />}
+            {i === 4 && <AdSlot show={adPlan.limits.ads} slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_LIST} />}
           </Fragment>
         ))}
       </div>
