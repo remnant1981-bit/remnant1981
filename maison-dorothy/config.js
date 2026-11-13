@@ -21,6 +21,8 @@ window.DOROTHY = {
     bandUrl: '',                     // 네이버 밴드 주소 (비우면 숨김)
     mapUrl: 'https://map.naver.com/p/search/' + encodeURIComponent('홍성군 홍북읍 청사로 146 센텀시티'),
     bank: '○○은행 000-000-000000 (예금주 ○○○)',
+    // 개인정보처리방침·교환환불 안내에 쓰는 정보 (policy.html)
+    policy: { officer: '○○○ (대표)', contact: '010-0000-0000', email: '○○○@○○○.com', effective: '2026년 ○월 ○일' },
     business: '상호 메종도로시 · 대표 ○○○ · 사업자등록번호 000-00-00000 · 통신판매업 신고 제0000-충남홍성-0000호'
   },
 
@@ -48,6 +50,10 @@ window.DOROTHY = {
   /* 주문 접수 주소: 구글 Apps Script 웹앱 URL (order-apps-script.gs 안내 참고).
    * 비워두면 손님이 주문 내용을 복사해 DM·카톡으로 보내는 방식으로 동작합니다. */
   orderEndpoint: '',
+
+  /* 상품표 주소: 구글 시트 '상품' 탭을 읽는 Apps Script 웹앱 URL (보통 orderEndpoint 와 같은 주소).
+   * 넣으면 아래 products 대신 시트의 상품이 보입니다. 시트를 못 읽으면 아래 products 로 보입니다. */
+  productsUrl: '',
 
   categories: ['아우터', '조끼', '원피스', '상의', '하의'],
 

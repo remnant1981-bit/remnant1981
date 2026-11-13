@@ -99,6 +99,49 @@
     return { open: false, text: '영업 시간 확인 중' };
   }
 
+  /* ---------- 구글 시트 상품표 → 상품 목록 ---------- */
+  // 사진 칸: 파일명(images 폴더), https 주소, 구글 드라이브 공유 링크 모두 허용. 그 밖의 값은 버림(보안)
+  function normalizeImg(v) {
+    const t = String(v || '').trim();
+    if (!t) return '';
+    const drive = t.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=\w+&)?id=)([\w-]{10,})/);
+    if (drive) return `https://drive.google.com/thumbnail?id=${drive[1]}&sz=w1000`;
+    if (/^https:\/\/[^\s"'<>()\\]+$/.test(t)) return t;
+    if (/^[\w.-]+\.(jpe?g|png|webp)$/i.test(t)) return t;
+    return '';
+  }
+  const list = v => String(v || '').split(/[,/·]/).map(x => x.trim()).filter(Boolean).slice(0, 12);
+  const yes = v => /^(y|yes|o|예|네|true|품절|1)$/i.test(String(v || '').trim());
+  const no = v => /^(n|no|x|아니오|아니요|숨김|false|0)$/i.test(String(v || '').trim());
+  const HEAD = { 노출: 'show', 아이디: 'id', id: 'id', 분류: 'cat', 상품명: 'name', 가격: 'price', 배지: 'badge', 사진: 'img', 추가사진: 'gallery',
+    컬러: 'colors', 사이즈: 'sizes', 추천사이즈: 'fit', 설명: 'desc', 코디팁: 'tip', 인스타링크: 'post', 함께입기: 'pair', 품절: 'soldOut' };
+  function parseSheet(rows) {
+    if (!Array.isArray(rows)) return null;
+    const hi = rows.findIndex(r => Array.isArray(r) && r.some(c => String(c).trim() === '상품명'));
+    if (hi < 0) return null;
+    const keys = rows[hi].map(c => HEAD[String(c).replace(/\s/g, '')] || '');
+    const out = [], seen = new Set();
+    rows.slice(hi + 1).forEach((r, n) => {
+      if (!Array.isArray(r)) return;
+      const o = {}; keys.forEach((k, i) => { if (k) o[k] = String(r[i] == null ? '' : r[i]).trim(); });
+      if (!o.name || no(o.show)) return;
+      let id = /^[\w-]{1,30}$/.test(o.id || '') ? o.id : `r${hi + n + 2}`;
+      if (seen.has(id)) return; seen.add(id);
+      const price = Number(String(o.price || '').replace(/[^\d]/g, ''));
+      const fm = String(o.fit || '').match(/(\d{2})\s*[~\-–]\s*(\d{2})/);
+      const badge = /^(new|신상)$/i.test(o.badge || '') ? 'NEW' : (o.badge || '').slice(0, 10);
+      const post = /^https:\/\/(www\.)?instagram\.com\/[^\s"'<>]+$/.test(o.post || '') ? o.post : '';
+      out.push({
+        id, cat: (o.cat || '기타').slice(0, 10), name: o.name.slice(0, 40), price: price > 0 ? price : null,
+        badge: badge || undefined, img: normalizeImg(o.img), gallery: String(o.gallery || '').split(/[\s,]+/).map(normalizeImg).filter(Boolean).slice(0, 6),
+        colors: list(o.colors), sizes: list(o.sizes).length ? list(o.sizes) : undefined, fit: fm ? [Number(fm[1]), Number(fm[2])] : undefined,
+        desc: (o.desc || '').slice(0, 400), tip: (o.tip || '').slice(0, 200), post, pair: list(o.pair), soldOut: yes(o.soldOut)
+      });
+    });
+    out.forEach(p => { p.pair = p.pair.filter(id => seen.has(id) && id !== p.id); });
+    return out.length ? out : null;
+  }
+
   const isPhone = s => /^0\d{1,2}-?\d{3,4}-?\d{4}$/.test(String(s || '').trim());
 
   function validate(o) {
@@ -131,7 +174,7 @@
     ].join('\n');
   }
 
-  const api = { won, hasPrice, priceLabel, lineKey, addLine, removeOne, changeQty, totals, freeShipLeft, formatPhone, openStatus, sizeOptions, fitLabel, fitsSize, isPhone, validate, orderNo, orderText };
+  const api = { won, hasPrice, priceLabel, lineKey, addLine, removeOne, changeQty, totals, freeShipLeft, formatPhone, openStatus, normalizeImg, parseSheet, sizeOptions, fitLabel, fitsSize, isPhone, validate, orderNo, orderText };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.DLogic = api;
 })(typeof self !== 'undefined' ? self : this);

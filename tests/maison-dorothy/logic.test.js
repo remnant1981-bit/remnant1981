@@ -124,3 +124,42 @@ test('openStatus: 영업 중·오픈 전·마감 후·일요일 휴무', () => {
   assert.match(L.openStatus(new Date(2026, 10, 14, 21, 0), S).text, /월요일 10:00/);     // 토 21시 → 일 휴무
   assert.match(L.openStatus(new Date(2026, 10, 15, 12, 0), S).text, /내일 10:00/);       // 일 12시
 });
+
+test('normalizeImg: 파일명·https·드라이브 링크 허용, 위험한 값 거부', () => {
+  assert.equal(L.normalizeImg('coat.jpg'), 'coat.jpg');
+  assert.equal(L.normalizeImg('https://example.com/a.jpg'), 'https://example.com/a.jpg');
+  assert.equal(L.normalizeImg('https://drive.google.com/file/d/1AbCdEfGhIjKlMn/view?usp=sharing'), 'https://drive.google.com/thumbnail?id=1AbCdEfGhIjKlMn&sz=w1000');
+  assert.equal(L.normalizeImg('https://drive.google.com/open?id=1AbCdEfGhIjKlMn'), 'https://drive.google.com/thumbnail?id=1AbCdEfGhIjKlMn&sz=w1000');
+  assert.equal(L.normalizeImg('http://example.com/a.jpg'), '');
+  assert.equal(L.normalizeImg('javascript:alert(1)'), '');
+  assert.equal(L.normalizeImg('x" onerror="alert(1).jpg'), '');
+  assert.equal(L.normalizeImg('../secret.jpg'), '');
+});
+
+test('parseSheet: 머리줄 찾기, 숨김·빈 줄 제외, 값 정리', () => {
+  const rows = [
+    ['메종도로시 상품표'],
+    ['노출', '아이디', '분류', '상품명', '가격', '배지', '사진', '추가사진', '컬러', '사이즈', '추천사이즈', '설명', '코디팁', '인스타링크', '함께입기', '품절'],
+    ['Y', 'c1', '아우터', '울 코트', '89,000원', '신상', 'coat.jpg', 'https://a.com/1.jpg, https://a.com/2.jpg', '베이지, 블랙', '', '66~88', '설명', '팁', 'https://www.instagram.com/p/X/', 'c2, zz', 'N'],
+    ['', 'c2', '하의', '청바지', '', '', 'jean.jpg', '', '', 'S/M/L', '', '', '', 'https://evil.com', 'c1', '품절'],
+    ['N', 'c3', '상의', '숨긴 옷', '1000'],
+    ['Y', '', '상의', '아이디 없는 옷', '20000'],
+    ['Y', 'c1', '상의', '중복 아이디', '1'],
+    ['Y', 'c5', '', '']
+  ];
+  const p = L.parseSheet(rows);
+  assert.deepEqual(p.map(x => x.id), ['c1', 'c2', 'r6']);
+  assert.equal(p[0].price, 89000);
+  assert.equal(p[0].badge, 'NEW');
+  assert.deepEqual(p[0].gallery, ['https://a.com/1.jpg', 'https://a.com/2.jpg']);
+  assert.deepEqual(p[0].colors, ['베이지', '블랙']);
+  assert.deepEqual(p[0].fit, [66, 88]);
+  assert.deepEqual(p[0].pair, ['c2']);
+  assert.equal(p[0].soldOut, false);
+  assert.equal(p[1].price, null);
+  assert.deepEqual(p[1].sizes, ['S', 'M', 'L']);
+  assert.equal(p[1].post, '');
+  assert.equal(p[1].soldOut, true);
+  assert.equal(L.parseSheet([['아무거나']]), null);
+  assert.equal(L.parseSheet(null), null);
+});

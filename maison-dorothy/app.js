@@ -1,5 +1,5 @@
-/* 메종도로시 화면 — 설정(config.js)과 로직(logic.js)을 읽어 그림 */
-(function () {
+/* 메종도로시 화면 — 설정(config.js)과 로직(logic.js)을 읽어 그림. 상품은 구글 시트(productsUrl)가 있으면 그쪽이 우선 */
+window.DorothyApp = function () {
   'use strict';
   const C = window.DOROTHY, L = window.DLogic, S = C.store;
   const $ = id => document.getElementById(id);
@@ -8,9 +8,9 @@
   const byId = id => C.products.find(p => p.id === id);
   const askUrl = S.kakaoUrl || S.dmUrl || S.instagram;   // 문의 창구: 카톡채널 > 인스타 DM
   const askName = S.kakaoUrl ? '카톡' : 'DM';
-  const src = f => (window.__IMG && window.__IMG[f]) || `images/${f}`;   // 미리보기 번들에서는 내장 이미지 사용
+  const src = f => (/^https:/.test(f) ? f : (window.__IMG && window.__IMG[f]) || `images/${f}`);   // 시트의 https 사진 / 미리보기 번들 내장 이미지 / images 폴더
   const arrow = '<svg><use href="#i-arrow"/></svg>';
-  const thumb = f => (window.__IMG && window.__IMG['t/' + f]) || `images/t/${f}`;   // 작은 정사각 썸네일(180px)
+  const thumb = f => (/^https:/.test(f) ? f : (window.__IMG && window.__IMG['t/' + f]) || `images/t/${f}`);   // 작은 정사각 썸네일(180px)
   const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') || d; } catch (e) { return d; } };
   const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 저장 불가 */ } };
   const wish = new Set(load('dorothy-wish', []).filter(id => byId(id)));
@@ -48,7 +48,7 @@
   addEventListener('scroll', onScroll, { passive: true }); onScroll();
 
   /* ---------- 상품 카드 ---------- */
-  const img = (file, alt, lazy = true, cls = '') => `<img${cls ? ` class="${cls}"` : ''} src="${src(file)}" alt="${esc(alt)}" width="720" height="900"${lazy ? ' loading="lazy" decoding="async"' : ''}>`;
+  const img = (file, alt, lazy = true, cls = '') => !file ? '' : `<img${cls ? ` class="${cls}"` : ''} src="${src(file)}" alt="${esc(alt)}" width="720" height="900"${lazy ? ' loading="lazy" decoding="async"' : ''}>`;
   const tag = p => p.soldOut ? '<span class="tag out">Sold out</span>'
     : p.badge === 'NEW' ? '<span class="tag">New</span>'
     : p.badge ? `<span class="tag rec">${esc(p.badge)}</span>` : '';
@@ -91,7 +91,8 @@
   /* ---------- 필터 ---------- */
   let cat = 'all', mySize = 0;
   try { mySize = Number(localStorage.getItem('dorothy-size')) || 0; } catch (e) { /* 없음 */ }
-  $('filters').innerHTML = ['all', ...C.categories]
+  const cats = () => [...new Set([...(C.categories || []), ...C.products.map(p => p.cat)])].filter(c => C.products.some(p => p.cat === c));
+  $('filters').innerHTML = ['all', ...cats()]
     .map(c => `<button type="button" data-v="${esc(c)}" aria-pressed="${c === 'all'}">${c === 'all' ? '전체' : esc(c)}</button>`).join('');
   $('mySize').innerHTML = [0, 66, 77, 88, 99]
     .map(s => `<button type="button" data-v="${s}" aria-pressed="${s === mySize}">${s || '전체'}</button>`).join('');
@@ -511,4 +512,38 @@
   openFromHash();
 
   render(); bar(); syncWish(); drawRecent(); tabState();
+
+  // 시트에서 새 상품표가 오면 목록만 다시 그림 (스토리·사장님 픽은 다음 방문부터 반영)
+  return {
+    update(list) {
+      C.products = list;
+      if (cat !== 'all' && !list.some(p => p.cat === cat)) cat = 'all';
+      $('filters').innerHTML = ['all', ...cats()].map(c => `<button type="button" data-v="${esc(c)}" aria-pressed="${c === cat}">${c === 'all' ? '전체' : esc(c)}</button>`).join('');
+      cart = cart.filter(x => byId(x.id) && !byId(x.id).soldOut).map(x => ({ ...x, price: L.hasPrice(byId(x.id)) ? byId(x.id).price : null }));
+      save(); render(); bar(); syncWish(); drawRecent();
+    }
+  };
+};
+
+/* ---------- 시작: 구글 시트 상품표를 불러온 뒤 화면 시작 ----------
+ * 1) 지난번에 받아 둔 상품표가 있으면 바로 그걸로 시작하고, 뒤에서 새로 받아 바뀐 게 있으면 목록 갱신
+ * 2) 처음 온 손님은 최대 2.5초 기다렸다가 시작 (못 받으면 config.js 상품으로 시작) */
+(function boot() {
+  const C = window.DOROTHY, L = window.DLogic, KEY = 'dorothy-sheet';
+  if (!C.productsUrl) { window.DorothyApp(); return; }
+  let cached = null;
+  try { cached = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { cached = null; }
+  const fetchSheet = ms => {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms);
+    return fetch(C.productsUrl + (C.productsUrl.includes('?') ? '&' : '?') + 'products=1', { signal: ctl.signal, cache: 'no-store' })
+      .then(r => r.json()).then(d => L.parseSheet(d && d.rows)).catch(() => null).finally(() => clearTimeout(t));
+  };
+  const keep = list => { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (e) { /* 저장 불가 */ } };
+  if (cached && cached.length) {
+    C.products = cached;
+    const app = window.DorothyApp();
+    fetchSheet(8000).then(list => { if (list && JSON.stringify(list) !== JSON.stringify(cached)) { keep(list); app.update(list); } });
+  } else {
+    fetchSheet(2500).then(list => { if (list) { C.products = list; keep(list); } window.DorothyApp(); });
+  }
 })();

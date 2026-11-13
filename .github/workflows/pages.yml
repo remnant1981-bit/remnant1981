@@ -34,7 +34,7 @@ jobs:
           cp -r coupon-wallet/. _site/
           cp -r rnd-budget _site/rnd-budget
           cp -r maison-dorothy _site/maison-dorothy
-          rm -f _site/maison-dorothy/order-apps-script.gs _site/maison-dorothy/README.md
+          rm -f _site/maison-dorothy/order-apps-script.gs _site/maison-dorothy/README.md _site/maison-dorothy/products-sheet.csv
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
