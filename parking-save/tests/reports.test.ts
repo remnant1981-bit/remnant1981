@@ -44,6 +44,11 @@ describe("정보 오류 신고", () => {
     expect((await post("abc", { category: "FEE" })).status).toBe(400);
     expect((await post("1", "{not json")).status).toBe(400);
   });
+  it("Origin 'null'·잘못된 Origin은 500이 아니라 403, 큰 본문은 413", async () => {
+    expect((await post("1", { category: "FEE" }, { origin: "null" })).status).toBe(403);
+    expect((await post("1", { category: "FEE" }, { origin: "::not a url::" })).status).toBe(403);
+    expect((await post("1", { category: "FEE", message: "가".repeat(5000) })).status).toBe(413);
+  });
 
   it("요청 제한: 같은 클라이언트 시간당 5회 초과 시 429", async () => {
     const h = { "x-forwarded-for": "192.0.2.200" };
