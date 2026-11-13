@@ -26,6 +26,18 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   p.on('pageerror', (e) => errors.push(e.message));
   p.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   p.on('dialog', (d) => d.accept(d.type() === 'prompt' ? '1안' : undefined));
+  // ① 기본 설정(1단계 공개 범위): 꺼진 기능은 숨김
+  await p.goto(base);
+  check('기본: 과제 구성·안 저장·FAQ·단계 메뉴 숨김', (await p.locator('#s0').isHidden()) && (await p.locator('#saveScenario').isHidden()) && (await p.locator('.faq').isHidden()) && (await p.locator('.steps').isHidden()));
+  check('기본: 예시·엑셀·점검 표시', (await p.locator('.demo-bar').isVisible()) && (await p.locator('#xlsx').isVisible()) && (await p.locator('#s4').isVisible()));
+  await p.click('[data-example="ok"]'); await p.waitForLoadState();
+  check('기본: 예시는 첫 기관·1차년도만', (await p.locator('#summary').isHidden()) && (await p.inputValue('#gov')) === '300,000' && (await p.locator('#checks .error').count()) === 0);
+  check('우측 요약: 총사업비·점검 통과', (await p.textContent('#live')).includes('423,900') && (await p.textContent('#live')).includes('통과'));
+  await p.evaluate(() => localStorage.clear());
+
+  // ② 전체 기능 켠 설정으로 기존 시나리오 검증
+  const ALL = 'examples:true,project:true,scenarios:true,faq:true,steps:true,legalHeader:true';
+  await p.route('**/config.js', (r) => r.fulfill({ contentType: 'text/javascript', body: `window.RB_CONFIG={features:{${ALL}}};` }));
   await p.goto(base);
 
   // 1. 법령 기준 고정
@@ -84,7 +96,8 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   check('광고 미설정 시 광고 영역 숨김', (await p.locator('#ad-top').isHidden()) && (await p.locator('#ad-bottom').isHidden()));
 
   // 광고 설정 시
-  await p.route('**/config.js', (r) => r.fulfill({ contentType: 'text/javascript', body: 'window.RB_CONFIG={adsenseClient:"ca-pub-0000000000000000",adsenseSlots:{top:"111",bottom:"222"}};' }));
+  await p.unroute('**/config.js');
+  await p.route('**/config.js', (r) => r.fulfill({ contentType: 'text/javascript', body: `window.RB_CONFIG={adsenseClient:"ca-pub-0000000000000000",adsenseSlots:{top:"111",bottom:"222"},features:{${ALL}}};` }));
   await p.route('https://pagead2.googlesyndication.com/**', (r) => r.fulfill({ contentType: 'text/javascript', body: 'window.__adLoaded=true;' }));
   await p.reload();
   check('광고 설정 시 2곳 표시·스크립트 로드', (await p.locator('#ad-top ins.adsbygoogle').count()) === 1 && (await p.locator('#ad-bottom ins.adsbygoogle').count()) === 1 && await p.evaluate(() => window.__adLoaded === true));

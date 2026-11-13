@@ -21,9 +21,15 @@
   const groupDigits = (v) => { const n = RB.int(v); return n ? fmt(n) : String(v ?? '').replace(/[^\d]/g, ''); };
   const yl = (y) => `${y + 1}차년도`;
 
+  // 기능 스위치(config.js features). 꺼진 기능은 숨김만 하고 저장 데이터는 유지
+  const FEAT = Object.assign({ examples: true, project: false, scenarios: false, faq: false, steps: false, legalHeader: false }, CFG.features || {});
+  document.querySelectorAll('[data-feature]').forEach((e) => { if (!FEAT[e.dataset.feature]) e.hidden = true; });
+  // 연차·공동기관 기능이 꺼져 있으면 첫 기관·1차년도만 편집·계산·내보내기
+  const single = (p) => (FEAT.project ? p : { ...p, years: 1, insts: p.insts.slice(0, 1) });
+
   let S = RB.normalizeProject(store.get('rb.current', {}));
   let C = Object.assign({ i: 0, y: 0 }, store.get('rb.cur', {}));
-  const clampCur = () => { C.i = Math.min(Math.max(0, C.i | 0), S.insts.length - 1); C.y = Math.min(Math.max(0, C.y | 0), S.years - 1); };
+  const clampCur = () => { if (!FEAT.project) { C.i = 0; C.y = 0; return; } C.i = Math.min(Math.max(0, C.i | 0), S.insts.length - 1); C.y = Math.min(Math.max(0, C.y | 0), S.years - 1); };
   clampCur();
   const I = () => S.insts[C.i];
   const Y = () => I().data[C.y];
@@ -31,7 +37,8 @@
   const replaceProject = (p) => { S = RB.normalizeProject(p); C = { i: 0, y: 0 }; save(); location.reload(); };
 
   $('basisLine').textContent = `적용 법령: ${RB.SOURCES.decreeT1} · ${RB.SOURCES.std} — 기준일 ${RB.BASIS_DATE}`;
-  $('foot').textContent = `본 도구는 참고용입니다. 사업별 공고문·부처 운영요령·협약이 우선하며, 최종 편성은 전문기관 기준을 확인하세요. 법령 기준일 ${RB.BASIS_DATE}.${CFG.contact ? ` 문의: ${CFG.contact}` : ''}`;
+  $('foot').textContent = `참고용 계산입니다. 공고문·운영요령이 우선합니다. 근거: ${RB.SOURCES.decreeT1}, ${RB.SOURCES.std}(기준일 ${RB.BASIS_DATE}).${CFG.contact ? ` 문의: ${CFG.contact}` : ''}`;
+  if (FEAT.project) $('h-out-t').textContent = '총괄표·엑셀';
 
   // ---------- 예시(데모) ----------
   const hasInput = () => S.insts.some((inst) => inst.data.some((d) => RB.int(d.gov) || d.people.some((p) => p.name || p.salary) || Object.values(d.items).some((v) => v && (v.cash || v.inkind))));
@@ -39,7 +46,7 @@
   document.querySelectorAll('[data-example]').forEach((b) => b.addEventListener('click', () => {
     const ex = RB.EXAMPLES[b.dataset.example];
     if (hasInput() && !isExample() && !confirm(`'${ex.label}'으로 바꿀까요? 지금 입력한 내용은 지워집니다. (필요하면 먼저 '현재 안 저장')`)) return;
-    replaceProject(ex.state);
+    replaceProject(FEAT.project ? ex.state : single(RB.normalizeProject(ex.state)));
   }));
   if (isExample()) {
     const n = $('demoNote');
@@ -99,8 +106,8 @@
       return chip(yl(y), y === C.y, errs, () => go(C.i, y), `${yl(y)} 편집${errs ? `, 오류 ${errs}건` : ''}`);
     }));
     $('copyPrev').hidden = C.y === 0;
-    $('editBar').hidden = S.insts.length === 1 && S.years === 1;
-    $('curLabel').textContent = S.insts.length === 1 && S.years === 1 ? '' : `— ${I().name} · ${yl(C.y)}`;
+    $('editBar').hidden = !FEAT.project || (S.insts.length === 1 && S.years === 1);
+    $('curLabel').textContent = !FEAT.project || (S.insts.length === 1 && S.years === 1) ? '' : `— ${I().name} · ${yl(C.y)}`;
   }
   function go(i, y) { C.i = i; C.y = y; clampCur(); renderAll(); }
   $('copyPrev').addEventListener('click', () => {
@@ -139,6 +146,10 @@
       if (document.activeElement !== i) i.value = v;
     }
     document.querySelectorAll('[data-basis]').forEach((td) => { td.textContent = rs.basis[td.dataset.basis]; });
+    $('ruleSummary').textContent = rs.profit || custom
+      ? `적용 기준: 정부지원 ≤ ${eff.govMaxPct}% · 기관부담 현금 ≥ ${eff.cashMinPct}% · 간접비 ${eff.indirectPct}%`
+      : `적용 기준: 기관부담 의무 없음 · 간접비 ${eff.indirectPct}%`;
+    if (custom) $('ruleBox').open = true;
     $('ruleMode').textContent = custom ? '공고문 기준 직접 입력' : '법령 기준 고정';
     $('ruleMode').classList.toggle('warn', custom);
     $('ruleHint').textContent = custom
@@ -228,7 +239,28 @@
       remain.textContent = lack > 0 ? `최소 총사업비까지 ${fmt(lack)}천원 더 편성하세요${cashLack > 0 ? `(그중 현금 ${fmt(cashLack)}천원 이상)` : ''}.` : '최소 총사업비를 충족했습니다.';
       remain.className = 'remain ' + (lack > 0 ? 'todo' : 'done');
     } else remain.textContent = '';
-    $('checks').replaceChildren(...r.checks.map((c) => el('li', { class: c.level }, el('span', { text: c.msg }), c.basis ? el('small', { class: 'cite', text: c.basis }) : '')));
+    // 오류·주의만 기본 표시, 통과·계산 내역은 접어 둠
+    const li = (c) => el('li', { class: c.level }, el('span', { text: c.msg }), c.basis ? el('small', { class: 'cite', text: c.basis }) : '');
+    const issues = r.checks.filter((c) => c.level === 'error' || c.level === 'warn');
+    const passed = r.checks.filter((c) => c.level === 'ok' || c.level === 'info');
+    const ready = !!f.gov && !!r.total.total;
+    $('checks').replaceChildren(...(issues.length ? issues.map(li) : [li(ready ? { level: 'ok', msg: '오류 없음 — 법령 기준을 모두 충족합니다.' } : passed[0] || { level: 'info', msg: '' })]));
+    $('passedBox').hidden = !ready;
+    $('passedSum').textContent = `계산 내역·통과 항목 ${passed.length}건`;
+    $('passed').replaceChildren(...passed.map(li));
+    // 우측 편성 요약(실시간)
+    const t = r.total, orgCash = Math.max(0, t.cash - f.gov), errs = r.checks.filter((c) => c.level === 'error').length;
+    const kv = (k, v, cls) => el('div', { class: cls || '' }, el('dt', { text: k }), el('dd', { text: v }));
+    $('live').replaceChildren(
+      kv('총사업비', `${fmt(t.total)}천원`, 'big'),
+      kv('최소 총사업비', `${fmt(f.total)}천원`),
+      kv('정부지원', `${fmt(f.gov)}${t.total ? ` (${((f.gov / t.total) * 100).toFixed(1)}%)` : ''}`),
+      kv('기관 현금', `${fmt(orgCash)}${t.total - f.gov > 0 ? ` (${((orgCash / (t.total - f.gov)) * 100).toFixed(1)}%)` : ''}`),
+      kv('기관 현물', fmt(t.inkind)),
+      kv('점검', !f.gov ? '입력 대기' : errs ? `오류 ${errs}건` : '통과', !f.gov ? '' : errs ? 'bad' : 'good'));
+    const w = (v) => (t.total ? `${(v / t.total) * 100}%` : '0');
+    $('meterGov').style.width = w(Math.min(f.gov, t.cash)); $('meterCash').style.width = w(orgCash); $('meterInk').style.width = w(t.inkind);
+    $('liveCur').textContent = $('curLabel').textContent.replace(/^— /, '');
     updateSummary();
     save();
     return r;
@@ -236,7 +268,7 @@
 
   // ---------- 5. 총괄표 ----------
   function updateSummary() {
-    const P = RB.calcProject(S);
+    const P = RB.calcProject(single(S));
     renderTabs(P);
     const multi = S.years > 1;
     const head = el('tr', {}, el('th', { text: '기관' }), ...Array.from({ length: S.years }, (_, y) => el('th', { text: yl(y) })), ...(multi ? [el('th', { text: '합계' })] : []));
@@ -268,7 +300,7 @@
     replaceProject({});
   });
   $('xlsx').addEventListener('click', () => {
-    const bytes = RB.buildXlsx(S);
+    const bytes = RB.buildXlsx(single(S));
     const url = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
     const a = el('a', { href: url, download: `${(S.title || '사업비편성표').replace(/[\\/:*?"<>|]/g, '_')}_${today()}.xlsx` });
     document.body.append(a); a.click(); a.remove();
