@@ -13,6 +13,7 @@ window.DOROTHY = {
     address: '충남 홍성군 홍북읍 청사로 146 센텀시티 128호',
     landmark: '내포동물병원과 안골빵집 사이 골목',
     hours: '10:00–20:00 · 일요일 휴무',
+    open: { days: [1, 2, 3, 4, 5, 6], from: '10:00', to: '20:00' },   // 영업 요일(일=0)·시간 → '영업 중' 표시
     phone: '',                       // 예: '010-1234-5678' (비우면 전화 버튼 숨김)
     instagram: 'https://www.instagram.com/2026.do.rothy/',
     dmUrl: 'https://ig.me/m/2026.do.rothy',   // 인스타 DM 바로가기

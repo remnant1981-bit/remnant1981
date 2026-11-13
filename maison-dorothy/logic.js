@@ -65,6 +65,40 @@
     return size >= p.fit[0] && size <= p.fit[1];
   }
 
+  // 무료배송까지 남은 금액 (가격 문의 상품이 있거나 이미 무료면 0)
+  function freeShipLeft(cart, shipping) {
+    const t = totals(cart, shipping, false);
+    if (t.unpriced || !t.sub) return 0;
+    return Math.max(0, shipping.freeOver - t.sub);
+  }
+
+  // 휴대폰 번호 입력 중 자동 하이픈 (010-1234-5678, 02-123-4567)
+  function formatPhone(v) {
+    const d = String(v || '').replace(/\D/g, '').slice(0, 11);
+    if (d.startsWith('02')) return d.length < 3 ? d : d.length < 6 ? `${d.slice(0, 2)}-${d.slice(2)}` : d.length < 10 ? `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}` : `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6)}`;
+    if (d.length < 4) return d;
+    if (d.length < 8) return `${d.slice(0, 3)}-${d.slice(3)}`;
+    if (d.length < 11) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+    return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+  }
+
+  // 영업 상태: sched = { days:[0~6, 일=0], from:'10:00', to:'20:00' }
+  function openStatus(now, sched) {
+    const toMin = s => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
+    const day = now.getDay(), min = now.getHours() * 60 + now.getMinutes();
+    const from = toMin(sched.from), to = toMin(sched.to);
+    if (sched.days.includes(day) && min >= from && min < to) return { open: true, text: `영업 중 · ${sched.to}까지` };
+    const names = ['일', '월', '화', '수', '목', '금', '토'];
+    for (let k = 0; k < 8; k++) {
+      const d = (day + k) % 7;
+      if (!sched.days.includes(d)) continue;
+      if (k === 0 && min < from) return { open: false, text: `준비 중 · 오늘 ${sched.from} 오픈` };
+      if (k === 0) continue;
+      return { open: false, text: `영업 종료 · ${k === 1 ? '내일' : names[d] + '요일'} ${sched.from} 오픈` };
+    }
+    return { open: false, text: '영업 시간 확인 중' };
+  }
+
   const isPhone = s => /^0\d{1,2}-?\d{3,4}-?\d{4}$/.test(String(s || '').trim());
 
   function validate(o) {
@@ -97,7 +131,7 @@
     ].join('\n');
   }
 
-  const api = { won, hasPrice, priceLabel, lineKey, addLine, removeOne, changeQty, totals, sizeOptions, fitLabel, fitsSize, isPhone, validate, orderNo, orderText };
+  const api = { won, hasPrice, priceLabel, lineKey, addLine, removeOne, changeQty, totals, freeShipLeft, formatPhone, openStatus, sizeOptions, fitLabel, fitsSize, isPhone, validate, orderNo, orderText };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.DLogic = api;
 })(typeof self !== 'undefined' ? self : this);

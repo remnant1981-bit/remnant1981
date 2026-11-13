@@ -10,6 +10,7 @@
   const askName = S.kakaoUrl ? '카톡' : 'DM';
   const src = f => (window.__IMG && window.__IMG[f]) || `images/${f}`;   // 미리보기 번들에서는 내장 이미지 사용
   const arrow = '<svg><use href="#i-arrow"/></svg>';
+  const thumb = f => (window.__IMG && window.__IMG['t/' + f]) || `images/t/${f}`;   // 작은 정사각 썸네일(180px)
   const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') || d; } catch (e) { return d; } };
   const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 저장 불가 */ } };
   const wish = new Set(load('dorothy-wish', []).filter(id => byId(id)));
@@ -160,7 +161,7 @@
   function drawRecent() {
     const list = recent.map(byId).filter(Boolean);
     $('recent').hidden = list.length < 2;
-    $('recentList').innerHTML = list.map(p => `<button type="button" class="mini" data-open="${esc(p.id)}"><img src="${src(p.img)}" alt="" width="96" height="120" loading="lazy"><span>${esc(p.name)}</span></button>`).join('');
+    $('recentList').innerHTML = list.map(p => `<button type="button" class="mini" data-open="${esc(p.id)}"><img src="${src(p.img)}" alt="" width="96" height="120" loading="lazy" decoding="async"><span>${esc(p.name)}</span></button>`).join('');
   }
 
   /* ---------- 상품 상세 ---------- */
@@ -172,9 +173,10 @@
       onPick(b.textContent); $('pErr').hidden = true;
     }));
   }
-  function openProduct(id) {
-    cur = byId(id); if (!cur) return;
-    if (!$('pSheet').hidden) hide('pSheet');
+  function openProduct(id, opt = {}) {
+    const next = byId(id); if (!next) return;
+    const already = !$('pSheet').hidden;
+    cur = next;
     const colors = cur.colors || [];
     const so = L.sizeOptions(cur);
     const usual = mySize ? `평소 ${mySize}` : null;
@@ -206,7 +208,8 @@
     $('addBtn').textContent = L.hasPrice(cur) ? '쇼핑백에 담기' : '담기 · 가격은 확인 후 안내';
     $('pHeart').setAttribute('aria-pressed', String(wish.has(cur.id)));
     recent = [cur.id, ...recent.filter(x => x !== cur.id)].slice(0, 10); store('dorothy-recent', recent); drawRecent();
-    show('pSheet');
+    const url = `${baseUrl}#p-${cur.id}`;
+    if (already) history.replaceState({ layer: 'pSheet' }, '', url); else show('pSheet', { url, replace: opt.replace });
     $('pSheet').querySelector('.panel').scrollTop = 0;
   }
   $('pHeart').addEventListener('click', () => toggleWish(cur.id, $('pHeart')));
@@ -232,7 +235,7 @@
       ? `<p class="empty">쇼핑백이 비어 있어요.<br><a href="#shop" data-close>이번 주 신상 보러 가기</a></p>`
       : cart.map((x, i) => {
         const p = byId(x.id);
-        return `<div class="line"><img src="${src(p.img)}" alt="" width="64" height="80">
+        return `<div class="bline"><img src="${src(p.img)}" alt="" width="64" height="80" loading="lazy">
           <div><div class="nm">${esc(x.name)}</div><small>${esc([x.color, x.size].filter(Boolean).join(' · '))}</small>
             <div class="qty"><button type="button" data-q="-1" data-i="${i}" aria-label="${esc(x.name)} 하나 빼기">−</button><span>${x.q}</span><button type="button" data-q="1" data-i="${i}" aria-label="${esc(x.name)} 하나 더">+</button></div></div>
           <div class="pr">${x.price > 0 ? L.won(x.price * x.q) : '가격 문의'}</div></div>`;
@@ -245,6 +248,13 @@
          <div><span>택배비</span><span>${t.ship ? L.won(t.ship) : '무료'}</span></div>
          <div class="all"><span>입금하실 금액</span><span>${L.won(t.all)}</span></div>`;
     $('addrBox').hidden = pickup();
+    const leftWon = L.freeShipLeft(cart, C.shipping), sub = L.totals(cart, C.shipping, false).sub;
+    const showFree = !empty && !t.unpriced && !pickup();
+    $('freeship').hidden = !showFree;
+    if (showFree) {
+      $('freeshipTxt').innerHTML = leftWon ? `<b>${L.won(leftWon)}</b> 더 담으면 무료배송이에요` : '무료배송으로 보내드려요';
+      $('freeshipBar').style.width = `${Math.min(100, sub / C.shipping.freeOver * 100)}%`;
+    }
   }
   $('lines').addEventListener('click', e => {
     const b = e.target.closest('[data-q]'); if (!b) return;
@@ -258,7 +268,7 @@
 
   $('orderForm').addEventListener('submit', async e => {
     e.preventDefault();
-    const o = { name: $('oName').value, phone: $('oPhone').value, pickup: pickup(), address: $('oAddr').value, memo: $('oMemo').value, agree: $('oAgree').checked };
+    const o = { name: $('oName').value, phone: $('oPhone').value, pickup: pickup(), address: [$('oAddr').value.trim(), $('oAddr2').value.trim()].filter(Boolean).join(' '), memo: $('oMemo').value, agree: $('oAgree').checked };
     const miss = L.validate(o);
     if (miss.length) { $('oErr').textContent = `확인해 주세요: ${miss.join(', ')}`; $('oErr').hidden = false; return; }
     $('oErr').hidden = true;
@@ -284,7 +294,7 @@
     ).map(s => `<li>${s}</li>`).join('');
     $('dText').textContent = text;
     if (!C.preview && sent) { cart = []; save(); bar(); }
-    hide('cSheet'); show('dSheet');
+    swap('cSheet', 'dSheet');
   });
 
   // Apps Script 웹앱은 CORS 응답을 주지 않으므로 no-cors 로 보냄 (네트워크 실패만 감지 가능)
@@ -303,21 +313,55 @@
     try { navigator.clipboard.writeText(pre.innerText).then(ok, fb); } catch (err) { fb(); }
   });
 
-  /* ---------- 시트 열고 닫기 ---------- */
+  /* ---------- 시트 열고 닫기 (뒤로가기로 닫힘) ---------- */
+  const baseUrl = location.href.split('#')[0];
+  const layers = [];
   let lastFocus = null;
-  function show(id) {
-    if (!document.querySelector('.sheet:not([hidden])')) lastFocus = document.activeElement;
-    $(id).hidden = false; document.body.style.overflow = 'hidden';
-    const f = $(id).querySelector('.x'); if (f) f.focus({ preventScroll: true });
+  function show(id, opt = {}) {
+    if (!layers.length) lastFocus = document.activeElement;
+    layers.push(id);
+    const el = $(id); el.hidden = false; el.style.zIndex = 50 + layers.length;
+    document.body.style.overflow = 'hidden';
+    const url = opt.url || (location.hash.startsWith('#p-') ? baseUrl : location.href);
+    if (opt.replace) history.replaceState({ layer: id }, '', url); else history.pushState({ layer: id }, '', url);
+    const f = el.querySelector('.x, .sv-x'); if (f) f.focus({ preventScroll: true });
+  }
+  function closeEl(id) {
+    if (id === 'sv') clearTimeout(timer);
+    $(id).hidden = true;
+    const i = layers.lastIndexOf(id); if (i >= 0) layers.splice(i, 1);
+    if (id === 'sv') drawStories();
+    if (!layers.length) { document.body.style.overflow = ''; if (lastFocus && lastFocus.isConnected) lastFocus.focus({ preventScroll: true }); }
   }
   function hide(id) {
-    $(id).hidden = true;
-    if (!document.querySelector('.sheet:not([hidden])')) { document.body.style.overflow = ''; if (lastFocus && lastFocus.isConnected) lastFocus.focus({ preventScroll: true }); }
+    if (history.state && history.state.layer === id && layers[layers.length - 1] === id) history.back();   // popstate 에서 닫음
+    else closeEl(id);
   }
+  function swap(from, to, url) { closeEl(from); show(to, { replace: true, url }); }
+  addEventListener('popstate', e => {
+    const want = e.state && e.state.layer;
+    while (layers.length && layers[layers.length - 1] !== want) closeEl(layers[layers.length - 1]);
+  });
   document.querySelectorAll('.sheet').forEach(s => s.addEventListener('click', e => {
-    if (e.target === s || e.target.closest('[data-close]')) hide(s.id);
+    const c = e.target.closest('[data-close]');
+    if (e.target !== s && !c) return;
+    if (c && c.tagName === 'A') {   // 시트 안 링크: 닫은 뒤 해당 위치로 이동
+      e.preventDefault(); const to = c.getAttribute('href'); hide(s.id);
+      setTimeout(() => { const t = document.querySelector(to); if (t) t.scrollIntoView(); }, 80);
+      return;
+    }
+    hide(s.id);
   }));
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.sheet:not([hidden])').forEach(s => hide(s.id)); });
+  document.addEventListener('keydown', e => {
+    if (!layers.length) return;
+    const top = $(layers[layers.length - 1]);
+    if (e.key === 'Escape' && layers[layers.length - 1] !== 'sv') { hide(top.id); return; }
+    if (e.key !== 'Tab') return;   // 열린 창 안에서만 포커스 이동
+    const f = [...top.querySelectorAll('a[href],button,input,textarea,[tabindex="0"]')].filter(x => !x.disabled && !x.closest('[hidden]') && x.offsetParent !== null && x.tabIndex >= 0);
+    if (!f.length) return;
+    if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+    else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+  });
 
   /* ---------- 스토리 ---------- */
   const groups = [];
@@ -328,19 +372,20 @@
   if (st) groups.push({ key: 'shop', name: '매장 이야기', cover: 'store.jpg', slides: [{ img: 'store.jpg', title: '내포 메종도로시', text: `${S.address} · ${S.landmark}` }, { img: st.photo, title: st.quote, text: st.text }] });
   const seen = new Set(load('dorothy-seen', []));
   function drawStories() {
-    $('stories').innerHTML = groups.map((g, i) => `<button type="button" class="st${seen.has(g.key) ? ' seen' : ''}" data-story="${i}"><span class="ring"><img src="${src(g.cover)}" alt="" width="60" height="60"></span><span>${esc(g.name)}</span></button>`).join('');
+    $('stories').innerHTML = groups.map((g, i) => `<button type="button" class="st${seen.has(g.key) ? ' seen' : ''}" data-story="${i}"><span class="ring"><img src="${thumb(g.cover)}" alt="" width="60" height="60"></span><span>${esc(g.name)}</span></button>`).join('');
   }
   drawStories();
   let sg = 0, ss = 0, timer = 0, startAt = 0, left = 0, paused = false;
   const DUR = 5000;
   function svShow() {
     const g = groups[sg], sl = g.slides[ss];
-    $('svGroup').textContent = g.name; $('svAv').style.backgroundImage = `url("${src(g.cover)}")`;
+    $('svGroup').textContent = g.name; $('svAv').style.backgroundImage = `url("${thumb(g.cover)}")`;
     $('svImg').src = src(sl.img); $('svImg').alt = sl.title;
     $('svTitle').textContent = sl.title; $('svText').textContent = sl.text || '';
     $('svGo').hidden = !sl.open;
     $('svBars').innerHTML = g.slides.map((_, k) => `<i class="${k < ss ? 'done' : ''}"><b></b></i>`).join('');
     seen.add(g.key); store('dorothy-seen', [...seen]);
+    const nx = g.slides[ss + 1] || (groups[sg + 1] && groups[sg + 1].slides[0]); if (nx) new Image().src = src(nx.img);
     run(DUR);
   }
   function run(ms) {
@@ -356,21 +401,22 @@
   }
   function svNext() { if (ss < groups[sg].slides.length - 1) { ss++; svShow(); } else if (sg < groups.length - 1) { sg++; ss = 0; svShow(); } else svClose(); }
   function svPrev() { if (ss > 0) ss--; else if (sg > 0) { sg--; ss = 0; } svShow(); }
-  function svOpen(i) { sg = i; ss = 0; $('sv').hidden = false; document.body.style.overflow = 'hidden'; svShow(); $('svClose').focus({ preventScroll: true }); }
-  function svClose() { clearTimeout(timer); $('sv').hidden = true; document.body.style.overflow = ''; drawStories(); }
+  function svOpen(i) { sg = i; ss = 0; show('sv'); svShow(); }
+  function svClose() { hide('sv'); }
   $('stories').addEventListener('click', e => { const b = e.target.closest('[data-story]'); if (b) svOpen(+b.dataset.story); });
   $('svClose').addEventListener('click', svClose);
   let downAt = 0, downY = 0;
   ['svPrev', 'svNext'].forEach(id => {
     $(id).addEventListener('pointerdown', e => { downAt = Date.now(); downY = e.clientY; pause(); });
+    $(id).addEventListener('pointercancel', () => run(left));
     $(id).addEventListener('pointerup', e => {
       if (e.clientY - downY > 80) { svClose(); return; }                 // 아래로 쓸어내리면 닫기
       if (Date.now() - downAt < 250) { id === 'svPrev' ? svPrev() : svNext(); } else run(left);   // 길게 누르면 멈춤
     });
   });
-  $('svGo').addEventListener('click', () => { const id = groups[sg].slides[ss].open; svClose(); openProduct(id); });
+  $('svGo').addEventListener('click', () => { const id = groups[sg].slides[ss].open; closeEl('sv'); openProduct(id, { replace: true }); });
   document.addEventListener('keydown', e => {
-    if ($('sv').hidden) return;
+    if ($('sv').hidden || layers[layers.length - 1] !== 'sv') return;
     if (e.key === 'Escape') svClose(); else if (e.key === 'ArrowRight') svNext(); else if (e.key === 'ArrowLeft') svPrev();
   });
 
@@ -396,6 +442,73 @@
       if (dy > 110) hide(panel.parentElement.id); y0 = null;
     });
   });
+
+  /* ---------- 영업 상태 ---------- */
+  function openNow() {
+    if (!S.open) return;
+    const o = L.openStatus(new Date(), S.open);
+    $('heroOpen').hidden = false; $('heroOpen').textContent = o.text; $('heroOpen').classList.toggle('on', o.open);
+    $('visitOpen').textContent = o.text; $('visitOpen').classList.toggle('on', o.open);
+  }
+  openNow(); setInterval(openNow, 60000);
+
+  /* ---------- 복사·공유 ---------- */
+  function copyText(text, okMsg) {
+    const fail = () => toast(text);
+    try { navigator.clipboard.writeText(text).then(() => toast(okMsg), fail); } catch (e) { fail(); }
+  }
+  $('copyAddr').addEventListener('click', () => copyText(S.address, '주소를 복사했어요'));
+  $('pShare').addEventListener('click', async () => {
+    const url = `${baseUrl}#p-${cur.id}`, data = { title: `${cur.name} | ${S.name}`, text: cur.tip, url };
+    if (navigator.share) { try { await navigator.share(data); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+    copyText(url, '링크를 복사했어요. 카톡에 붙여넣어 보내보세요');
+  });
+
+  /* ---------- 주문서 입력 도우미 ---------- */
+  $('oPhone').addEventListener('input', e => {
+    const el = e.target, end = el.selectionEnd === el.value.length;
+    el.value = L.formatPhone(el.value); if (end) el.setSelectionRange(el.value.length, el.value.length);
+  });
+  // 우편번호 검색(다음 우편번호 서비스): 누를 때만 불러오고, 못 불러오면 직접 입력 안내
+  let postReady = null;
+  function loadPost() {
+    if (postReady) return postReady;
+    postReady = new Promise((ok, no) => {
+      const sc = document.createElement('script');
+      sc.src = 'https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
+      sc.onload = () => (window.daum && window.daum.Postcode ? ok() : no()); sc.onerror = no;
+      document.head.appendChild(sc); setTimeout(no, 5000);
+    });
+    postReady.catch(() => { postReady = null; });
+    return postReady;
+  }
+  // 아이폰은 주소 검색창(외부 iframe)의 작은 글씨 입력칸을 누르면 화면이 확대되므로, 검색 중에만 확대를 막음
+  const vp = document.querySelector('meta[name=viewport]'), vp0 = vp && vp.content;
+  const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent);
+  const lockZoom = on => { if (vp && isIOS) vp.content = on ? vp0 + ',maximum-scale=1' : vp0; };
+  $('findAddr').addEventListener('click', async () => {
+    const layer = $('postLayer');
+    if (!layer.hidden) { layer.hidden = true; lockZoom(false); return; }
+    $('findAddr').textContent = '불러오는 중…';
+    try {
+      await loadPost();
+      layer.hidden = false; layer.innerHTML = ''; lockZoom(true);
+      new window.daum.Postcode({
+        width: '100%', height: '100%',
+        oncomplete: d => { $('oAddr').value = `${d.roadAddress || d.jibunAddress}${d.buildingName ? ` (${d.buildingName})` : ''}`; layer.hidden = true; lockZoom(false); $('oAddr2').focus(); }
+      }).embed(layer);
+    } catch (e) { toast('주소 검색을 불러오지 못했어요. 직접 입력해 주세요'); $('oAddr').focus(); }
+    $('findAddr').textContent = '주소 찾기';
+  });
+
+  /* ---------- 공유 링크로 들어오면 그 옷을 바로 열기 (#p-상품id) ---------- */
+  function openFromHash() {
+    const m = location.hash.match(/^#p-([\w-]+)$/);
+    if (!m || !byId(m[1]) || (cur && cur.id === m[1] && !$('pSheet').hidden)) return;
+    history.replaceState(null, '', baseUrl); openProduct(m[1]);
+  }
+  addEventListener('hashchange', openFromHash);
+  openFromHash();
 
   render(); bar(); syncWish(); drawRecent(); tabState();
 })();

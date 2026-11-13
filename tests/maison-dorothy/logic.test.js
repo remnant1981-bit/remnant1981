@@ -97,3 +97,30 @@ test('changeQty: 증가·감소·0이면 삭제·최대 9', () => {
   assert.equal(c.length, 0);
   assert.deepEqual(L.changeQty([], 3, 1), []);
 });
+
+test('freeShipLeft: 남은 금액, 가격 문의 섞이면 0', () => {
+  const c = L.addLine([], A, '블랙', '프리');
+  assert.equal(L.freeShipLeft(c, SHIP), 40000);
+  assert.equal(L.freeShipLeft(L.addLine(L.addLine(c, B, '', ''), A, '블랙', '프리'), SHIP), 0);
+  assert.equal(L.freeShipLeft(L.addLine(c, Q, '', ''), SHIP), 0);
+  assert.equal(L.freeShipLeft([], SHIP), 0);
+});
+
+test('formatPhone: 휴대폰·서울·자리수 초과', () => {
+  assert.equal(L.formatPhone('01012345678'), '010-1234-5678');
+  assert.equal(L.formatPhone('010-123'), '010-123');
+  assert.equal(L.formatPhone('0411234567'), '041-123-4567');
+  assert.equal(L.formatPhone('0212345678'), '02-1234-5678');
+  assert.equal(L.formatPhone('021234567'), '02-123-4567');
+  assert.equal(L.formatPhone('010123456789999'), '010-1234-5678');
+  assert.equal(L.isPhone(L.formatPhone('01012345678')), true);
+});
+
+test('openStatus: 영업 중·오픈 전·마감 후·일요일 휴무', () => {
+  const S = { days: [1, 2, 3, 4, 5, 6], from: '10:00', to: '20:00' };
+  assert.equal(L.openStatus(new Date(2026, 10, 13, 14, 0), S).open, true);              // 금 14시
+  assert.match(L.openStatus(new Date(2026, 10, 13, 9, 0), S).text, /오늘 10:00 오픈/);   // 금 9시
+  assert.match(L.openStatus(new Date(2026, 10, 13, 20, 0), S).text, /내일 10:00/);       // 금 20시
+  assert.match(L.openStatus(new Date(2026, 10, 14, 21, 0), S).text, /월요일 10:00/);     // 토 21시 → 일 휴무
+  assert.match(L.openStatus(new Date(2026, 10, 15, 12, 0), S).text, /내일 10:00/);       // 일 12시
+});
