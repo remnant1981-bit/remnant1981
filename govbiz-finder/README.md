@@ -13,6 +13,14 @@ npm run dev             # http://localhost:3000
 개발 모드에서는 비밀키가 없으면 `data/.devkeys.json`(커밋 제외)에 자동 생성. **운영(NODE_ENV=production)에서는 `.env.example`의 비밀키 3종이 필수**이며 없으면 기동 후 요청이 실패한다.
 기업 관계 확인은 관리자 화면(`/admin`)에서 승인. 개발 편의용 `DEV_AUTO_APPROVE_COMPANY=true`는 production에서 무시됨.
 
+## 데모 모드(직접 체험)
+```bash
+npm run demo            # data/demo.sqlite 새로 생성 + 데모 계정 + 테스트 공고 → http://localhost:3000
+npm run demo -- --keep  # 이전 데모 상태 유지
+```
+- 기업 계정 `demo@demo.test` / `DemoUser12345`, 관리자 `admin@demo.test` / `DemoAdmin12345`(데모 DB 전용).
+- 실제 DB(`data/dev.sqlite`)·운영 키와 분리. 외부 API 호출 없음. 화면 상단에 '데모 모드' 표시. 무료 요금제 한도(진행 관리 3건) 적용 상태.
+
 ## 명령
 | 명령 | 설명 |
 |---|---|
