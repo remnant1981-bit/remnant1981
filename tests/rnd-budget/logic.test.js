@@ -188,3 +188,64 @@ test('체험 예시: 정상 예시는 모든 기관·연차 오류 0건, 오류 
   const err = RB.calcBudget(RB.sheetState(RB.normalizeProject(RB.EXAMPLES.error.state), 0, 0)).checks.filter((c) => c.level === 'error').map((c) => c.msg).join('\n');
   for (const re of [/최소 총사업비보다/, /현금 .*부족/, /연구수당/, /위탁연구개발비/, /총 참여율/]) assert.match(err, re);
 });
+
+// ---------- 집행 현황판 ----------
+const execProject = () => {
+  const p = RB.normalizeProject(RB.EXAMPLES.ok.state);
+  p.insts[0].data[0].exec = { start: '2026-04-01', end: '2027-03-31',
+    monthly: { personnel: [3500, 3250, 3250, 3250, 3250, 3250, 3250, 3250], equipment: [0, 0, 45000, 0, 13000], material: [0, 2400, 5100, 3800, 6200, 4300, 5100, 4300], outsource: [0, 0, 0, 20000], activity: [1200, 1800, 2100, 1600, 2300, 1500, 1900, 1600], allowance: [0, 0, 0, 0, 0, 4500, 0, 5000], indirect: [1500, 1700, 2200, 1800, 2100, 1900, 1900, 1900] },
+    paid: [{ date: '2026-06-30', amount: '5000' }] };
+  return p;
+};
+
+test('집행: 경과율·집행률·잔액·상태(±25%p)', () => {
+  const E = RB.calcExecution(execProject(), 0, 0, '2026-11-13');
+  assert.equal(E.elapsedPct, 62.2); assert.deepEqual(E.days, { passed: 227, total: 365 });
+  assert.deepEqual(E.total, { agreed: 313900, spent: 173950, remain: 139950, rate: 55.4 });
+  const st = Object.fromEntries(E.rows.map((r) => [r.key, r.status]));
+  assert.deepEqual(st, { personnel: 'ok', equipment: 'fast', material: 'slow', outsource: 'ok', activity: 'ok', allowance: 'over', indirect: 'ok' });
+  assert.equal(E.months[0], '2026-04'); assert.equal(E.months[11], '2027-03');
+  const msg = E.checks.map((c) => c.msg).join('\n');
+  assert.match(msg, /연구수당 9,500천원 — 협약액 9,000천원 초과/);
+  assert.match(msg, /기관부담 현금 8,900천원 미납 — 기한 2026-12-31\(연차 종료 3개월 전\), D-48/);
+  assert.deepEqual(E.schedule.map((s) => [s.date, s.dday]), [['2026-12-31', 48], ['2027-01-31', 79], ['2027-03-31', 138]]);
+});
+
+test('집행: 협약 조정·기한(협약)·경계값·기간 미입력', () => {
+  const p = execProject(); const ex = p.insts[0].data[0].exec;
+  ex.agreed = { allowance: '10000' }; ex.cashDue = '2026-11-01';
+  let E = RB.calcExecution(p, 0, 0, '2026-11-13');
+  assert.equal(E.rows.find((r) => r.key === 'allowance').status, 'fast'); // 9,500/10,000 = 95% > 경과율+25
+  assert.ok(E.checks.some((c) => c.level === 'error' && /기한 2026-11-01\(협약\) 경과/.test(c.msg)));
+  // 부진 경계: 경과율 − 25 정확히는 정상
+  ex.monthly.material = []; ex.agreed.material = '1000'; ex.monthly.material[0] = 372; // 37.2% = 62.2 − 25
+  assert.equal(RB.calcExecution(p, 0, 0, '2026-11-13').rows.find((r) => r.key === 'material').status, 'ok');
+  ex.monthly.material[0] = 371;
+  assert.equal(RB.calcExecution(p, 0, 0, '2026-11-13').rows.find((r) => r.key === 'material').status, 'slow');
+  // 인건비는 과속 판정 제외
+  ex.monthly.personnel = [35000];
+  assert.equal(RB.calcExecution(p, 0, 0, '2026-11-13').rows.find((r) => r.key === 'personnel').status, 'ok');
+  // 기간 미입력
+  E = RB.calcExecution(RB.normalizeProject(RB.EXAMPLES.ok.state), 0, 0, '2026-11-13');
+  assert.equal(E.ready, false); assert.equal(E.elapsedPct, 0); assert.match(E.checks[0].msg, /시작일·종료일/);
+  // 잘못된 날짜 정리, 월말 보정
+  assert.equal(RB.normalizeExec({ start: '2026-02-30', end: 'x' }).start, '');
+  assert.equal(RB.ymdAddMonths('2027-05-31', -3), '2027-02-28');
+  // 종료일 이후 경과율 100% 상한
+  assert.equal(RB.calcExecution(execProject(), 0, 0, '2028-01-01').elapsedPct, 100);
+});
+
+test('집행 엑셀: 시트 구성·수식', () => {
+  const files = unzip(RB.buildExecXlsx(execProject(), 0, 0, '2026-11-13'));
+  for (const n of ['집행 현황', '월별 집행', '기관부담 현금', '점검·일정']) assert.match(files['xl/workbook.xml'], new RegExp(`name="${n}"`));
+  assert.match(files['xl/worksheets/sheet1.xml'], /<f>B5-C5<\/f>/);
+  assert.match(files['xl/worksheets/sheet1.xml'], /초과/);
+  assert.match(files['xl/worksheets/sheet2.xml'], /2026-04/);
+  assert.match(files['xl/worksheets/sheet3.xml'], /2026-06-30/);
+});
+
+test('v2 저장값에 exec 자동 추가, 편성 계산 영향 없음', () => {
+  const p = RB.normalizeProject(RB.EXAMPLES.ok.state);
+  assert.deepEqual(p.insts[0].data[0].exec, RB.blankExec());
+  assert.equal(RB.calcProject(p).total.total, RB.calcProject(RB.EXAMPLES.ok.state).total.total);
+});

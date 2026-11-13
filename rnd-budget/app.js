@@ -22,7 +22,7 @@
   const yl = (y) => `${y + 1}차년도`;
 
   // 기능 스위치(config.js features). 꺼진 기능은 숨김만 하고 저장 데이터는 유지
-  const FEAT = Object.assign({ examples: true, project: false, scenarios: false, faq: false, steps: false, legalHeader: false }, CFG.features || {});
+  const FEAT = Object.assign({ examples: true, project: false, scenarios: false, faq: false, steps: false, legalHeader: false, execution: false }, CFG.features || {});
   document.querySelectorAll('[data-feature]').forEach((e) => { if (!FEAT[e.dataset.feature]) e.hidden = true; });
   // 연차·공동기관 기능이 꺼져 있으면 첫 기관·1차년도만 편집·계산·내보내기
   const single = (p) => (FEAT.project ? p : { ...p, years: 1, insts: p.insts.slice(0, 1) });
@@ -291,6 +291,7 @@
     syncRuleInputs();
     govIn.value = groupDigits(Y().gov);
     renderPeople(); renderItems(); update();
+    if (C.mode === 'exec') renderExec();
   }
 
   // ---------- 엑셀·저장 ----------
@@ -328,6 +329,135 @@
     renderScenarios();
   });
 
+  // ---------- 집행 현황판(features.execution) ----------
+  const X = () => { const d = Y(); d.exec = RB.normalizeExec(d.exec); return d.exec; };
+  const projEnd = () => I().data.slice(0, S.years).map((d) => d.exec && d.exec.end).filter(RB.isYmd).sort().pop() || '';
+  const ST = { ok: ['ok', '정상'], over: ['bad', '✖ 초과'], slow: ['warn', '⚠ 부진'], fast: ['warn', '⚠ 과속'] };
+  let xKeys = '';
+  function setMode(mode) {
+    C.mode = FEAT.execution && mode === 'exec' ? 'exec' : 'plan';
+    document.querySelectorAll('#modeBar [data-mode]').forEach((b) => { const on = b.dataset.mode === C.mode; b.classList.toggle('on', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
+    $('planView').hidden = C.mode === 'exec';
+    $('execView').hidden = C.mode !== 'exec';
+    ['s0', 'ad-top', 'ad-bottom'].forEach((id) => { const e = $(id); if (e) e.classList.toggle('mode-hide', C.mode === 'exec'); });
+    if (C.mode === 'exec') renderExec();
+    save();
+  }
+  document.querySelectorAll('#modeBar [data-mode]').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
+
+  function renderExec() {
+    const ex = X();
+    $('xCur').textContent = S.insts.length === 1 && S.years === 1 ? '' : `— ${I().name} · ${yl(C.y)}`;
+    for (const [id, k] of [['xStart', 'start'], ['xEnd', 'end'], ['xDue', 'cashDue']]) $(id).value = ex[k] || '';
+    xKeys = '';
+    renderExecGrid(); renderExecPaid(); updateExec();
+  }
+  for (const [id, k] of [['xStart', 'start'], ['xEnd', 'end'], ['xDue', 'cashDue']]) {
+    $(id).addEventListener('change', (e) => { X()[k] = RB.isYmd(e.target.value) ? e.target.value : ''; renderExecGrid(); updateExec(); });
+  }
+  function renderExecGrid() {
+    const ex = X(), E = RB.calcExecution(S, C.i, C.y, today(), projEnd());
+    const months = E.months.length ? E.months : Array.from({ length: 12 }, (_, k) => `${k + 1}개월`);
+    const plan = RB.calcBudget(RB.sheetState(S, C.i, C.y)).rows;
+    const head = el('tr', {}, el('th', { text: '비목' }), ...months.map((m) => el('th', { text: m.length === 7 ? `${m.slice(2, 4)}.${m.slice(5)}` : m })), el('th', { text: '누계' }));
+    const body = plan.map((r) => {
+      const arr = (ex.monthly[r.key] ||= []);
+      return el('tr', {}, el('td', { text: r.label }), ...Array.from({ length: 12 }, (_, k) => el('td', {}, el('input', { value: groupDigits(arr[k] ?? ''), inputmode: 'numeric', maxlength: 12, 'aria-label': `${r.label} ${months[k]} 집행액(천원)`,
+        oninput: (e) => { arr[k] = e.target.value; e.target.value = groupDigits(e.target.value); updateExec(); } }))), el('td', { 'data-xsum': r.key }));
+    });
+    $('xGrid').replaceChildren(el('thead', {}, head), el('tbody', {}, ...body));
+  }
+  function renderExecPaid() {
+    const ex = X();
+    const rows = ex.paid.map((x, k) => el('tr', {},
+      el('td', {}, el('input', { type: 'date', value: x.date || '', 'aria-label': `납부 ${k + 1} 날짜`, onchange: (e) => { x.date = e.target.value; updateExec(); } })),
+      el('td', {}, el('input', { value: groupDigits(x.amount ?? ''), inputmode: 'numeric', maxlength: 12, 'aria-label': `납부 ${k + 1} 금액(천원)`, oninput: (e) => { x.amount = e.target.value; e.target.value = groupDigits(e.target.value); updateExec(); } })),
+      el('td', { class: 'del' }, el('button', { type: 'button', class: 'icon', 'aria-label': `납부 ${k + 1} 삭제`, text: '✕', onclick: () => { ex.paid.splice(k, 1); renderExecPaid(); updateExec(); } }))));
+    $('xPaid').replaceChildren(el('thead', {}, el('tr', {}, el('th', { text: '납부일' }), el('th', { text: '금액(천원)' }), el('th', {}, el('span', { class: 'sr', text: '삭제' })))), el('tbody', {}, ...rows), el('tfoot', {}, el('tr', {}, el('td', { text: '납부 누계 / 계획' }), el('td', { id: 'xPaidSum' }), el('td'))));
+  }
+  $('xAddPaid').addEventListener('click', () => { const ex = X(); if (ex.paid.length >= 100) return; ex.paid.push({ date: today(), amount: '' }); renderExecPaid(); updateExec(); $('xPaid').querySelector('tbody tr:last-child input:not([type=date])').focus(); });
+
+  function updateExec() {
+    const E = RB.calcExecution(S, C.i, C.y, today(), projEnd());
+    const ex = X();
+    // 현황표(비목 구성이 바뀔 때만 다시 그림 → 입력 포커스 유지)
+    const keys = E.rows.map((r) => r.key).join(',');
+    if (keys !== xKeys) {
+      xKeys = keys;
+      $('xRows').replaceChildren(
+        el('thead', {}, el('tr', {}, ...['비목', '편성(현금)', '협약(현금)', '집행 누계', '잔액', `집행률 (│ 경과율)`, '상태'].map((t) => el('th', { text: t })))),
+        el('tbody', {}, ...E.rows.map((r) => el('tr', { 'data-xrow': r.key },
+          el('td', { text: r.label }), el('td', { 'data-c': 'plan' }),
+          el('td', {}, el('input', { value: groupDigits(ex.agreed[r.key] ?? ''), placeholder: fmt(r.plan), inputmode: 'numeric', maxlength: 14, 'aria-label': `${r.label} 협약 금액(천원, 비우면 편성액)`,
+            oninput: (e) => { ex.agreed[r.key] = e.target.value; e.target.value = groupDigits(e.target.value); updateExec(); } })),
+          el('td', { 'data-c': 'spent' }), el('td', { 'data-c': 'remain' }), el('td', { 'data-c': 'rate' }), el('td', { 'data-c': 'st' })))),
+        el('tfoot', {}, el('tr', {}, el('td', { text: '합계' }), el('td', { 'data-t': 'plan' }), el('td', { 'data-t': 'agreed' }), el('td', { 'data-t': 'spent' }), el('td', { 'data-t': 'remain' }), el('td', { 'data-t': 'rate' }), el('td'))));
+    }
+    for (const r of E.rows) {
+      const tr = $('xRows').querySelector(`[data-xrow="${r.key}"]`); if (!tr) continue;
+      const c = (k) => tr.querySelector(`[data-c="${k}"]`);
+      c('plan').textContent = fmt(r.plan); c('spent').textContent = fmt(r.spent);
+      c('remain').textContent = fmt(r.remain); c('remain').classList.toggle('neg', r.remain < 0);
+      c('rate').replaceChildren(el('span', { class: 'xbar' }, el('span', { style: `width:${Math.min(r.rate, 100)}%` }), E.ready ? el('i', { style: `left:${E.elapsedPct}%` }) : ''), `${r.rate > 900 ? '—' : r.rate + '%'}`);
+      const [cls, label] = ST[r.status];
+      c('st').replaceChildren(el('span', { class: `st ${cls}`, text: label }));
+    }
+    const tf = (k, v) => { const e = $('xRows').querySelector(`[data-t="${k}"]`); if (e) e.textContent = v; };
+    tf('plan', fmt(E.rows.reduce((a, r) => a + r.plan, 0))); tf('agreed', fmt(E.total.agreed)); tf('spent', fmt(E.total.spent)); tf('remain', fmt(E.total.remain)); tf('rate', `${E.total.rate}%`);
+    $('xHint').textContent = `현물 ${fmt(E.inkind)}천원은 편성액 기준(집행 관리 대상 아님) · 협약 금액을 비우면 편성액 사용 · 부진·과속 기준: 경과율 ±${RB.LIMITS.execDeviationPct}%p`;
+    for (const r of RB.calcBudget(RB.sheetState(S, C.i, C.y)).rows) {
+      const e = $('xGrid').querySelector(`[data-xsum="${r.key}"]`);
+      if (e) e.textContent = fmt((ex.monthly[r.key] || []).slice(0, 12).reduce((a, v) => a + RB.int(v), 0));
+    }
+    const kv = (k, v, cls) => el('div', { class: cls || '' }, el('dt', { text: k }), el('dd', { text: v }));
+    $('xKpis').replaceChildren(
+      kv('경과일', E.ready ? `${E.days.passed}일 / ${E.days.total}일` : '기간 입력 필요'),
+      kv('경과율', E.ready ? `${E.elapsedPct}%` : '-'),
+      kv('남은 기간', E.ready ? `${Math.max(0, E.days.total - E.days.passed)}일` : '-'),
+      kv('협약 금액', Object.values(ex.agreed).some((v) => String(v ?? '') !== '') ? '일부 조정' : '편성값 사용'));
+    const errs = E.checks.filter((c) => c.level === 'error').length, warns = E.checks.filter((c) => c.level === 'warn').length;
+    $('xLive').replaceChildren(
+      kv('총 집행률(현금)', `${E.total.rate}%`, 'big'), kv('경과율', E.ready ? `${E.elapsedPct}%` : '-'),
+      kv('잔액', `${fmt(E.total.remain)}천원`), kv('집행 누계', `${fmt(E.total.spent)}천원`),
+      kv('경고', errs || warns ? `초과·오류 ${errs} · 주의 ${warns}` : '없음', errs ? 'bad' : warns ? '' : 'good'));
+    $('xMeter').style.width = `${Math.min(100, E.total.rate)}%`;
+    $('xLegend').textContent = `집행률 ${E.total.rate}% · 경과율 ${E.ready ? E.elapsedPct + '%' : '-'}`;
+    const order = { error: 0, warn: 1, info: 2, ok: 3 };
+    $('xChecks').replaceChildren(...[...E.checks].sort((a, b) => order[a.level] - order[b.level]).map((c) => el('li', { class: c.level }, el('span', { text: c.msg }), c.basis ? el('small', { class: 'cite', text: c.basis }) : '')));
+    $('xSched').replaceChildren(...(E.schedule.length ? E.schedule.map((s) => el('li', { class: s.done ? 'done' : '' }, el('span', { text: `${s.label} (${s.date})` }),
+      el(s.dday < 0 || (!s.done && s.dday <= 30) ? 'b' : 'span', { text: s.done ? '완료' : s.dday >= 0 ? `D-${s.dday}` : `D+${-s.dday}` }))) : [el('li', {}, el('span', { text: '연차 기간을 입력하면 표시됩니다.' }))]));
+    const ps = $('xPaidSum'); if (ps) ps.textContent = `${fmt(E.org.paid)} / ${fmt(E.org.plan)} (최소 ${fmt(E.org.min)})`;
+    save();
+  }
+  $('xXlsx').addEventListener('click', () => {
+    const bytes = RB.buildExecXlsx(S, C.i, C.y, today(), projEnd());
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    const a = el('a', { href: url, download: `${(S.title || '집행현황').replace(/[\\/:*?"<>|]/g, '_')}_${yl(C.y)}_집행현황_${today()}.xlsx` });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  });
+  // 백업: 과제 전체(편성+집행)를 JSON 파일로 저장·복원
+  $('backupSave').addEventListener('click', () => {
+    const data = JSON.stringify({ app: 'rnd-budget', v: 3, savedAt: new Date().toISOString(), project: S }, null, 1);
+    const url = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+    const a = el('a', { href: url, download: `사업비_백업_${(S.title || '과제').replace(/[\\/:*?"<>|]/g, '_')}_${today()}.json` });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  });
+  $('backupLoad').addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      if (file.size > 5 * 1024 * 1024) throw new Error('size');
+      const obj = JSON.parse(await file.text());
+      if (!obj || obj.app !== 'rnd-budget' || !obj.project) throw new Error('format');
+      const p = RB.normalizeProject(obj.project);
+      if (!confirm(`백업(${String(obj.savedAt || '').slice(0, 10)}, ${p.title || '제목 없음'})을 불러올까요? 현재 입력은 바뀝니다.`)) return;
+      S = p; C = { i: 0, y: 0, mode: 'exec' }; save(); location.reload();
+    } catch { alert('백업 파일을 읽지 못했습니다. 이 도구에서 저장한 .json 파일인지 확인하세요.'); }
+  });
+
   // ---------- 광고(설정 시에만) ----------
   const slots = CFG.adsenseSlots || {};
   if (CFG.adsenseClient && (slots.top || slots.bottom)) {
@@ -345,4 +475,5 @@
   }
 
   renderAll(); renderScenarios();
+  setMode(C.mode);
 })();
