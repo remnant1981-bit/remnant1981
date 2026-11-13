@@ -18,6 +18,7 @@ import { seoulToday, formatSeoul } from "@/lib/time";
 import { FormattedText } from "@/components/FormattedText";
 import { AdSlot } from "@/components/AdSlot";
 import { companyPlan } from "@/server/plans";
+import { aiExtractionFor } from "@/server/ai-extract";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -50,7 +51,7 @@ export default async function Detail({ params }: Props) {
   const db = await getDb();
   const a = await getAnnouncement(db, id);
   if (!a) notFound();
-  const [extras, v] = await Promise.all([getAnnouncementExtras(db, a.id), getViewer()]);
+  const [extras, v, ai] = await Promise.all([getAnnouncementExtras(db, a.id), getViewer(), aiExtractionFor(db, a.id)]);
   const adPlan = await companyPlan(db, v.company?.id);
   let match = null;
   let bookmarked = false;
@@ -104,6 +105,19 @@ export default async function Detail({ params }: Props) {
           <ul className="list-disc pl-5 text-sm">{extras.files.map((f) => <li key={f.source_url}><a className="underline" href={f.source_url} target="_blank" rel="noopener noreferrer nofollow">{f.name}</a></li>)}</ul>
         )}
       </section>
+
+      {ai && (ai.summary.support || ai.summary.target || ai.summary.how_to_apply || ai.other.length > 0) && (
+        <section className="card p-4" aria-labelledby="ai">
+          <h2 id="ai" className="mb-2 font-bold">AI 요약 <span className="chip bg-gray-100 text-gray-700">참고</span></h2>
+          <dl className="grid gap-1 text-sm sm:grid-cols-[6rem_1fr]">
+            {ai.summary.support && <><dt className="text-[var(--muted)]">지원내용</dt><dd>{ai.summary.support}</dd></>}
+            {ai.summary.target && <><dt className="text-[var(--muted)]">지원대상</dt><dd>{ai.summary.target}</dd></>}
+            {ai.summary.how_to_apply && <><dt className="text-[var(--muted)]">신청방법</dt><dd>{ai.summary.how_to_apply}</dd></>}
+          </dl>
+          {ai.other.length > 0 && (<><h3 className="mb-1 mt-3 text-sm font-semibold">기타 요건·우대사항</h3><ul className="list-disc pl-5 text-sm">{ai.other.map((x, i) => <li key={i}>{x}</li>)}</ul></>)}
+          <p className="mt-2 text-xs text-[var(--muted)]">공고 본문을 AI가 자동 정리한 참고 정보입니다({formatSeoul(ai.at)}). 틀릴 수 있으니 반드시 공식 원문으로 확인하세요.</p>
+        </section>
+      )}
 
       <section className="card p-4" aria-labelledby="fit">
         <h2 id="fit" className="mb-2 font-bold">기업 적합성 분석 (참고용)</h2>

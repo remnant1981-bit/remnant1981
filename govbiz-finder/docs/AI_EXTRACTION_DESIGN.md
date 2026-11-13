@@ -1,6 +1,20 @@
 # 공고문 자격요건 AI 추출 설계 (초안)
 
-상태: **설계·샘플 비교 단계**. 운영 반영(DB 테이블, 수집 후 자동 실행, 화면 표시)은 샘플 결과 확인 후 별도 승인.
+상태: **운영 코드 구현 완료, 기본 꺼짐**(`AI_EXTRACT_ENABLED=false`). 사용자 승인(2026-11-13)으로 테이블·Batch 처리·화면 표시를 미리 구현. 모델은 샘플 비교 후 `AI_EXTRACT_MODEL`로 지정하고 켬.
+
+### 켜는 방법(서버·PC 공통)
+| 환경변수 | 값 |
+|---|---|
+| `ANTHROPIC_API_KEY` | Console 발급 키(환경변수만, 커밋 금지) |
+| `AI_EXTRACT_ENABLED` | `true` (끄면 API 호출 중지 + 저장 결과도 판정·화면에 미사용) |
+| `AI_EXTRACT_MODEL` | 샘플 비교로 정한 모델(기본 claude-opus-5-5) |
+| `AI_MONTHLY_BUDGET_USD` | 월 예산(기본 20). 초과 예상분은 제출 안 함 |
+| `AI_EXTRACT_MAX_PER_RUN` | 1회 제출 상한(기본 500) |
+
+- 실행: `npm run collect` 끝에 자동 실행(결과 반영 → 신규 제출). 단독 실행은 `npm run ai:extract`.
+- Batch는 보통 1시간 이내 완료 → 다음 수집 때 결과 반영(최대 하루 지연).
+- 관리자 화면 '수집 원천·모니터링'에 상태·건수·이번 달 비용 표시.
+- 공고 상세에 'AI 요약(참고)'(지원내용·대상·신청방법, 기타 요건·우대사항) 표시.
 
 ## 1. 목적
 - 현재 맞춤 공고 판정은 공고명·지원대상 문구에서 **정규식으로 추정한 규칙**(신뢰도 0.5~0.7)에 의존함.
@@ -36,27 +50,19 @@
 - 허용 목록 밖 값, 형식 오류, 중복 항목은 버리고 사유를 기록(`dropped`).
 - 단위 테스트: `tests/ai-extract.test.ts`(변환·인젝션 방어·표시 단계·비용 계산).
 
-## 4. 처리 흐름(운영 반영 시 — 승인 필요)
+## 4. 처리 흐름(구현: `src/server/ai-extract.ts`, 마이그레이션 0012)
 1. 수집(runSource) 후 `content_hash`가 새로 생기거나 바뀐 공고만 대상 큐에 넣음.
 2. 하루 1회 Batch API로 제출 → 완료 후 결과 저장(최대 24시간, 보통 1시간 이내).
 3. 결과는 신규 테이블에 저장, `loadRules`가 기존 규칙과 합침(같은 field_key면 신뢰도 높은 쪽 우선, 공고 지역 규칙(1.0)은 항상 유지).
 4. 관리자 화면에 처리 건수·실패·누적 비용 표시. 월 비용 상한(예: $20) 초과 시 자동 중지.
 
-### 신규 테이블 제안(미적용, 승인 대상)
-```sql
-CREATE TABLE ai_extractions (
-  announcement_id TEXT NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
-  content_hash TEXT NOT NULL,          -- 원문 바뀌면 재추출
-  version TEXT NOT NULL,               -- 프롬프트·스키마 버전(AI_EXTRACT_VERSION)
-  model TEXT NOT NULL,
-  output_json TEXT,                    -- 검증 전 원본(감사용)
-  rules_json TEXT,                     -- 검증 후 규칙
-  status TEXT NOT NULL,                -- ok | failed
-  input_tokens INTEGER, output_tokens INTEGER, cost_usd REAL,
-  created_at TEXT NOT NULL,
-  PRIMARY KEY (announcement_id, content_hash, version)
-);
-```
+- 실제 흐름: 1·2단계는 수집 스크립트 끝에서 `runAiCycle`(끝난 배치 결과 반영 → 신규 제출)로 처리. 실패 건은 자동 재시도하지 않음(비용 보호).
+- 대상: 활성·비모의·접수 중/예정/상시/미확인, 본문 200자 초과, 같은 원문·버전 미처리 공고. 마감 임박 순.
+- 규칙 병합(`mergeByConfidence`): 관리자 등록 규칙 > 같은 항목 중 신뢰도 높은 규칙(지역 표기 1.0 > AI 명시 0.8 > 문구 추정 0.5~0.7). 원문이 바뀌면 이전 AI 결과는 쓰지 않고 재추출 대상.
+
+### 테이블 `ai_extractions` (`migrations/0012_ai_extractions.sql`, 기존 테이블 변경 없음)
+- 키: (announcement_id, content_hash, version). status: pending | ok | failed.
+- 저장: 모델 출력 원본(감사용), 검증 후 규칙, 버린 항목·사유, 토큰·비용(Batch 단가).
 
 ## 5. 알려진 제한
 - 기업마당·K-Startup API가 주는 본문은 **요약 본문**임. 첨부 공고문(HWP/PDF)의 세부 자격요건은 포함 안 됨 → 첨부 파싱은 별도 과제(수집 정책 검토 필요).

@@ -7,6 +7,7 @@
     "dev": "next dev",
     "demo": "tsx scripts/demo.ts",
     "ai:sample": "tsx scripts/ai-sample.ts",
+    "ai:extract": "tsx scripts/ai-extract.ts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
@@ -21,6 +22,7 @@
     "collect": "tsx scripts/collect.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "@expo-google-fonts/noto-sans-kr": "^0.4.4",
     "@pdf-lib/fontkit": "^1.1.1",
     "bcryptjs": "^3.0.3",
@@ -31,7 +33,6 @@
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^1.8.0",
     "@tailwindcss/postcss": "^4.3.5",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^26.6.6",

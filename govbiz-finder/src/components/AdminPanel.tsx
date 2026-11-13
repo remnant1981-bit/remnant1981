@@ -56,6 +56,16 @@ export function AdminPanel() {
         <h3 className="mt-4 font-semibold">최근 수집 실행</h3>
         <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-sm"><thead><tr className="border-b"><th>시작</th><th>원천</th><th>상태</th><th>수집/신규/갱신/건너뜀</th><th>오류</th></tr></thead>
           <tbody>{ov.runs.map((r: Any) => (<tr key={r.id} className="border-b"><td>{formatSeoul(r.started_at)}</td><td>{r.source_id}</td><td>{r.status}</td><td>{r.fetched_count}/{r.inserted_count}/{r.updated_count}/{r.skipped_count}</td><td className="max-w-[260px] break-words">{r.error_summary ?? "-"}</td></tr>))}</tbody></table></div>
+        {ov.ai && (<>
+          <h3 className="mt-4 font-semibold">AI 자격요건 추출</h3>
+          <p className="text-sm">
+            상태: <strong>{ov.ai.enabled ? (ov.ai.hasKey ? "사용 중" : "켜짐(API 키 없음)") : "꺼짐"}</strong> · 모델 {ov.ai.model}
+            {" "}· 완료 {ov.ai.counts.ok} · 대기 {ov.ai.counts.pending} · 실패 {ov.ai.counts.failed}
+            {" "}· 이번 달 ${Number(ov.ai.monthSpentUsd).toFixed(2)} / ${ov.ai.monthlyBudgetUsd} (누적 ${Number(ov.ai.totalSpentUsd).toFixed(2)})
+            {ov.ai.lastUpdatedAt && <> · 최근 {formatSeoul(ov.ai.lastUpdatedAt)}</>}
+          </p>
+          <p className="text-xs text-[var(--muted)]">수집 후 자동 실행(Batch). 환경변수 AI_EXTRACT_ENABLED·AI_EXTRACT_MODEL·AI_MONTHLY_BUDGET_USD로 설정.</p>
+        </>)}
       </section>
 
       <section aria-labelledby="cl"><h2 id="cl" className="mb-2 text-lg font-bold">기업 관계 확인 신청</h2>
