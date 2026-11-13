@@ -301,3 +301,9 @@
 - 문제없음 확인: SQL 주입(자리표시자·상수 보간만), XSS, 오픈 리다이렉트, 관리자 차단·토큰·감사로그, 경로 매개변수 검증, XFF 우회, 개인정보·비밀값·쿠키·서비스 워커·SSRF·오류 응답.
 - 유지: CSP `unsafe-inline`(Next 하이드레이션), 개발 의존성 moderate 8건(운영 의존성 0건).
 - 검증: vitest 318(신규 6, 신고 Origin 테스트는 수정 전 실패 확인), E2E 29.
+
+## 지도 타일 교체 준비 (2026-11-13)
+- `src/lib/map-tiles.ts`: `MAP_TILE_PROVIDER=osm|vworld` + `VWORLD_API_KEY`(무료, 도메인 등록형 브라우저 키). 서버가 읽어 지도 컴포넌트에 전달 → 다시 빌드 없이 교체. 키 누락·형식 오류는 OSM 복귀 + 헬스 `MAP_TILE_FALLBACK`(운영 알림). 키 형식 검증으로 주소 주입 차단.
+- CSP img-src는 `TILE_HOSTS` 목록에서 생성(OSM·브이월드). setup.sh 환경파일에 두 항목 추가, DEPLOYMENT에 교체 절차.
+- 네이버 지도는 SDK 방식이라 이 구조 밖 — OPEN_ISSUES에 기록.
+- 검증: vitest(기본·브이월드 주소·잘못된 키 6종 복귀·CSP 호스트 포함), E2E 지도 화면은 OSM 기본으로 기존과 동일.
