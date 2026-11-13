@@ -67,13 +67,20 @@ function mapFees(row: RawRow, flags: string[]): NormalizedFeeRule[] {
     if ((baseAmt ?? 0) > 0 || (addAmt ?? 0) > 0 || (dayAmt ?? 0) > 0) { flags.push("FEE_CONFLICT"); return out; } // 무료인데 요금 기재 → 추정 금지
     out.push({ ruleType: "FREE", amount: null, durationMinutes: null, dayType: "EVERYDAY", dailyMaxBasis: null });
   } else if (kind === "유료") {
-    if (baseMin == null || baseMin <= 0 || baseAmt == null) { flags.push("FEE_INCOMPLETE"); }
+    const dayRule = (): NormalizedFeeRule[] => (dayAmt != null && dayAmt > 0 ? [{ ruleType: "DAILY_MAX", amount: dayAmt, durationMinutes: dayHours != null && dayHours > 0 ? Math.round(dayHours * 60) : null, dayType: "EVERYDAY", dailyMaxBasis: "UNKNOWN" }] : []);
+    if (baseMin === 0 && baseAmt === 0 && addMin != null && addMin > 0 && addAmt != null && addAmt > 0) {
+      // 기본시간·기본요금이 모두 0이고 추가 단위요금만 있는 경우(실데이터 41곳, 예: 5분당 250원): 기본 구간 없이 처음부터 단위요금으로 과금.
+      // 요금엔진 표현상 '첫 단위 = 기본'으로 넣으면 ceil(이용분/단위)×단위요금과 같다. 기본요금이 0이 아닌데 기본시간만 0인 경우는 해석이 갈려 계산하지 않음.
+      flags.push("FEE_PER_UNIT_FROM_START");
+      out.push({ ruleType: "BASE", amount: addAmt, durationMinutes: addMin, dayType: "EVERYDAY", dailyMaxBasis: null },
+        { ruleType: "ADDITIONAL", amount: addAmt, durationMinutes: addMin, dayType: "EVERYDAY", dailyMaxBasis: null }, ...dayRule());
+    } else if (baseMin == null || baseMin <= 0 || baseAmt == null) { flags.push("FEE_INCOMPLETE"); }
     else {
       out.push({ ruleType: "BASE", amount: baseAmt, durationMinutes: baseMin, dayType: "EVERYDAY", dailyMaxBasis: null });
       if (addMin != null && addMin > 0 && addAmt != null) out.push({ ruleType: "ADDITIONAL", amount: addAmt, durationMinutes: addMin, dayType: "EVERYDAY", dailyMaxBasis: null });
       else flags.push("FEE_NO_ADDITIONAL");
       // 1일주차권: 날짜 경계·적용 방식이 원천에 명시되지 않음(OPEN_ISSUES #5) → 기준 UNKNOWN으로 보존, 요금엔진은 계산 불가 처리
-      if (dayAmt != null && dayAmt > 0) out.push({ ruleType: "DAILY_MAX", amount: dayAmt, durationMinutes: dayHours != null && dayHours > 0 ? Math.round(dayHours * 60) : null, dayType: "EVERYDAY", dailyMaxBasis: "UNKNOWN" });
+      out.push(...dayRule());
     }
   } else if (kind === "혼합") flags.push("FEE_MIXED"); // 무료·유료 구간 구분이 구조화되어 있지 않음 → 계산하지 않음(사용자 결정 2026-11-08)
   else flags.push(kind === "" ? "FEE_KIND_MISSING" : "FEE_KIND_UNSUPPORTED");
