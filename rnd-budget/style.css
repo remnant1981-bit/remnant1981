@@ -136,3 +136,40 @@ h2 .cur{font-size:.85rem;font-weight:600;color:var(--brand);margin-left:4px}
   .edit-bar{padding:8px 10px}
 }
 @media print{.edit-bar,#s0 .guide,#addInst{display:none!important}}
+/* 간소화: 적용 기준 접기·통과 항목 접기 */
+details.rulebox>summary{cursor:pointer;font-weight:600;font-size:.92rem}
+details.rulebox[open]>summary{margin-bottom:8px}
+.passed{margin-top:8px;font-size:.88rem}.passed>summary{cursor:pointer;color:var(--muted)}
+.passed .checks{margin-top:6px}
+/* PC 최적화: 넓은 화면 2단(좌 입력 / 우 고정 요약·점검·엑셀) */
+.live h2{margin-bottom:8px}
+.live-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0}
+.live-grid div{background:var(--bg);border-radius:8px;padding:8px 10px}
+.live-grid dt{font-size:.75rem;color:var(--muted)}.live-grid dd{margin:0;font-weight:700;font-variant-numeric:tabular-nums}
+.live-grid .big{grid-column:1/-1;background:var(--brand-soft)}.live-grid .big dd{font-size:1.35rem}
+.live-grid .bad dd{color:var(--err)}.live-grid .good dd{color:var(--ok)}
+.meter{display:flex;height:10px;border-radius:99px;overflow:hidden;background:var(--line);margin-top:12px}
+.meter span{display:block;height:100%;transition:width .2s}
+#meterGov{background:var(--brand)}#meterCash{background:#f59e0b}#meterInk{background:#10b981}
+.meter-legend{display:flex;gap:12px;font-size:.75rem;color:var(--muted);margin:6px 0 0}
+.meter-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.meter-legend .g{background:var(--brand)}.meter-legend .c{background:#f59e0b}.meter-legend .k{background:#10b981}
+@media (min-width:1100px){
+  .wrap{max-width:1360px;padding:0 28px}
+  body{font-size:15.5px}
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:20px;align-items:start}
+  .col-side{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto;padding-right:2px}
+  .col-side .card{padding:16px}
+  .col-side #summary{min-width:0}
+  .edit-bar{top:0}
+  .grid3{grid-template-columns:1fr 1fr 1.4fr}
+  .kpis{grid-template-columns:repeat(4,1fr)}
+  #people{min-width:0}#items{min-width:0}
+  .tbl th,.tbl td{padding:7px 6px}
+  .tbl input{padding:7px 9px}
+  .card{padding:20px 22px}
+  h2{font-size:1.15rem}
+}
+@media (min-width:1600px){.layout{grid-template-columns:minmax(0,1fr) 420px}}
+@media (min-width:1100px) and (max-height:760px){.col-side{position:static;max-height:none}}
+@media print{.layout{display:block}.col-side{position:static}.live .meter,.meter-legend{display:none}}

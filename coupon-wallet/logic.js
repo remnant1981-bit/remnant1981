@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
 
-  const VERSION = '1.2.0';
+  const VERSION = '1.3.0';
 
   /* ---------- 날짜 ---------- */
   const pad = n => String(n).padStart(2, '0');
@@ -220,11 +220,27 @@
     return out;
   }
 
+  /* ---------- 공유 받기(Web Share Target) ---------- */
+  const MAX_SHARE_IMAGES = 10, MAX_SHARE_BYTES = 20 * 1024 * 1024;
+  // 공유로 들어온 파일 중 쓸 수 있는 이미지만 (형식·크기·개수 제한)
+  function pickShareImages(files) {
+    return (files || []).filter(f => f && typeof f.type === 'string' && /^image\//.test(f.type) && f.size > 0 && f.size <= MAX_SHARE_BYTES).slice(0, MAX_SHARE_IMAGES);
+  }
+  // 다른 사이트의 폼 POST가 공유로 위장하는 것을 막음. OS 공유 시트(none)·같은 출처는 허용, 헤더가 없으면 허용
+  const shareOriginAllowed = site => site !== 'cross-site';
+  // 서비스워커 범위 안에서 이 앱이 아닌 경로(같은 사이트에 올라간 다른 앱 등)인지 판단: 루트 파일과 vendor/ 만 이 앱 것
+  function isOwnPath(pathname, scopePath) {
+    if (!pathname.startsWith(scopePath)) return false;
+    const rel = pathname.slice(scopePath.length);
+    return rel === '' || !rel.includes('/') || rel.startsWith('vendor/');
+  }
+
   const CW = {
     VERSION, toStr, parse, isDate, today, dayDiff, won, wonCompact, uid,
     couponStatus, daysLeft, ddayLabel, ddayClass, loyaltyState, pace, stats, notifyLines,
     normalizeCoupon, normalizeLoyalty, normalizeBackup,
-    SCAN_MODELS, DEFAULT_SCAN_MODEL, SCAN_SCHEMA, SCAN_SYSTEM, parseScan, mergeScan
+    SCAN_MODELS, DEFAULT_SCAN_MODEL, SCAN_SCHEMA, SCAN_SYSTEM, parseScan, mergeScan,
+    MAX_SHARE_IMAGES, pickShareImages, shareOriginAllowed, isOwnPath
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = CW;
   else root.CW = CW;

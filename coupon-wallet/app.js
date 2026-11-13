@@ -370,7 +370,10 @@ function applyScan(f, r) {
   if (r.aiOk && m.isCoupon === false) return scanStatus('쿠폰·기프티콘 이미지가 아닌 것 같음. 사진만 첨부했으니 직접 입력해 주세요', 'warn');
   setIf('brand', m.brand); setIf('title', m.title); setIf('expires', m.expires); setIf('code', m.code);
   if (m.value) field(f, 'value').value = m.value;
-  if (m.memo && !field(f, 'memo').value.trim()) field(f, 'memo').value = m.memo;
+  if (m.memo) {
+    const memoEl = field(f, 'memo'), cur = memoEl.value.trim();
+    if (!cur.includes(m.memo)) memoEl.value = cur ? `${cur}\n${m.memo}` : m.memo;
+  }
   const bcNote = m.codeSource === 'barcode' ? (m.mismatch ? ' 바코드 판독 번호와 AI가 읽은 번호가 달라 바코드 값을 넣었음.' : '') : '';
   if (r.aiOk) {
     return m.confidence === 'high'
@@ -422,6 +425,72 @@ function renderKeyState() {
   $('#scan-state').textContent = scanCfg.tail
     ? `API 키 등록됨 (…${scanCfg.tail}) · 모델 ${scanCfg.model}`
     : 'API 키 미등록 · 바코드 번호만 읽음(지원 기기)';
+}
+
+/* ========== 공유받기 (카톡 등 → 공유하기 → 쿠폰지갑) ========== */
+// 서비스워커가 받은 사진을 IndexedDB('pendingShare')에 넣어 두면, 앱이 열릴 때 꺼내 한 장씩 자동 인식함.
+// 대기열은 처리가 끝날 때까지 저장소에 남겨 두어, 앱을 닫아도 남은 사진이 사라지지 않음
+let shareQueue = [];   // [{name,type,blob}] 맨 앞이 지금 처리 중인 사진
+let shareTotal = 0, shareActive = false, shareSaved = false, shareText = '';
+
+const persistShare = () => CWStore.setMeta('pendingShare', shareQueue.length ? { items: shareQueue, text: '', at: Date.now() } : null).catch(() => {});
+
+// 팝업 닫힘과 history.back()이 끝난 뒤에 실행 (끝나기 전에 새 팝업을 열면 뒤로가기 처리에 닫힘)
+function whenSettled(fn, tries = 30) {
+  if ((!anyOpen() && !(history.state && history.state.dlg)) || tries <= 0) return fn();
+  setTimeout(() => whenSettled(fn, tries - 1), 50);
+}
+
+function startShareItem() {
+  const it = shareQueue[0];
+  if (!it) return;
+  const idx = shareTotal - shareQueue.length + 1;
+  ui.tab = 'coupons'; ui.status = 'active'; ui.brand = ''; ui.q = ''; render();
+  openCoupon();
+  $('#coupon-form-title').textContent = shareTotal > 1 ? `쿠폰 추가 (공유 ${idx}/${shareTotal})` : '쿠폰 추가 (공유)';
+  if (shareText) { field($('#form-coupon'), 'memo').value = shareText; shareText = ''; }
+  shareActive = true; shareSaved = false;
+  runScan(new File([it.blob], it.name || 'shared', { type: it.type }));
+}
+
+function onCouponClosed() {
+  cancelScan();
+  if (!shareActive) return;
+  shareActive = false;
+  shareQueue.shift(); persistShare();            // 저장했든 건너뛰었든 이 사진은 끝
+  if (!shareQueue.length) return;
+  if (shareSaved) whenSettled(startShareItem);   // 저장했으면 바로 다음 사진
+  else toast(`남은 공유 사진 ${shareQueue.length}장`, { label: '이어서 처리', fn: () => whenSettled(startShareItem) });
+}
+
+async function receiveShare(mode) {
+  if (mode === 'blocked' || mode === 'error') return toast('공유를 받지 못함. 다시 시도해 주세요');
+  let data = null;
+  try { data = await CWStore.getMeta('pendingShare'); } catch (e) { /* 아래에서 안내 */ }
+  const items = data && Array.isArray(data.items) ? data.items : [];
+  const text = data && typeof data.text === 'string' ? data.text : '';
+  if (!items.length && !text) return toast('공유된 내용이 없음');
+  if (items.length) {
+    shareQueue = items; shareTotal = items.length; shareText = text;
+    persistShare();                               // 글은 한 번만 쓰고 비움
+    startShareItem();
+    return;
+  }
+  // 글만 공유된 경우: 메모에 넣고 직접 입력하도록 안내
+  CWStore.setMeta('pendingShare', null).catch(() => {});
+  ui.tab = 'coupons'; render(); openCoupon();
+  field($('#form-coupon'), 'memo').value = text;
+  toast('공유된 글을 메모에 넣었음. 사진이 없어 직접 입력해 주세요');
+}
+
+// 앱을 닫는 바람에 처리하지 못한 공유 사진이 남아 있으면 이어서 처리하도록 안내
+async function resumeShare() {
+  let data = null;
+  try { data = await CWStore.getMeta('pendingShare'); } catch (e) { return; }
+  const items = data && Array.isArray(data.items) ? data.items : [];
+  if (!items.length) return;
+  shareQueue = items; shareTotal = items.length;
+  toast(`처리하지 않은 공유 사진 ${items.length}장`, { label: '이어서 처리', fn: () => whenSettled(startShareItem) });
 }
 
 /* ========== 알림 / 설정 정보 ========== */
@@ -555,7 +624,7 @@ document.addEventListener('input', e => {
 });
 
 $('#scan-file').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) runScan(f); });
-$('#dlg-coupon').addEventListener('close', cancelScan);
+$('#dlg-coupon').addEventListener('close', onCouponClosed);
 
 field($('#form-coupon'), 'image').addEventListener('change', async e => {
   const file = e.target.files[0];
@@ -582,6 +651,7 @@ $('#form-coupon').addEventListener('submit', async e => {
   const dup = rec.code && state.coupons.some(c => c.id !== rec.id && c.brand === rec.brand && c.code === rec.code);
   upsert(state.coupons, rec);
   ui.tab = 'coupons'; ui.status = CW.couponStatus(rec); ui.brand = ''; ui.q = '';
+  if (shareActive) shareSaved = true;
   closeAll(); render();
   toast(dup ? '저장함 (같은 번호의 쿠폰이 이미 있음)' : '저장함');
 });
@@ -655,7 +725,8 @@ async function init() {
   if (['home', 'coupons', 'loyalty'].includes(p.get('tab'))) ui.tab = p.get('tab');
   render();
   if (p.get('add') === 'coupon') openCoupon();
-  if (p.has('add') || p.has('tab')) history.replaceState(history.state, '', location.pathname);
+  if (p.has('add') || p.has('tab') || p.has('share')) history.replaceState(history.state, '', location.pathname);
+  if (p.has('share')) await receiveShare(p.get('share')); else resumeShare();
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* 무시 */ }
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').then(registerPeriodic).catch(() => {});
