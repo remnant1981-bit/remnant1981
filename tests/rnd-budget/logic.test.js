@@ -133,3 +133,10 @@ test('위탁연구개발비 40%·기존 인력 현금·장비 3천만 원 안내
   // 점검 결과에 근거 조문 포함
   assert.ok(r.checks.some((c) => /제114조/.test(c.basis)));
 });
+
+test('체험 예시: 정상 예시는 오류 0건, 오류 예시는 주요 오류 모두 표시', () => {
+  const ok = RB.calcBudget(RB.EXAMPLES.ok.state);
+  assert.equal(ok.checks.filter((c) => c.level === 'error').length, 0);
+  const err = RB.calcBudget(RB.EXAMPLES.error.state).checks.filter((c) => c.level === 'error').map((c) => c.msg).join('\n');
+  for (const re of [/최소 총사업비보다/, /현금 .*부족/, /연구수당/, /위탁연구개발비/, /총 참여율/]) assert.match(err, re);
+});

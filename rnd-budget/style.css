@@ -94,3 +94,8 @@ td.na{color:var(--muted)}
 .checks li{display:block}.checks .cite{display:block;margin-top:2px}
 #people select{min-width:10.5em}
 @media (max-width:639px){#people select{min-width:0;width:100%}}
+.demo-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin-top:10px;font-size:.88rem;color:var(--muted)}
+.btn.sm{padding:5px 10px;font-size:.85rem}
+.demo-note{background:var(--warn-bg);color:var(--warn);border-radius:10px;padding:10px 14px;margin:0 0 14px;font-size:.9rem}
+.linkbtn{border:0;background:none;padding:0;font:inherit;color:inherit;text-decoration:underline;font-weight:700;cursor:pointer}
+@media print{.demo-bar,.demo-note{display:none!important}}

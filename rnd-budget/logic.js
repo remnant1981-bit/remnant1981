@@ -53,6 +53,25 @@
     existingCash: { label: '기존 인력 현금(부처 인정 시)', inkind: false },
   };
 
+
+  // 체험용 예시(데모). 정상 편성 1건, 점검 오류 확인용 1건
+  const EXAMPLES = {
+    ok: { label: '정상 편성 예시(중소기업)', state: { ruleset: 'sme', title: '[예시] 액체수소 이송용 극저온 펌프 개발', gov: '300000',
+      people: [
+        { name: '김책임', salary: '84000', months: 12, rate: 30, otherRate: 40, kind: 'existing' },
+        { name: '이선임', salary: '62000', months: 12, rate: 50, otherRate: 30, kind: 'existing' },
+        { name: '박연구', salary: '48000', months: 12, rate: 60, otherRate: 20, kind: 'existing' },
+        { name: '신규연구원', salary: '42000', months: 10, rate: 100, otherRate: 0, kind: 'new' },
+      ],
+      items: { equipment: { cash: '60000', inkind: '15000' }, material: { cash: '120000', inkind: '10000' }, outsource: { cash: '40000' }, activity: { cash: '25000' }, allowance: { cash: '9000' } } } },
+    error: { label: '오류 점검 예시(중견 3천억 미만)', state: { ruleset: 'midS', title: '[예시] 점검 오류 확인용', gov: '400000',
+      people: [
+        { name: '최수석', salary: '90000', months: 12, rate: 70, otherRate: 50, kind: 'existing' },
+        { name: '정선임', salary: '60000', months: 12, rate: 50, otherRate: 0, kind: 'existingCash' },
+      ],
+      items: { equipment: { inkind: '40000' }, material: { cash: '150000', inkind: '60000' }, outsource: { cash: '160000' }, activity: { cash: '10000' }, allowance: { cash: '30000' } } } },
+  };
+
   const DEFAULT_RULES = { indirectPct: 10, allowanceMaxPct: LIMITS.allowancePct };
 
   const int = (v) => {
@@ -272,7 +291,7 @@
     return zip(files);
   }
 
-  const RB = { BASIS_DATE, SOURCES, RULESETS, LIMITS, ITEMS, PERSON_KINDS, DEFAULT_RULES, int, pct, effectiveRules, calcFunding, personCost, calcBudget, buildXlsx, crc32 };
+  const RB = { EXAMPLES, BASIS_DATE, SOURCES, RULESETS, LIMITS, ITEMS, PERSON_KINDS, DEFAULT_RULES, int, pct, effectiveRules, calcFunding, personCost, calcBudget, buildXlsx, crc32 };
   if (typeof module !== 'undefined' && module.exports) module.exports = RB;
   else root.RB = RB;
 })(typeof self !== 'undefined' ? self : this);

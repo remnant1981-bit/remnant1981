@@ -34,6 +34,19 @@
   $('basisLine').textContent = `적용 법령: ${RB.SOURCES.decreeT1} · ${RB.SOURCES.std} — 기준일 ${RB.BASIS_DATE}`;
   $('foot').textContent = `본 도구는 참고용입니다. 사업별 공고문·부처 운영요령·협약이 우선하며, 최종 편성은 전문기관 기준을 확인하세요. 법령 기준일 ${RB.BASIS_DATE}.${CFG.contact ? ` 문의: ${CFG.contact}` : ''}`;
 
+  // ---------- 예시(데모) ----------
+  document.querySelectorAll('[data-example]').forEach((b) => b.addEventListener('click', () => {
+    const ex = RB.EXAMPLES[b.dataset.example];
+    const hasInput = RB.int(S.gov) || S.people.some((p) => p.name || p.salary) || Object.values(S.items).some((v) => v && (v.cash || v.inkind));
+    if (hasInput && !String(S.title || '').startsWith('[예시]') && !confirm(`'${ex.label}'으로 바꿀까요? 지금 입력한 내용은 지워집니다. (필요하면 먼저 '현재 안 저장')`)) return;
+    S = Object.assign(blank(), JSON.parse(JSON.stringify(ex.state))); save(); location.reload();
+  }));
+  if (String(S.title || '').startsWith('[예시]')) {
+    const n = $('demoNote');
+    n.hidden = false;
+    n.append('예시 데이터로 체험 중입니다. 값을 바꿔 보며 점검 결과를 확인하고, 실제 작성은 ', el('button', { type: 'button', class: 'linkbtn', text: '새로 작성', onclick: () => { S = blank(); save(); location.reload(); } }), '을 누르세요.');
+  }
+
   // ---------- 1. 기관 유형·적용 기준 ----------
   const sel = $('ruleset');
   const groups = [['기업(영리기관)', ['sme', 'midS', 'midL', 'large']], ['비영리기관', ['univ', 'nonprofit']], ['기타', ['custom']]];

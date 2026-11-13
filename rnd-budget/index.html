@@ -20,11 +20,17 @@
   <div class="wrap">
     <h1>R&amp;D 사업비 편성 가이드</h1>
     <p class="sub">기관 유형만 고르면 <strong>법령 기준이 자동 적용</strong>됩니다. 순서대로 입력하면 기관부담금·현금/현물·간접비가 계산되고 편성 오류를 바로 알려 드립니다. 무료·회원가입 없음, 입력값은 이 브라우저에만 저장됩니다.</p>
+    <div class="demo-bar" role="group" aria-label="예시로 체험하기">
+      <span>처음이면 예시로 체험해 보세요:</span>
+      <button type="button" class="btn ghost sm" data-example="ok">정상 편성 예시</button>
+      <button type="button" class="btn ghost sm" data-example="error">오류 점검 예시</button>
+    </div>
     <p class="basis-line" id="basisLine"></p>
   </div>
 </header>
 
 <main id="main" class="wrap">
+  <p class="demo-note" id="demoNote" hidden></p>
   <ol class="steps" aria-label="작성 순서"><li><a href="#s1">기관·정부출연금</a></li><li><a href="#s2">인건비</a></li><li><a href="#s3">비목 편성</a></li><li><a href="#s4">점검</a></li><li><a href="#s5">엑셀·저장</a></li></ol>
 
   <section class="card" id="s1" aria-labelledby="h-fund">

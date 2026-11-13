@@ -89,6 +89,14 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   await p.reload();
   check('광고 설정 시 2곳 표시·스크립트 로드', (await p.locator('#ad-top ins.adsbygoogle').count()) === 1 && (await p.locator('#ad-bottom ins.adsbygoogle').count()) === 1 && await p.evaluate(() => window.__adLoaded === true));
 
+  // 예시(데모)
+  await p.click('[data-example="error"]'); await p.waitForLoadState();
+  check('오류 예시: 오류 5건 이상·배너', (await p.locator('#checks .error').count()) >= 5 && await p.locator('#demoNote').isVisible() && (await p.inputValue('#ruleset')) === 'midS');
+  await p.click('[data-example="ok"]'); await p.waitForLoadState();
+  check('정상 예시: 오류 0건', (await p.locator('#checks .error').count()) === 0 && (await p.inputValue('#gov')) === '300,000', await p.textContent('#checks'));
+  await p.click('#demoNote .linkbtn'); await p.waitForLoadState();
+  check('새로 작성 → 빈 화면', (await p.inputValue('#gov')) === '' && await p.locator('#demoNote').isHidden());
+
   check('콘솔·스크립트 오류 없음', errors.length === 0, errors.join(' | '));
   await browser.close(); server.close();
   const fail = results.filter((x) => !x).length;
