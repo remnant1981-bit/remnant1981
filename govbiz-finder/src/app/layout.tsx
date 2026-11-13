@@ -47,7 +47,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <NavLinks items={[
                 { href: "/search", label: "공고 검색" },
                 ...(v.profile ? [{ href: "/recommend", label: "우리 기업 공고", strong: true }] : [{ href: "/recommend", label: "우리 기업 맞춤 공고", strong: true }]),
-                ...(v.session ? [{ href: "/my", label: "내 공고·알림", ...(v.company ? { badge: await soonBookmarkCount(v.session.user.id, v.company.id) } : { guestDeadlineBadge: true }) }, { href: "/company", label: "기업정보" }] : [{ href: "/my", label: "관심 공고", guestDeadlineBadge: true }]),
+                ...(v.session ? [{ href: "/my", label: "내 공고·알림", ...(v.company ? { badge: await soonBookmarkCount(v.session.user.id, v.company.id) } : { guestDeadlineBadge: true }) }, ...(v.company ? [{ href: "/pipeline", label: "진행 관리" }] : []), { href: "/company", label: "기업정보" }] : [{ href: "/my", label: "관심 공고", guestDeadlineBadge: true }]),
                 ...(v.session?.user.role === "admin" ? [{ href: "/admin", label: "관리자" }] : []),
               ]} />
             </nav>

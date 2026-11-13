@@ -8,6 +8,8 @@ import { loadRules } from "@/server/recommend";
 import { bookmarkedIds, recordView } from "@/server/userdata";
 import { evaluateMatch, DISPLAY_LABEL, checkableConditions } from "@/domain/matching";
 import { ConditionCheck } from "@/components/ConditionCheck";
+import { PipelinePanel } from "@/components/PipelineControls";
+import { getPipelineItem, listMembers } from "@/server/pipeline";
 import { categoryName } from "@/domain/taxonomy";
 import { CategoryTags, FitChip, AccuracyChip, Notice, Provenance, RuleChip, StatusChip, TestBadge, BackLink } from "@/components/ui";
 import { BookmarkButton } from "@/components/BookmarkButton";
@@ -75,6 +77,8 @@ export default async function Detail({ params }: Props) {
         </div>
         <div className="mt-3"><Provenance url={a.canonical_url} sourceName={a.source_name} sourceStatus={a.source_status} checkedAt={a.last_checked_at} /></div>
       </header>
+
+      {v.company && v.session && <PipelinePanel announcementId={a.id} me={v.session.user.email} members={await listMembers(db, v.company.id)} item={await getPipelineItem(db, v.company.id, a.id)} />}
 
       {a.source_status === "mock" && <Notice tone="warn">이 공고는 개발용 <strong>테스트(모의) 데이터</strong>이며 실제 공고가 아닙니다.</Notice>}
       {a.status_basis === "estimated" && a.application_status !== "unknown" && <Notice>접수 상태는 접수 기간 날짜로 <strong>추정</strong>한 값입니다. 정확한 상태는 공식 원문에서 확인하세요.</Notice>}
