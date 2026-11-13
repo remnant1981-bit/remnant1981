@@ -23,14 +23,15 @@ function doPost(e) {
     if (d.website) return out({ ok: true });          // 스팸 차단용 숨은 칸
     const clip = (v, n) => String(v == null ? '' : v).slice(0, n);
     const items = (Array.isArray(d.items) ? d.items : []).slice(0, 30)
-      .map(x => `${clip(x.name, 40)}(${clip(x.color, 20)}/${clip(x.size, 20)})×${Number(x.q) || 1}`).join('\n');
+      .map(x => `${clip(x.name, 40)}(${[clip(x.color, 20), clip(x.size, 20)].filter(String).join('/')})×${Number(x.q) || 1}${x.price > 0 ? '' : ' 가격문의'}`).join('\n');
     if (!items || !clip(d.name, 30) || !clip(d.phone, 20)) return out({ ok: false });
 
     const sh = sheet();
     sh.appendRow([
       new Date(), clip(d.no, 30), '입금대기', clip(d.name, 30), "'" + clip(d.phone, 20),
       d.pickup ? '매장 픽업' : '택배', clip(d.address, 120), items,
-      Number(d.sub) || 0, Number(d.ship) || 0, Number(d.all) || 0, clip(d.memo, 300)
+      Number(d.sub) || 0, d.ship == null ? '확인 후 안내' : Number(d.ship) || 0,
+      d.all == null ? '확인 후 안내' : Number(d.all) || 0, clip(d.memo, 300)
     ]);
 
     const to = NOTIFY_EMAIL || Session.getEffectiveUser().getEmail();

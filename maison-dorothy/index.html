@@ -3,77 +3,124 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>메종도로시 | 내포 66~99 여성복</title>
-<meta name="description" content="내포 센텀시티 메종도로시. 66~99 여성복을 88사장이 직접 입어보고 소개합니다. 전국 택배·매장 픽업.">
+<title>메종도로시 | 내포신도시 66~99 여성복</title>
+<meta name="description" content="내포신도시 센텀시티 메종도로시. 66~99 사이즈 여성복, 매장에서 입어보고 전국 택배·매장 픽업으로 받아보세요.">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#5b3a2e">
 <meta property="og:type" content="website">
-<meta property="og:title" content="메종도로시 | 내포 66~99 여성복">
-<meta property="og:description" content="88사장이 직접 입어보고 골라드려요. 전국 택배 · 매장 픽업">
+<meta property="og:site_name" content="메종도로시">
+<meta property="og:title" content="메종도로시 | 내포신도시 66~99 여성복">
+<meta property="og:description" content="좋은 옷, 오래 입는 옷, 매일 손이 가는 옷. 전국 택배 · 매장 픽업">
+<meta property="og:image" content="https://remnant1981-bit.github.io/remnant1981/maison-dorothy/images/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preload" as="image" href="images/store.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Noto+Sans+KR:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="wrap">
-  <div class="preview" id="previewBar" hidden>오픈 준비 중입니다. 상품·가격은 예시이며 주문이 접수되지 않습니다.</div>
+<div class="preview" id="previewBar" hidden>오픈 준비 중 · 가격과 주문 접수는 아직 연결 전입니다</div>
 
-  <header class="store">
+<header class="hero">
+  <img src="images/store.jpg" alt="메종도로시 매장 안 모습" class="hero-img" width="1200" height="900">
+  <div class="hero-txt">
     <div class="size" id="sizes"></div>
     <h1 id="storeName">메종도로시</h1>
     <p id="tagline"></p>
-    <p class="meta"><span id="addr"></span> · <span id="hours"></span></p>
-  </header>
+  </div>
+</header>
 
-  <nav class="quick" aria-label="바로가기">
-    <a class="main" href="#shop"><b>신상 보고 바로 주문하기</b><small>택배 · 매장 픽업 모두 가능</small></a>
-    <a id="qKakao" href="#" target="_blank" rel="noopener"><b>카톡 상담</b><small>사이즈 물어보기</small></a>
-    <a id="qInsta" href="#" target="_blank" rel="noopener"><b>인스타그램</b><small>실착 코디 보기</small></a>
-    <a id="qMap" href="#" target="_blank" rel="noopener"><b>오시는 길</b><small>지도 보기</small></a>
-    <a id="qPhone" href="#"><b>전화</b><small id="qPhoneNo"></small></a>
-    <a id="qBand" href="#" target="_blank" rel="noopener"><b>밴드 신상방</b><small>새 소식 먼저 받기</small></a>
-  </nav>
+<div class="wrap">
+  <section class="lead">
+    <p id="intro"></p>
+    <div class="cta">
+      <a class="btn" href="#shop">신상 보기</a>
+      <a class="btn line" id="ctaAsk" href="#" target="_blank" rel="noopener">사이즈 물어보기</a>
+    </div>
+    <ul class="promise">
+      <li><b>66~99</b>사이즈 상담</li>
+      <li><b>매장 픽업</b>입어보고 결정</li>
+      <li><b>전국 택배</b>입금 다음 날 발송</li>
+    </ul>
+  </section>
 
-  <section id="shop" class="shop">
-    <div class="head"><h2>이번 주 신상</h2><small id="count"></small></div>
-    <div class="filters" id="filters" role="group" aria-label="분류"></div>
+  <section id="shop" class="shop" aria-labelledby="shopTitle">
+    <div class="head"><h2 id="shopTitle">이번 주 신상</h2><small id="count"></small></div>
+    <div class="filter-row">
+      <span class="flabel" id="mySizeLabel">내 사이즈</span>
+      <div class="filters" id="mySize" role="group" aria-labelledby="mySizeLabel"></div>
+    </div>
+    <div class="filters" id="filters" role="group" aria-label="종류"></div>
     <div class="grid" id="grid"></div>
+    <p class="muted center">더 많은 코디는 <a id="moreInsta" href="#" target="_blank" rel="noopener">인스타그램</a>에서 매일 올라와요</p>
+  </section>
+
+  <section class="story" aria-labelledby="storyTitle">
+    <img id="storyImg" alt="" loading="lazy" width="960" height="720">
+    <div class="story-txt">
+      <h2 id="storyTitle"></h2>
+      <small id="storyBy"></small>
+      <p id="storyText"></p>
+    </div>
+  </section>
+
+  <section class="visit" aria-labelledby="visitTitle">
+    <h2 id="visitTitle">매장에서 입어보세요</h2>
+    <dl>
+      <dt>주소</dt><dd id="addr"></dd>
+      <dt>찾기</dt><dd id="landmark"></dd>
+      <dt>영업</dt><dd id="hours"></dd>
+    </dl>
+    <div class="links">
+      <a class="btn line" id="qMap" href="#" target="_blank" rel="noopener">지도 보기</a>
+      <a class="btn line" id="qPhone" href="#">전화하기</a>
+      <a class="btn line" id="qBand" href="#" target="_blank" rel="noopener">밴드 신상방</a>
+    </div>
   </section>
 
   <section class="info" aria-labelledby="infoTitle">
     <h2 id="infoTitle">주문 안내</h2>
+    <ol class="flow">
+      <li>마음에 드는 옷을 담고 평소 사이즈를 골라요</li>
+      <li>주문서를 보내면 사장님이 사이즈·재고·가격을 확인해 연락드려요</li>
+      <li>안내받은 계좌로 입금하면 다음 날 발송, 픽업은 준비되면 연락</li>
+    </ol>
     <dl>
-      <dt>결제</dt><dd>계좌이체 (주문 후 안내 계좌로 입금)</dd>
       <dt>택배</dt><dd id="shipInfo"></dd>
-      <dt>픽업</dt><dd>매장 픽업 시 택배비 없음, 입어보고 결정 가능</dd>
+      <dt>픽업</dt><dd>택배비 없음, 입어보고 결정 가능</dd>
       <dt>교환</dt><dd>받은 날부터 7일 이내 (단순 변심은 왕복 택배비 부담)</dd>
     </dl>
-    <details><summary>사이즈가 맞을지 걱정돼요</summary><p>평소 입는 사이즈와 키를 주문서 메모에 적어주세요. 88사장이 입어보고 맞는 사이즈로 연락드립니다.</p></details>
-    <details><summary>사진이랑 색이 다를까요?</summary><p>궁금하면 카톡으로 물어보세요. 자연광에서 찍은 사진을 보내드려요.</p></details>
-    <details><summary>매장에 와서 입어볼 수 있나요?</summary><p>네. 주문서에서 '매장 픽업'을 고르면 옷을 따로 챙겨두고, 입어보신 뒤 결정하셔도 됩니다.</p></details>
+    <details><summary>사이즈가 맞을지 걱정돼요</summary><p>평소 입는 사이즈를 고르고, 키와 체형 고민을 메모에 적어주세요. 사장님이 직접 보고 맞는 사이즈로 연락드려요.</p></details>
+    <details><summary>사진이랑 색이 다를까요?</summary><p>궁금하면 DM으로 물어보세요. 매장에서 실물 사진을 찍어 보내드려요.</p></details>
+    <details><summary>가격은 왜 안 보이나요?</summary><p>입고 수량이 적은 옷은 재고와 함께 가격을 안내드려요. 담아서 주문서를 보내시면 바로 알려드려요.</p></details>
   </section>
 
   <footer><p id="biz"></p><p>© 메종도로시</p></footer>
 </div>
 
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
 <div class="bar"><div class="in">
-  <div class="sum"><span id="barCount">담은 상품 0개</span><b id="barTotal">0원</b></div>
+  <div class="sum"><span id="barCount">담은 옷 0벌</span><b id="barTotal"></b></div>
   <button type="button" class="btn" id="openCart" disabled>주문서 쓰기</button>
 </div></div>
 
 <div class="sheet" id="pSheet" hidden><div class="panel" role="dialog" aria-modal="true" aria-labelledby="pName">
-  <div class="top"><h2 id="pName"></h2><button type="button" class="x" data-close>닫기</button></div>
-  <div class="ph big" id="pPh"></div>
-  <div class="pprice" id="pPrice"></div>
+  <div class="top"><span class="pbadge" id="pBadge"></span><button type="button" class="x" data-close>닫기</button></div>
+  <div class="gallery" id="pGallery"></div>
+  <div class="ptitle"><h2 id="pName"></h2><span class="pprice" id="pPrice"></span></div>
   <p id="pDesc"></p>
-  <div class="owner" id="pOwner"></div>
-  <div class="measure" id="pMeasure"></div>
-  <div class="opt"><span class="lab">컬러</span><div class="chips" id="pColors"></div></div>
-  <div class="opt"><span class="lab">사이즈</span><div class="chips" id="pSizes"></div></div>
-  <p class="err" id="pErr" hidden>컬러와 사이즈를 골라주세요.</p>
+  <div class="tip"><b>사장님 코디 팁</b><p id="pTip"></p></div>
+  <p class="muted" id="pFit"></p>
+  <div class="opt" id="pColorBox"><span class="lab">컬러</span><div class="chips" id="pColors"></div></div>
+  <div class="opt"><span class="lab" id="pSizeLab">사이즈</span><div class="chips" id="pSizes"></div></div>
+  <p class="err" id="pErr" hidden></p>
   <button type="button" class="btn block" id="addBtn">담기</button>
+  <div class="sublinks"><a id="pPost" href="#" target="_blank" rel="noopener">인스타에서 코디 더 보기</a><a id="pAsk" href="#" target="_blank" rel="noopener">이 옷 물어보기</a></div>
+  <div class="pair" id="pPairBox"><h3>함께 입으면 예뻐요</h3><div class="pair-list" id="pPair"></div></div>
 </div></div>
 
 <div class="sheet" id="cSheet" hidden><div class="panel" role="dialog" aria-modal="true" aria-labelledby="cTitle">
@@ -89,26 +136,22 @@
       </div>
     </fieldset>
     <div class="f" id="addrBox"><label for="oAddr">배송 주소</label><input id="oAddr" autocomplete="street-address" placeholder="도로명 주소, 동·호수" maxlength="120"></div>
-    <div class="f"><label for="oMemo">평소 사이즈 · 요청사항</label><textarea id="oMemo" placeholder="예) 키 160, 상의 88 / 하의 30 입어요" maxlength="300"></textarea></div>
+    <div class="f"><label for="oMemo">키·체형 고민·요청사항</label><textarea id="oMemo" placeholder="예) 키 160, 뱃살 커버되는 핏이면 좋겠어요" maxlength="300"></textarea></div>
     <input type="text" id="oWeb" name="website" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true">
     <label class="agree"><input type="checkbox" id="oAgree"><span>주문 처리(연락·배송)를 위해 성함·연락처·주소를 수집하며, 거래 완료 후 관련 법령에 따른 기간이 지나면 파기합니다. 동의합니다.</span></label>
     <div class="tot" id="tot"></div>
     <p class="err" id="oErr" role="alert" hidden></p>
-    <button type="submit" class="btn block" id="submitBtn">주문 접수하기</button>
+    <button type="submit" class="btn block" id="submitBtn">주문서 보내기</button>
   </form>
 </div></div>
 
 <div class="sheet" id="dSheet" hidden><div class="panel done" role="dialog" aria-modal="true" aria-labelledby="dTitle">
-  <div class="top"><h2 id="dTitle">주문이 접수됐어요</h2><button type="button" class="x" data-close>닫기</button></div>
+  <div class="top"><h2 id="dTitle">주문서를 받았어요</h2><button type="button" class="x" data-close>닫기</button></div>
   <p class="note" id="dNote" hidden></p>
-  <ol class="steps">
-    <li>아래 계좌로 입금해 주세요<br><b id="dBank"></b></li>
-    <li>88사장이 사이즈 확인 후 연락드려요</li>
-    <li>입금 확인 다음 날 발송 (픽업은 준비되면 연락)</li>
-  </ol>
+  <ol class="steps" id="dSteps"></ol>
   <pre id="dText"></pre>
   <button type="button" class="btn block" id="copyOrder">주문 내용 복사</button>
-  <p class="muted" id="dKakao"></p>
+  <a class="btn line block" id="dAsk" href="#" target="_blank" rel="noopener">DM으로 보내기</a>
 </div></div>
 
 <script src="config.js"></script>

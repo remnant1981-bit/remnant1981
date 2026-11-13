@@ -1,79 +1,104 @@
 /* 메종도로시 주문 페이지 설정 — 매장 정보·상품은 이 파일만 고치면 됩니다.
- * ○○ 표시는 실제 값으로 바꿀 자리. preview: true 동안은 "오픈 준비 중" 띠가 보이고 주문이 실제로 접수되지 않습니다. */
+ * 상품 설명·코디 팁·추천 사이즈는 인스타 게시물 원문에서 가져왔습니다.
+ * price 를 비워두면(null) "가격 문의"로 보이고, 손님이 담으면 사장님이 확인 후 입금액을 안내합니다.
+ * preview: true 동안은 "오픈 준비 중" 띠가 보이고 주문이 실제로 접수되지 않습니다. */
 window.DOROTHY = {
   preview: true,
 
   store: {
     name: '메종도로시',
-    tagline: '편하게 입고, 멋스럽게 나서는 여성복.\n88사장이 직접 입어보고 골라드려요.',
+    tagline: '좋은 옷, 오래 입는 옷, 매일 손이 가는 옷',
+    intro: '66~99 사이즈까지, 입어보면 더 마음에 드는 옷을 고릅니다.',
     sizes: ['66', '77', '88', '99'],
-    address: '내포 청사로146 센텀시티 128호',
+    address: '충남 홍성군 홍북읍 청사로 146 센텀시티 128호',
+    landmark: '내포동물병원과 안골빵집 사이 골목',
     hours: '10:00–20:00 · 일요일 휴무',
     phone: '',                       // 예: '010-1234-5678' (비우면 전화 버튼 숨김)
     instagram: 'https://www.instagram.com/2026.do.rothy/',
-    kakaoUrl: '',                    // 카톡채널 주소 예: 'https://pf.kakao.com/_xxxxx'
-    kakaoId: '@메종도로시',            // 채널 검색용 아이디
+    dmUrl: 'https://ig.me/m/2026.do.rothy',   // 인스타 DM 바로가기
+    kakaoUrl: '',                    // 카톡채널 주소 예: 'https://pf.kakao.com/_xxxxx' (있으면 DM 대신 우선 사용)
     bandUrl: '',                     // 네이버 밴드 주소 (비우면 숨김)
-    mapUrl: 'https://map.naver.com/p/search/' + encodeURIComponent('내포 센텀시티 메종도로시'),
+    mapUrl: 'https://map.naver.com/p/search/' + encodeURIComponent('홍성군 홍북읍 청사로 146 센텀시티'),
     bank: '○○은행 000-000-000000 (예금주 ○○○)',
-    business: '상호 메종도로시 · 대표 ○○○ · 사업자등록번호 000-00-00000 · 통신판매업 신고 제0000-충남○○-0000호'
+    business: '상호 메종도로시 · 대표 ○○○ · 사업자등록번호 000-00-00000 · 통신판매업 신고 제0000-충남홍성-0000호'
+  },
+
+  /* 손님 후기·매장 이야기 (인스타 원문) */
+  story: {
+    quote: '“메종도로시는 개미지옥이에요!”',
+    by: '단골 손님이 붙여준 별명',
+    text: '“올 때마다 예쁜 옷 가져오시면 어쩌라는 거예요~” 하시면서도 예쁜 옷 쏙쏙 데려가시는 손님들 덕분에 오늘도 열심히 고르고 있어요. 유행보다 오래 입을 수 있는 옷, 입어보면 더 마음에 드는 옷으로요.',
+    photo: 'market.jpg',
+    photoAlt: '내포모터페스티벌 프리마켓에 나온 메종도로시 부스'
   },
 
   shipping: { fee: 3500, freeOver: 70000 },
 
   /* 주문 접수 주소: 구글 Apps Script 웹앱 URL (order-apps-script.gs 안내 참고).
-   * 비워두면 손님이 주문 내용을 복사해 카톡으로 보내는 방식으로 동작합니다. */
+   * 비워두면 손님이 주문 내용을 복사해 DM·카톡으로 보내는 방식으로 동작합니다. */
   orderEndpoint: '',
 
   categories: ['아우터', '조끼', '원피스', '상의', '하의'],
 
-  /* 상품 목록 — 위에 있을수록 먼저 보입니다.
-   * img: images 폴더에 넣은 사진 파일명 (비우면 색 블록)  tone: 사진 없을 때 색 2개
-   * soldOut: true 면 품절 표시 */
+  /* 상품 — 위에 있을수록 먼저 보입니다.
+   * price: 숫자 또는 null(가격 문의)   img: images 폴더 사진   colors: 고를 컬러(없으면 생략)
+   * sizes: 정해진 사이즈(S·M·L 등)   fit: [최소, 최대] 추천 사이즈(없으면 사이즈 상담)
+   * tip: 사장님 코디 한마디   post: 인스타 게시물 주소   pair: 함께 입으면 좋은 상품 id   soldOut: true 면 품절 */
   products: [
-    { id: 'd02', cat: '하의', name: '소세지 밑단 청바지', price: 42000, isNew: true,
-      colors: ['진청'], sizes: ['26', '28', '30', '32', '34'], tone: ['#27384d', '#3c5470'], img: '',
-      desc: '밑단이 동글하게 모이는 핏이라 체크남방·니트와 귀엽게 어울려요.',
-      owner: '30 입었어요. 종아리가 넉넉해요.', measure: '허리 ○○ · 밑단 ○○ · 총장 ○○' },
-    { id: 't01', cat: '상의', name: '울 체크남방', price: 45000, isNew: true,
-      colors: ['브라운체크'], sizes: ['66-88 프리', '88-99'], tone: ['#6b4a35', '#a3785a'], img: '',
-      desc: '보송한 울 체크. 데님과 입으면 편하게 입어도 멋이 나요.',
-      owner: '66-88 프리 입었어요. 팔뚝 여유 있어요.', measure: '가슴 ○○ · 총장 ○○ · 소매 ○○' },
-    { id: 'v01', cat: '조끼', name: '양털안감 곡선누빔 조끼', price: 49000, isNew: true,
-      colors: ['블랙', '카멜'], sizes: ['프리(66-99)'], tone: ['#3b3632', '#8a6a4d'], img: '',
-      desc: '가디건이나 후드티 위에 툭. 몸통은 포근하고 팔은 편해요.',
-      owner: '프리 사이즈, 99까지 여유 있어요.', measure: '가슴 ○○ · 총장 ○○' },
-    { id: 'd01', cat: '하의', name: '기모 스판 데님', price: 39000,
-      colors: ['진청', '연청'], sizes: ['26', '28', '30', '32', '34', '36'], tone: ['#2e4057', '#4a6585'], img: '',
-      desc: '앉았다 일어날 때도 편한 스판, 안쪽은 포근한 기모라 한겨울까지 입어요.',
-      owner: '30 입었어요. 허리가 파고들지 않아요.', measure: '허리 ○○ · 엉덩이 ○○ · 총장 ○○' },
-    { id: 'v02', cat: '조끼', name: '덤블 빈티지 토글 조끼', price: 46000,
-      colors: ['아이보리', '브라운'], sizes: ['프리(66-99)'], tone: ['#d8cbb8', '#9c7b5c'], img: '',
-      desc: '보글보글한 덤블, 나무 토글 단추. 엉덩이를 덮는 길이예요.',
-      owner: '프리 사이즈, 뒷모습이 예뻐요.', measure: '가슴 ○○ · 총장 ○○' },
-    { id: 'v03', cat: '조끼', name: '숏 퀼팅 조끼', price: 35000,
-      colors: ['네이비', '머스터드'], sizes: ['프리(66-88)'], tone: ['#2c3550', '#c39a3e'], img: '',
-      desc: '원피스 위에 짧게 얹으면 코디가 차분하게 정리돼요.',
-      owner: '프리, 원피스 위에 딱 좋아요.', measure: '가슴 ○○ · 총장 ○○' },
-    { id: 'o01', cat: '원피스', name: '꽃패치 골덴 원피스', price: 58000,
-      colors: ['올리브', '차콜'], sizes: ['66-77', '88-99'], tone: ['#6b6a3c', '#4a4744'], img: '',
-      desc: '셔츠카라에 자연스럽게 퍼지는 스커트, 뒤에 작은 꽃패치.',
-      owner: '88-99 입었어요. 배 부분 여유 있어요.', measure: '가슴 ○○ · 총장 ○○' },
-    { id: 'a01', cat: '아우터', name: '숲빛 체크 자켓', price: 69000,
-      colors: ['딥그린체크'], sizes: ['66-88', '88-99'], tone: ['#2f4a3d', '#4d5a55'], img: '',
-      desc: '딥그린과 차콜이 섞인 체크. 큰 카라와 포켓이 포인트예요.',
-      owner: '88-99 입었어요. 안에 니트 입어도 편해요.', measure: '가슴 ○○ · 총장 ○○ · 소매 ○○' },
-    { id: 'a02', cat: '아우터', name: '할매니얼 꽃 누빔 자켓', price: 59000,
-      colors: ['카키'], sizes: ['프리(66-99)'], tone: ['#c98a9a', '#6c6a4a'], img: '',
-      desc: '잔꽃무늬에 카키 소매, 소매를 접으면 크림 보아가 보여요.',
-      owner: '프리, 가볍게 걸치기 좋아요.', measure: '가슴 ○○ · 총장 ○○' },
-    { id: 'a03', cat: '아우터', name: '니트 후드 가디건', price: 52000,
-      colors: ['오트밀', '그레이'], sizes: ['프리(66-99)'], tone: ['#cdbfa9', '#8d8a86'], img: '',
-      desc: '힙을 덮는 하프기장. 청바지 위에 툭 걸치기 좋아요.',
-      owner: '프리, 엉덩이까지 덮여요.', measure: '가슴 ○○ · 총장 ○○' },
-    { id: 'a04', cat: '아우터', name: '꽃무늬 할매 가디건', price: 44000,
-      colors: ['핑크꽃', '아이보리'], sizes: ['프리(66-99)'], tone: ['#e3b6bf', '#efe5d6'], img: '',
-      desc: '복슬복슬한 니트에 분홍 꽃. 어깨부터 넉넉한 오버핏이에요.',
-      owner: '프리, 팔뚝 여유 있어요.', measure: '가슴 ○○ · 총장 ○○' }
+    { id: 'p06', cat: '하의', name: '기모 스판 데님', price: null, badge: '사장님 추천', img: 'fleece-denim.jpg',
+      colors: [], sizes: ['S', 'M', 'L'],
+      desc: '스판력이 좋아 앉았다 일어날 때도 편하고, 안쪽은 포근한 기모라 한겨울까지 입어요. 은은한 워싱에 밑단까지 자연스럽게 퍼지는 라인.',
+      tip: '매장에서 입어보고 앉아도 보세요. 편안함은 그때 바로 느껴지실 거예요.',
+      post: 'https://www.instagram.com/p/Dfoa23gRqvn/' },
+    { id: 'p01', cat: '상의', name: '울 체크남방', price: null, badge: 'NEW', img: 'check-shirt-denim.jpg',
+      colors: [], pair: ['p02'],
+      desc: '보송한 울 체크남방. 차분한 브라운 체크에 짙은 데님을 더하면 편하게 입어도 멋이 나요.',
+      tip: '저라면 소매를 한 번 접고 스니커즈를 신을래요. 주말에 커피 한잔하러 나갈 때 딱 좋은 코디예요.',
+      post: 'https://www.instagram.com/p/DfrSS26RkXT/' },
+    { id: 'p02', cat: '하의', name: '소세지 청바지', price: null, badge: 'NEW', img: 'check-shirt-denim.jpg',
+      colors: [], pair: ['p01'],
+      desc: '밑단이 동글하게 모이는 소세지 핏. 체크남방이나 니트와 귀엽게 어울려요.',
+      tip: '청바지 핏이 궁금하시면 매장에서 편하게 입어보세요.',
+      post: 'https://www.instagram.com/p/DfrSS26RkXT/' },
+    { id: 'p03', cat: '조끼', name: '곡선누빔 양털안감 조끼', price: null, badge: 'NEW', img: 'curved-quilt-vest.jpg',
+      colors: [],
+      desc: '겉은 깔끔한 곡선 누빔, 안쪽은 보송한 양털 안감. 몸통은 포근하고 팔은 움직이기 편해요.',
+      tip: '누빔 패딩바지랑 세트처럼 맞춰보세요. 위아래 톤만 맞춰도 겨울 외출룩이 완성돼요.',
+      post: 'https://www.instagram.com/p/DfqdegBIkeo/' },
+    { id: 'p04', cat: '원피스', name: '꽃패치 골덴 원피스', price: null, img: 'corduroy-dress.jpg', gallery: ['dress-quilted-vest.jpg'],
+      colors: ['차콜', '올리브'], fit: [66, 88], pair: ['p05'],
+      desc: '단정한 셔츠카라에 자연스럽게 퍼지는 스커트, 뒤돌면 살짝 보이는 꽃패치. 배와 힙을 편하게 감싸고 양옆 포켓도 있어요.',
+      tip: '앵클부츠에 조끼나 가디건 하나 더해보세요. 따뜻한 나들이룩 완성이에요.',
+      post: 'https://www.instagram.com/p/DflchE6mfgJ/' },
+    { id: 'p05', cat: '조끼', name: '숏 퀼팅 조끼', price: null, img: 'dress-quilted-vest.jpg',
+      colors: ['네이비'], pair: ['p04'],
+      desc: '짧은 기장의 퀼팅 조끼. 원피스 위에 얹으면 원피스 색은 살리고 코디는 차분하게 잡아줘요.',
+      tip: '올리브 원피스에 네이비 퀼팅 조끼, 가방과 부츠는 브라운으로 맞춰봤어요.',
+      post: 'https://www.instagram.com/p/Dfq69JyxNdq/' },
+    { id: 'p07', cat: '아우터', name: '숲빛 체크 자켓', price: null, img: 'forest-check-jacket.jpg',
+      colors: [],
+      desc: '딥그린과 차콜이 섞인 체크라 색감은 차분하고, 가까이 보면 보송한 원단 결이 매력적이에요. 큼직한 카라와 포켓.',
+      tip: '청바지엔 편하게, 차콜 슬랙스엔 단정하게. 바지는 그대로 두고 아우터만 바꿔보세요.',
+      post: 'https://www.instagram.com/p/Dfn9-xmGXTH/' },
+    { id: 'p08', cat: '아우터', name: '꽃 양털 자켓', price: null, img: 'flower-fleece-jacket.jpg',
+      colors: [], fit: [66, 88],
+      desc: '잔꽃무늬에 카키 소매, 소매를 접으면 크림색 보아가 보여요. 뒤는 카키·차콜 배색에 잔잔한 누빔.',
+      tip: '크림색 바지랑 입으면 빈티지한 나들이룩, 청바지 위에 걸치면 꽃무늬가 포인트가 돼요.',
+      post: 'https://www.instagram.com/p/DfmBp34R6YZ/' },
+    { id: 'p09', cat: '아우터', name: '니트 후드 가디건', price: null, img: 'knit-hood-cardigan.jpg',
+      colors: ['아이보리', '그레이'], fit: [66, 99],
+      desc: '힙을 덮는 하프기장. 겨울 패턴에 떡볶이 단추, 후드 덕분에 뒷모습까지 경쾌해요.',
+      tip: '평소 입는 청바지 위에 툭. 기본 티에 하나만 걸쳐도 코디가 살아나요.',
+      post: 'https://www.instagram.com/p/Dfjef4rRW0B/' },
+    { id: 'p10', cat: '조끼', name: '덤블 빈티지 토글 조끼', price: null, img: 'tumble-toggle-vest.jpg',
+      colors: [], fit: [66, 99],
+      desc: '보글보글한 덤블에 빈티지한 패턴, 나무 토글 단추. 엉덩이를 덮는 길이라 뒷모습도 편안해요.',
+      tip: '평소 즐겨 입는 후드티 입고 오셔서 같이 코디해 봐요.',
+      post: 'https://www.instagram.com/p/DfjVM1bR6FN/' },
+    { id: 'p11', cat: '아우터', name: '꽃무늬 할매 가디건', price: null, img: 'flower-knit-cardigan.jpg',
+      colors: ['네이비', '그레이', '아이보리'], fit: [66, 99],
+      desc: '복슬복슬한 니트에 분홍 꽃이 콕콕. 어깨부터 소매까지 여유 있는 오버핏이에요.',
+      tip: '청바지에 툭 걸치면 데일리룩, 롱스커트에 단추를 채우면 빈티지한 나들이룩.',
+      post: 'https://www.instagram.com/p/DfgTAZzmQ-S/' }
   ]
 };

@@ -1,10 +1,13 @@
-/* 메종도로시 - 순수 로직 (DOM 비의존). 화면(app.js)과 테스트가 공유함. */
+/* 메종도로시 - 순수 로직 (DOM 비의존). 화면(app.js)과 테스트가 공유함.
+ * 가격(price)이 비어 있는 상품은 "가격 문의" 상품: 담을 수는 있고, 입금액은 사장님이 확인 후 안내 */
 (function (root) {
   'use strict';
 
   const won = n => `${Math.round(Number(n) || 0).toLocaleString('ko-KR')}원`;
+  const hasPrice = p => typeof p.price === 'number' && p.price > 0;
+  const priceLabel = p => (hasPrice(p) ? won(p.price) : '가격 문의');
 
-  // 장바구니 줄 키: 같은 상품·컬러·사이즈는 수량만 늘림
+  // 같은 상품·컬러·사이즈는 수량만 늘림
   const lineKey = (id, color, size) => `${id}|${color}|${size}`;
 
   function addLine(cart, p, color, size) {
@@ -12,7 +15,7 @@
     const next = cart.map(x => ({ ...x }));
     const hit = next.find(x => x.k === k);
     if (hit) hit.q += 1;
-    else next.push({ k, id: p.id, name: p.name, color, size, price: p.price, q: 1 });
+    else next.push({ k, id: p.id, name: p.name, color, size, price: hasPrice(p) ? p.price : null, q: 1 });
     return next;
   }
 
@@ -23,17 +26,37 @@
     return next;
   }
 
-  // 픽업이거나 무료배송 기준 이상이면 택배비 0
+  // 가격 문의 상품이 섞이면 택배비·입금액은 null(확인 후 안내). 픽업은 언제나 택배비 0
   function totals(cart, shipping, pickup) {
-    const sub = cart.reduce((s, x) => s + x.price * x.q, 0);
     const count = cart.reduce((s, x) => s + x.q, 0);
+    const unpriced = cart.filter(x => !(x.price > 0)).reduce((s, x) => s + x.q, 0);
+    const sub = cart.reduce((s, x) => s + (x.price > 0 ? x.price * x.q : 0), 0);
+    if (unpriced) return { sub, ship: pickup ? 0 : null, all: null, count, unpriced };
     const ship = (pickup || sub === 0 || sub >= shipping.freeOver) ? 0 : shipping.fee;
-    return { sub, ship, all: sub + ship, count };
+    return { sub, ship, all: sub + ship, count, unpriced };
+  }
+
+  // 사이즈 선택지: 정해진 사이즈(S·M·L 등)가 있으면 그것, 없으면 "평소 사이즈"(추천 범위 안)
+  const USUAL = [66, 77, 88, 99];
+  function sizeOptions(p) {
+    if (Array.isArray(p.sizes) && p.sizes.length) return { label: '사이즈', values: p.sizes.slice() };
+    const [lo, hi] = Array.isArray(p.fit) ? p.fit : [66, 99];
+    return { label: '평소 입는 사이즈', values: USUAL.filter(s => s >= lo && s <= hi).map(s => `평소 ${s}`) };
+  }
+  function fitLabel(p) {
+    if (Array.isArray(p.sizes) && p.sizes.length) return p.sizes.join(' · ');
+    if (Array.isArray(p.fit)) return `${p.fit[0]}~${p.fit[1]} 추천`;
+    return '사이즈 상담';
+  }
+  // "내 사이즈" 필터: 추천 범위를 아는 상품만 거르고, 모르는 상품은 상담 대상으로 남김
+  function fitsSize(p, size) {
+    if (!size) return true;
+    if (!Array.isArray(p.fit)) return true;
+    return size >= p.fit[0] && size <= p.fit[1];
   }
 
   const isPhone = s => /^0\d{1,2}-?\d{3,4}-?\d{4}$/.test(String(s || '').trim());
 
-  // 주문서 검사: 빠진 항목 이름 목록 (비면 통과)
   function validate(o) {
     const miss = [];
     if (!String(o.name || '').trim()) miss.push('성함');
@@ -44,17 +67,17 @@
   }
 
   const pad = n => String(n).padStart(2, '0');
-  // 주문번호: D월일-시분-임의2자리 (예: D1113-1452-07)
   const orderNo = (d = new Date(), rnd = Math.random()) =>
     `D${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}-${pad(Math.floor(rnd * 100))}`;
 
   function orderText(no, cart, t, o) {
-    const lines = cart.map(x => `· ${x.name} (${x.color}/${x.size}) ×${x.q} ${won(x.price * x.q)}`);
+    const opt = x => [x.color, x.size].filter(Boolean).join('/');
+    const lines = cart.map(x => `· ${x.name}${opt(x) ? ` (${opt(x)})` : ''} ×${x.q} ${x.price > 0 ? won(x.price * x.q) : '가격 문의'}`);
     return [
       `[메종도로시 주문] ${no}`,
       ...lines,
-      `택배비: ${t.ship ? won(t.ship) : '무료'}`,
-      `입금액: ${won(t.all)}`,
+      `택배비: ${t.ship === null ? '확인 후 안내' : t.ship ? won(t.ship) : '무료'}`,
+      `입금액: ${t.all === null ? '확인 후 안내' : won(t.all)}`,
       '',
       `받는 분: ${o.name.trim()}`,
       `연락처: ${o.phone.trim()}`,
@@ -64,7 +87,7 @@
     ].join('\n');
   }
 
-  const api = { won, lineKey, addLine, removeOne, totals, isPhone, validate, orderNo, orderText };
+  const api = { won, hasPrice, priceLabel, lineKey, addLine, removeOne, totals, sizeOptions, fitLabel, fitsSize, isPhone, validate, orderNo, orderText };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.DLogic = api;
 })(typeof self !== 'undefined' ? self : this);

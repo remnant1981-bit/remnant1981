@@ -3,63 +3,91 @@
   'use strict';
   const C = window.DOROTHY, L = window.DLogic, S = C.store;
   const $ = id => document.getElementById(id);
-  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const CART_KEY = 'dorothy-cart';
+  const byId = id => C.products.find(p => p.id === id);
+  const askUrl = S.kakaoUrl || S.dmUrl || S.instagram;   // 문의 창구: 카톡채널 > 인스타 DM
+  const askName = S.kakaoUrl ? '카톡' : 'DM';
 
   /* ---------- 매장 정보 ---------- */
   $('previewBar').hidden = !C.preview;
   $('sizes').innerHTML = S.sizes.map(s => `<span>${esc(s)}</span>`).join('');
   $('storeName').textContent = S.name;
   $('tagline').textContent = S.tagline;
+  $('intro').textContent = S.intro;
   $('addr').textContent = S.address;
+  $('landmark').textContent = S.landmark;
   $('hours').textContent = S.hours;
   $('biz').textContent = S.business;
   $('shipInfo').textContent = `${L.won(C.shipping.fee)} · ${L.won(C.shipping.freeOver)} 이상 무료 · 입금 다음 날 발송`;
-  function link(id, href, show = !!href) { const a = $(id); if (show) a.href = href; else a.hidden = true; }
-  link('qKakao', S.kakaoUrl);
-  link('qInsta', S.instagram);
+  function link(id, href) { const a = $(id); if (href) a.href = href; else a.hidden = true; }
+  link('ctaAsk', askUrl);
+  link('moreInsta', S.instagram);
   link('qMap', S.mapUrl);
   link('qBand', S.bandUrl);
-  link('qPhone', 'tel:' + S.phone.replace(/[^0-9]/g, ''), !!S.phone);
-  $('qPhoneNo').textContent = S.phone;
+  link('qPhone', S.phone ? 'tel:' + S.phone.replace(/[^0-9]/g, '') : '');
+  link('dAsk', askUrl);
+  $('dAsk').textContent = `${askName}으로 보내기`;
+
+  const st = C.story;
+  if (st) {
+    $('storyImg').src = 'images/' + st.photo; $('storyImg').alt = st.photoAlt;
+    $('storyTitle').textContent = st.quote; $('storyBy').textContent = st.by; $('storyText').textContent = st.text;
+  } else document.querySelector('.story').hidden = true;
 
   /* ---------- 상품 목록 ---------- */
-  const tone = p => `linear-gradient(135deg,${p.tone[0]} 0 50%,${p.tone[1]} 50% 100%)`;
-  const ph = p => p.img
-    ? `<img src="images/${esc(p.img)}" alt="${esc(p.name)}" loading="lazy">`
-    : '';
-  let cat = 'all';
+  const img = (file, alt, lazy = true) => `<img src="images/${esc(file)}" alt="${esc(alt)}" width="720" height="900"${lazy ? ' loading="lazy"' : ''}>`;
+  const badge = p => p.soldOut ? '<span class="badge out">품절</span>'
+    : p.badge ? `<span class="badge${p.badge === 'NEW' ? '' : ' rec'}">${esc(p.badge)}</span>` : '';
+  const card = (p, i = 9) => `
+    <button type="button" class="card" data-id="${esc(p.id)}"${p.soldOut ? ' disabled' : ''}>
+      <div class="ph">${img(p.img, p.name, i > 3)}${badge(p)}</div>
+      <b>${esc(p.name)}</b>
+      <span class="price${L.hasPrice(p) ? '' : ' ask'}">${L.priceLabel(p)}</span>
+      <span class="fit">${esc(L.fitLabel(p))}</span>
+    </button>`;
+
+  let cat = 'all', mySize = 0;
+  try { mySize = Number(localStorage.getItem('dorothy-size')) || 0; } catch (e) { /* 없음 */ }
   $('filters').innerHTML = ['all', ...C.categories]
-    .map(c => `<button type="button" data-cat="${esc(c)}" aria-pressed="${c === 'all'}">${c === 'all' ? '전체' : esc(c)}</button>`).join('');
-  $('filters').addEventListener('click', e => {
-    const b = e.target.closest('button'); if (!b) return;
-    cat = b.dataset.cat;
-    $('filters').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
-    render();
-  });
-  function render() {
-    const list = C.products.filter(p => cat === 'all' || p.cat === cat);
-    $('count').textContent = `${list.length}개`;
-    $('grid').innerHTML = list.map(p => `
-      <button type="button" class="card" data-id="${esc(p.id)}"${p.soldOut ? ' disabled' : ''}>
-        <div class="ph" style="background:${tone(p)}">${ph(p)}${p.soldOut ? '<span class="badge out">품절</span>' : p.isNew ? '<span class="badge">NEW</span>' : ''}</div>
-        <b>${esc(p.name)}</b><span class="price">${L.won(p.price)}</span><span class="fit">${p.sizes.map(esc).join(' · ')}</span>
-      </button>`).join('');
+    .map(c => `<button type="button" data-v="${esc(c)}" aria-pressed="${c === 'all'}">${c === 'all' ? '전체' : esc(c)}</button>`).join('');
+  $('mySize').innerHTML = [0, 66, 77, 88, 99]
+    .map(s => `<button type="button" data-v="${s}" aria-pressed="${s === mySize}">${s ? s : '전체'}</button>`).join('');
+  function pressGroup(el, onPick) {
+    el.addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      el.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+      onPick(b.dataset.v); render();
+    });
   }
-  $('grid').addEventListener('click', e => { const c = e.target.closest('.card'); if (c && !c.disabled) openProduct(c.dataset.id); });
+  pressGroup($('filters'), v => { cat = v; });
+  pressGroup($('mySize'), v => { mySize = Number(v); try { localStorage.setItem('dorothy-size', v); } catch (e) { /* 저장 불가 */ } });
+
+  function render() {
+    const list = C.products.filter(p => (cat === 'all' || p.cat === cat) && L.fitsSize(p, mySize));
+    $('count').textContent = `${list.length}벌`;
+    $('grid').innerHTML = list.length ? list.map(card).join('')
+      : `<p class="empty">조건에 맞는 옷이 아직 없어요. <a href="${esc(askUrl)}" target="_blank" rel="noopener">${askName}으로 물어보세요</a></p>`;
+  }
+  document.addEventListener('click', e => {
+    const c = e.target.closest('.card'); if (c && !c.disabled) openProduct(c.dataset.id);
+  });
 
   /* ---------- 장바구니 ---------- */
   let cart = [];
   try { cart = JSON.parse(localStorage.getItem(CART_KEY) || '[]') || []; } catch (e) { cart = []; }
-  cart = cart.filter(x => C.products.some(p => p.id === x.id && !p.soldOut));
-  const save = () => { try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch (e) { /* 저장 불가 환경 */ } };
+  cart = cart.filter(x => { const p = byId(x.id); return p && !p.soldOut; })
+    .map(x => ({ ...x, price: L.hasPrice(byId(x.id)) ? byId(x.id).price : null }));
+  const save = () => { try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch (e) { /* 저장 불가 */ } };
   const pickup = () => $('shipPick').checked;
   function bar() {
     const t = L.totals(cart, C.shipping, false);
-    $('barCount').textContent = `담은 상품 ${t.count}개`;
-    $('barTotal').textContent = L.won(t.sub);
+    $('barCount').textContent = `담은 옷 ${t.count}벌`;
+    $('barTotal').textContent = !t.count ? '' : t.unpriced ? (t.sub ? `${L.won(t.sub)} + 가격 문의` : '가격은 확인 후 안내') : L.won(t.sub);
     $('openCart').disabled = t.count === 0;
   }
+  let toastTimer = 0;
+  function toast(msg) { $('toast').textContent = msg; $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('toast').hidden = true; }, 1800); }
 
   /* ---------- 상품 상세 ---------- */
   let cur = null, selC = null, selS = null;
@@ -71,35 +99,61 @@
     }));
   }
   function openProduct(id) {
-    cur = C.products.find(p => p.id === id);
-    selC = cur.colors.length === 1 ? cur.colors[0] : null;
-    selS = cur.sizes.length === 1 ? cur.sizes[0] : null;
+    if (!$('pSheet').hidden) hide('pSheet');
+    cur = byId(id);
+    const colors = cur.colors || [];
+    const so = L.sizeOptions(cur);
+    selC = colors.length === 1 ? colors[0] : null;
+    const usual = mySize ? `평소 ${mySize}` : null;
+    selS = so.values.length === 1 ? so.values[0] : (usual && so.values.includes(usual) ? usual : null);
+    $('pBadge').textContent = cur.badge || '';
+    $('pGallery').innerHTML = [cur.img, ...(cur.gallery || [])].map((f, i) => img(f, `${cur.name} 사진 ${i + 1}`, false)).join('');
+    $('pGallery').scrollLeft = 0;
     $('pName').textContent = cur.name;
-    $('pPh').style.background = tone(cur);
-    $('pPh').innerHTML = ph(cur);
-    $('pPrice').textContent = L.won(cur.price);
+    $('pPrice').textContent = L.priceLabel(cur);
     $('pDesc').textContent = cur.desc;
-    $('pOwner').innerHTML = `<b>88사장 실착</b> · ${esc(cur.owner)}`;
-    $('pMeasure').textContent = `실측: ${cur.measure}`;
-    chips($('pColors'), cur.colors, v => { selC = v; }, selC);
-    chips($('pSizes'), cur.sizes, v => { selS = v; }, selS);
+    $('pTip').textContent = cur.tip;
+    $('pFit').textContent = Array.isArray(cur.fit) ? `${cur.fit[0]}~${cur.fit[1]} 사이즈 추천 · 정확한 핏은 사장님이 확인해 드려요`
+      : cur.sizes ? '사이즈가 고민되면 메모에 평소 사이즈를 적어주세요' : '사이즈는 평소 입는 사이즈를 알려주시면 맞춰드려요';
+    $('pColorBox').hidden = !colors.length;
+    chips($('pColors'), colors, v => { selC = v; }, selC);
+    $('pSizeLab').textContent = so.label;
+    chips($('pSizes'), so.values, v => { selS = v; }, selS);
+    link('pPost', cur.post); $('pPost').hidden = !cur.post;
+    link('pAsk', askUrl);
+    const pairs = (cur.pair || []).map(byId).filter(p => p && !p.soldOut);
+    $('pPairBox').hidden = !pairs.length;
+    $('pPair').innerHTML = pairs.map(p => card(p)).join('');
     $('pErr').hidden = true;
+    $('addBtn').textContent = L.hasPrice(cur) ? '담기' : '담기 (가격은 확인 후 안내)';
     show('pSheet');
+    $('pSheet').querySelector('.panel').scrollTop = 0;
   }
   $('addBtn').addEventListener('click', () => {
-    if (!selC || !selS) { $('pErr').hidden = false; return; }
-    cart = L.addLine(cart, cur, selC, selS); save(); bar(); hide('pSheet');
+    const needC = (cur.colors || []).length > 0;
+    if ((needC && !selC) || !selS) {
+      $('pErr').textContent = needC && !selC ? '컬러를 골라주세요.' : '사이즈를 골라주세요.';
+      $('pErr').hidden = false; return;
+    }
+    cart = L.addLine(cart, cur, needC ? selC : '', selS); save(); bar(); hide('pSheet');
+    toast(`${cur.name} 담았어요`);
   });
 
   /* ---------- 주문서 ---------- */
   function drawCart() {
-    $('lines').innerHTML = cart.map((x, i) => `
-      <div class="line"><div>${esc(x.name)} ×${x.q}<small>${esc(x.color)} / ${esc(x.size)}</small></div>
-      <div class="rt"><span>${L.won(x.price * x.q)}</span><button type="button" class="rm" data-i="${i}">빼기</button></div></div>`).join('');
+    $('lines').innerHTML = cart.map((x, i) => {
+      const p = byId(x.id);
+      return `<div class="line"><img src="images/${esc(p.img)}" alt="" width="44" height="55">
+        <div class="nm">${esc(x.name)} ×${x.q}<small>${esc([x.color, x.size].filter(Boolean).join(' / '))}</small></div>
+        <div class="rt"><span>${x.price > 0 ? L.won(x.price * x.q) : '문의'}</span><button type="button" class="rm" data-i="${i}">빼기</button></div></div>`;
+    }).join('');
     const t = L.totals(cart, C.shipping, pickup());
-    $('tot').innerHTML = `<div><span>상품</span><span>${L.won(t.sub)}</span></div>
-      <div><span>택배비</span><span>${t.ship ? L.won(t.ship) : '무료'}</span></div>
-      <div class="all"><span>입금하실 금액</span><span>${L.won(t.all)}</span></div>`;
+    $('tot').innerHTML = t.unpriced
+      ? `<div><span>택배비</span><span>${t.ship === 0 ? '무료 (픽업)' : '확인 후 안내'}</span></div>
+         <div class="all"><span>입금하실 금액</span><span>사장님이 확인 후 안내</span></div>`
+      : `<div><span>상품</span><span>${L.won(t.sub)}</span></div>
+         <div><span>택배비</span><span>${t.ship ? L.won(t.ship) : '무료'}</span></div>
+         <div class="all"><span>입금하실 금액</span><span>${L.won(t.all)}</span></div>`;
     $('addrBox').hidden = pickup();
   }
   $('lines').addEventListener('click', e => {
@@ -121,27 +175,29 @@
     const t = L.totals(cart, C.shipping, o.pickup);
     const no = L.orderNo();
     const text = L.orderText(no, cart, t, o);
-    let note = '';
+    let note = '', sent = false;
     if (C.preview) {
       note = '오픈 준비 중이라 실제 주문은 접수되지 않았어요.';
     } else if (C.orderEndpoint && !$('oWeb').value) {
-      $('submitBtn').disabled = true; $('submitBtn').textContent = '접수 중…';
-      const sent = await send({ no, items: cart, ...t, ...o, text });
-      $('submitBtn').disabled = false; $('submitBtn').textContent = '주문 접수하기';
-      if (!sent) note = '접수 연결이 원활하지 않아요. 아래 주문 내용을 복사해 카톡으로 보내주세요.';
+      $('submitBtn').disabled = true; $('submitBtn').textContent = '보내는 중…';
+      sent = await send({ no, items: cart, ...t, ...o, text });
+      $('submitBtn').disabled = false; $('submitBtn').textContent = '주문서 보내기';
+      if (!sent) note = `연결이 원활하지 않아요. 아래 주문 내용을 복사해 ${askName}으로 보내주세요.`;
     } else {
-      note = '아래 주문 내용을 복사해 카톡으로 보내주시면 접수가 완료돼요.';
+      note = `아래 주문 내용을 복사해 ${askName}으로 보내주시면 접수돼요.`;
     }
     $('dNote').textContent = note; $('dNote').hidden = !note;
-    $('dTitle').textContent = C.preview ? '주문 미리보기' : note ? '주문 내용을 보내주세요' : '주문이 접수됐어요';
-    $('dBank').textContent = S.bank;
+    $('dTitle').textContent = C.preview ? '주문서 미리보기' : sent ? '주문서를 받았어요' : '주문 내용을 보내주세요';
+    $('dSteps').innerHTML = (t.all === null
+      ? ['사장님이 사이즈·재고·가격을 확인해 연락드려요', '안내받은 금액을 입금해 주세요', '입금 다음 날 발송 (픽업은 준비되면 연락)']
+      : [`입금하실 금액 <b>${L.won(t.all)}</b>`, `입금 계좌 <b>${esc(S.bank)}</b>`, '사장님이 사이즈 확인 후 연락드리고, 입금 다음 날 발송해요']
+    ).map(s => `<li>${s}</li>`).join('');
     $('dText').textContent = text;
-    $('dKakao').textContent = `카톡채널 '${S.kakaoId}'로 문의하시면 더 빨리 확인해 드려요.`;
-    if (!C.preview) { cart = []; save(); bar(); }
+    if (!C.preview && sent) { cart = []; save(); bar(); }
     hide('cSheet'); show('dSheet');
   });
 
-  // Apps Script 웹앱은 CORS 응답을 주지 않으므로 no-cors 로 보냄 (전송 실패만 감지 가능)
+  // Apps Script 웹앱은 CORS 응답을 주지 않으므로 no-cors 로 보냄 (네트워크 실패만 감지 가능)
   async function send(payload) {
     const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 12000);
     try {
@@ -159,10 +215,10 @@
 
   /* ---------- 시트 열고 닫기 ---------- */
   let lastFocus = null;
-  function show(id) { lastFocus = document.activeElement; $(id).hidden = false; document.body.style.overflow = 'hidden'; const f = $(id).querySelector('button,input'); if (f) f.focus(); }
+  function show(id) { if (document.querySelector('.sheet:not([hidden])') === null) lastFocus = document.activeElement; $(id).hidden = false; document.body.style.overflow = 'hidden'; const f = $(id).querySelector('.x'); if (f) f.focus({ preventScroll: true }); }
   function hide(id) {
     $(id).hidden = true;
-    if (!document.querySelector('.sheet:not([hidden])')) { document.body.style.overflow = ''; if (lastFocus) lastFocus.focus(); }
+    if (!document.querySelector('.sheet:not([hidden])')) { document.body.style.overflow = ''; if (lastFocus) lastFocus.focus({ preventScroll: true }); }
   }
   document.querySelectorAll('.sheet').forEach(s => s.addEventListener('click', e => {
     if (e.target === s || e.target.hasAttribute('data-close')) hide(s.id);
