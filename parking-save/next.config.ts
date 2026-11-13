@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const securityHeaders = [
+  // HTTPS 강제(운영만). nginx+certbot으로 HTTPS 제공 후 유효 — HTTP로 접속하면 브라우저가 무시함. 하위 도메인·preload는 도메인 확정 후 결정
+  ...(process.env.NODE_ENV === "production" ? [{ key: "Strict-Transport-Security", value: "max-age=31536000" }] : []),
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },

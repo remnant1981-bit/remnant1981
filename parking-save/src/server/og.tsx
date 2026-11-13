@@ -38,3 +38,22 @@ export async function ogImage(c: OgCard): Promise<ImageResponse> {
     { ...OG_SIZE, fonts: f ? [{ name: "Pretendard", data: f, weight: 700, style: "normal" }] : [], headers: { "Cache-Control": "public, max-age=3600" } },
   );
 }
+
+// 렌더링 결과 캐시(시설별 PNG, 1시간, 최대 300장). 같은 링크가 여러 번 공유·수집될 때 다시 그리지 않는다
+const CACHE_TTL_MS = 3600_000, CACHE_MAX = 300;
+const pngCache = new Map<string, { at: number; png: ArrayBuffer }>();
+export const ogCacheStats = { hits: 0, misses: 0 };
+export function resetOgCacheForTest() { pngCache.clear(); ogCacheStats.hits = 0; ogCacheStats.misses = 0; }
+const pngResponse = (png: ArrayBuffer) => new Response(png, { headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=3600" } });
+
+export async function ogImageCached(key: string, render: () => Promise<OgCard>, now = Date.now()): Promise<Response> {
+  const hit = pngCache.get(key);
+  if (hit && now - hit.at < CACHE_TTL_MS) { ogCacheStats.hits++; return pngResponse(hit.png); }
+  ogCacheStats.misses++;
+  const png = await (await ogImage(await render())).arrayBuffer();
+  pngCache.delete(key); pngCache.set(key, { at: now, png });
+  while (pngCache.size > CACHE_MAX) pngCache.delete(pngCache.keys().next().value!);
+  return pngResponse(png);
+}
+/** 요청 제한 초과 응답(이미지 대신) */
+export const ogTooMany = (retryAfterSec: number) => new Response("Too Many Requests", { status: 429, headers: { "Retry-After": String(retryAfterSec), "Cache-Control": "no-store" } });
