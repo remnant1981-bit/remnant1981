@@ -250,6 +250,7 @@ describe("사용자 시나리오 (TEST_PLAN §4)", () => {
       const cid = list.items[0].company_id;
       expect((await admin.call("PUT", "/api/admin/subscriptions", { companyId: cid, plan: "gold" })).status).toBe(400);
       expect((await admin.call("PUT", "/api/admin/subscriptions", { companyId: cid, plan: "team", paidUntil: "2026-02-30" })).status).toBe(400);
+      expect((await admin.call("PUT", "/api/admin/subscriptions", { companyId: cid, plan: "pro" })).status).toBe(400); // 종료일 없는 유료 요금제 거절
       expect((await admin.call("PUT", "/api/admin/subscriptions", { companyId: cid, plan: "team", seats: 5, trialEndsAt: "2999-12-31" })).body).toMatchObject({ plan: "team", status: "trial" });
       expect((await db.get<any>("SELECT COUNT(*) n FROM admin_audit_logs WHERE action='subscription.set'")).n).toBe(1);
       // Team 체험: 한도 해제·담당자 지정 가능

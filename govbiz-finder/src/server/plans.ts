@@ -43,13 +43,16 @@ export function planLimitError(message: string): ApiError {
 
 // ---------- 관리자 ----------
 export async function listSubscriptions(db: Db) {
-  return db.all<{ company_id: string; company_name: string | null; business_number_masked: string; members: number; plan: string | null; seats: number | null; trial_ends_at: string | null; paid_until: string | null; memo: string | null; updated_at: string | null }>(
+  const rows = await db.all<{ company_id: string; company_name: string | null; business_number_masked: string; members: number; plan: string | null; seats: number | null; trial_ends_at: string | null; paid_until: string | null; memo: string | null; updated_at: string | null }>(
     `SELECT c.id AS company_id, c.company_name, c.business_number_masked,
             (SELECT COUNT(*) FROM company_members m WHERE m.company_id=c.id AND m.verification_status='verified') AS members,
             s.plan, s.seats, s.trial_ends_at, s.paid_until, s.memo, s.updated_at
      FROM companies c LEFT JOIN subscriptions s ON s.company_id=c.id
      WHERE EXISTS (SELECT 1 FROM company_members m WHERE m.company_id=c.id AND m.verification_status='verified')
      ORDER BY s.updated_at DESC NULLS LAST, c.company_name LIMIT 500`);
+  const today = seoulToday();
+  // 현재 실제 적용 상태(만료 시 무료)를 함께 내려 관리자가 저장 결과를 바로 확인
+  return rows.map((r) => { const e = resolvePlan(r.plan ? { plan: r.plan as PlanId, seats: r.seats ?? 1, trial_ends_at: r.trial_ends_at, paid_until: r.paid_until } : null, today); return { ...r, effective: { plan: e.plan, label: e.label, status: e.status, endsAt: e.endsAt } }; });
 }
 
 export async function setSubscription(db: Db, adminId: string, input: Record<string, unknown>) {
@@ -66,6 +69,8 @@ export async function setSubscription(db: Db, adminId: string, input: Record<str
   };
   const trial = date(input.trialEndsAt, "체험 종료일");
   const paid = date(input.paidUntil, "이용 종료일");
+  // 종료일 없는 유료 요금제는 즉시 '만료'로 판정되어 무료 한도가 적용되므로 저장 단계에서 막는다
+  if (plan !== "free" && !trial && !paid) throw new ApiError(400, "invalid_input", "유료 요금제는 이용 종료일(결제) 또는 체험 종료일을 입력해 주세요.");
   const memo = typeof input.memo === "string" ? input.memo.slice(0, 500) : null;
   await db.run(
     `INSERT INTO subscriptions(company_id, plan, seats, trial_ends_at, paid_until, memo, updated_by, updated_at) VALUES (?,?,?,?,?,?,?,?)

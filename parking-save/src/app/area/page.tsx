@@ -5,6 +5,9 @@ import { areaIndex } from "@/server/area";
 import { getLang } from "@/i18n/server";
 import { dict } from "@/i18n/dict";
 import { areaHref } from "@/lib/site";
+import { headers } from "next/headers";
+import { clientKey, pageLimiter } from "@/server/rate-limit";
+import { TooManyRequests } from "@/components/TooManyRequests";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +18,8 @@ export async function generateMetadata(): Promise<Metadata> {
 
 /** 지역 목록(시·도 → 시·군·구). 검색 엔진이 지역별 페이지를 찾을 수 있게 하는 진입점 */
 export default async function AreaIndexPage() {
+  const rl = pageLimiter.check(clientKey(await headers()));
+  if (!rl.ok) return <TooManyRequests lang={await getLang()} retryAfterSec={rl.retryAfterSec} />;
   const lang = await getLang();
   const t = dict(lang).area;
   const idx = await areaIndex(await getAppDb());
