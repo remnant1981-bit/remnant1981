@@ -10,6 +10,7 @@ import { Empty, Notice } from "@/components/ui";
 import { formatSeoul } from "@/lib/time";
 import { searchWithMatches } from "@/server/recommend";
 import { AdSlot } from "@/components/AdSlot";
+import { pipelineStages } from "@/server/pipeline";
 import { InstallApp } from "@/components/InstallApp";
 
 export default async function Home() {
@@ -25,6 +26,7 @@ export default async function Home() {
        (SELECT COUNT(*) FROM data_sources WHERE enabled=1 AND integration_status='live') AS live,
        (SELECT COUNT(*) FROM data_sources WHERE enabled=1 AND integration_status='mock') AS mock`),
   ]);
+  const stages = v.company ? await pipelineStages(db, v.company.id) : new Map<string, string>();
   // 기업정보가 있으면 '해당 안 됨' 공고는 홈 목록에서 제외(전체는 '더 보기'의 검색에서 확인)
   const section = async (title: string, id: string, res: typeof open, more: string) => {
     let rows = await attachMatches(db, res.rows, null);
@@ -39,7 +41,7 @@ export default async function Home() {
     return (
       <section aria-labelledby={id} className="mt-8">
         <div className="mb-2 flex items-baseline justify-between"><h2 id={id} className="text-lg font-bold">{title}</h2><Link href={more} className="text-sm underline">더 보기</Link></div>
-        {rows.length ? <div className="grid gap-3">{rows.map((r) => <AnnouncementCard key={r.id} r={r} canBookmark={!!v.company} />)}</div> : <Empty title="해당하는 공고가 없습니다." />}
+        {rows.length ? <div className="grid gap-3">{rows.map((r) => <AnnouncementCard key={r.id} r={r} canBookmark={!!v.company} stage={stages.get(r.id)} />)}</div> : <Empty title="해당하는 공고가 없습니다." />}
       </section>
     );
   };

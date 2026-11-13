@@ -1,5 +1,6 @@
 import { route, json, readJson, type Ctx } from "./api";
 import { guestProfileFromCookie } from "./viewer";
+import { addPipelineNote, listPipeline, removePipelineItem, removePipelineNote, savePipelineItem } from "./pipeline";
 import { guestChecksFromCookie, loadCompanyChecks, saveCompanyCheck } from "./checks";
 import type { CompanyView } from "./company";
 import type { CompanyProfile } from "@/domain/matching";
@@ -171,6 +172,18 @@ export const handlers: Record<string, (req: Request, ...a: any[]) => Promise<Res
   "DELETE /api/bookmarks": route({ auth: "user" }, async (req, c) => {
     const b = await readJson<{ announcementId?: unknown }>(req);
     return toggleBookmark(c.db, c.session!.user.id, b.announcementId, false);
+  }),
+  // ---------- 신청 진행 관리 ----------
+  "GET /api/pipeline": route({ auth: "user" }, async (_req, c) => listPipeline(c.db, c.session!.user.id)),
+  "POST /api/pipeline": route({ auth: "user" }, async (req, c) => savePipelineItem(c.db, c.session!.user.id, await readJson(req))),
+  "DELETE /api/pipeline": route({ auth: "user" }, async (req, c) => {
+    const b = await readJson<{ announcementId?: unknown }>(req);
+    return removePipelineItem(c.db, c.session!.user.id, b.announcementId);
+  }),
+  "POST /api/pipeline/notes": route({ auth: "user" }, async (req, c) => addPipelineNote(c.db, c.session!.user.id, await readJson(req))),
+  "DELETE /api/pipeline/notes": route({ auth: "user" }, async (req, c) => {
+    const b = await readJson<{ noteId?: unknown }>(req);
+    return removePipelineNote(c.db, c.session!.user.id, b.noteId);
   }),
   "GET /api/history": route({ auth: "user" }, async (_req, c) => listHistory(c.db, c.session!.user.id)),
   "DELETE /api/history": route({ auth: "user" }, async (_req, c) => {

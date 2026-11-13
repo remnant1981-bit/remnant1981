@@ -153,6 +153,69 @@ describe("사용자 시나리오 (TEST_PLAN §4)", () => {
     expect((await anon.call("POST", "/api/checks", { announcementId: a.id, fieldKey: "venture", verdict: "yes" })).status).toBe(401);
   });
 
+  it("신청 진행 관리: 추가·단계 변경·목표일·메모·삭제, 입력 검증, 비로그인·미확인 차단", async () => {
+    const c = await member();
+    const id = (await c.call("GET", "/api/announcements")).body.rows[0].id;
+    expect((await c.call("POST", "/api/pipeline", { announcementId: id })).body).toMatchObject({ stage: "interested" });
+    expect((await c.call("POST", "/api/pipeline", { announcementId: id, stage: "preparing", targetDate: "2026-12-01" })).body).toMatchObject({ stage: "preparing", targetDate: "2026-12-01" });
+    // 보낸 항목만 변경(목표일 유지)
+    expect((await c.call("POST", "/api/pipeline", { announcementId: id, stage: "applied" })).body).toMatchObject({ stage: "applied", targetDate: "2026-12-01" });
+    expect((await c.call("POST", "/api/pipeline", { announcementId: id, stage: "hacked" })).status).toBe(400);
+    expect((await c.call("POST", "/api/pipeline", { announcementId: id, targetDate: "2026-13-40" })).status).toBe(400);
+    expect((await c.call("POST", "/api/pipeline", { announcementId: id, assigneeUserId: "0".repeat(32) })).status).toBe(400);
+    expect((await c.call("POST", "/api/pipeline", { announcementId: "nope" })).status).toBe(404);
+    const n = await c.call("POST", "/api/pipeline/notes", { announcementId: id, body: "  담당기관 문의 완료 <b>x</b>  " });
+    expect(n.status).toBe(200);
+    expect((await c.call("POST", "/api/pipeline/notes", { announcementId: id, body: "" })).status).toBe(400);
+    expect((await c.call("POST", "/api/pipeline/notes", { announcementId: id, body: "가".repeat(2001) })).status).toBe(400);
+    const list = (await c.call("GET", "/api/pipeline")).body;
+    expect(list.items).toHaveLength(1);
+    expect(list.items[0]).toMatchObject({ announcement_id: id, stage: "applied", note_count: 1 });
+    expect(list.members).toHaveLength(1);
+    // 자신을 담당자로 지정
+    expect((await c.call("POST", "/api/pipeline", { announcementId: id, assigneeUserId: list.members[0].id })).body.assigneeUserId).toBe(list.members[0].id);
+    // CSRF·비로그인·기업 미확인
+    expect((await c.call("POST", "/api/pipeline", { announcementId: id }, { "x-csrf-token": "bad" })).status).toBe(403);
+    const anon = await client(handlers);
+    expect((await anon.call("GET", "/api/pipeline")).status).toBe(401);
+    const u = await client(handlers);
+    await u.call("POST", "/api/auth/register", { email: "nocompany@example.test", password: PW });
+    await u.call("GET", "/api/auth/me");
+    expect((await u.call("GET", "/api/pipeline")).status).toBe(403);
+    expect((await u.call("POST", "/api/pipeline", { announcementId: id })).status).toBe(403);
+    // 다른 사용자는 남의 메모를 지울 수 없음(기업 미확인 → 403)
+    expect((await u.call("DELETE", "/api/pipeline/notes", { noteId: n.body.id })).status).toBe(403);
+    expect((await c.call("DELETE", "/api/pipeline/notes", { noteId: n.body.id })).status).toBe(200);
+    await c.call("POST", "/api/pipeline/notes", { announcementId: id, body: "다시" });
+    expect((await c.call("DELETE", "/api/pipeline", { announcementId: id })).status).toBe(200);
+    expect((await db.get<any>("SELECT (SELECT COUNT(*) FROM pipeline_items) + (SELECT COUNT(*) FROM pipeline_notes) AS n")).n).toBe(0);
+  });
+  it("신청 진행 관리: 다른 기업의 진행 건·메모는 보이지 않고 수정할 수 없다", async () => {
+    const a = await member();
+    const id = (await a.call("GET", "/api/announcements")).body.rows[0].id;
+    await a.call("POST", "/api/pipeline", { announcementId: id, stage: "reviewing" });
+    const note = (await a.call("POST", "/api/pipeline/notes", { announcementId: id, body: "A사 내부 메모" })).body.id;
+    // 두 번째 기업 구성원
+    const admin = await client(handlers);
+    await admin.call("POST", "/api/auth/login", { email: "admin@example.test", password: "AdminPass12345" });
+    await admin.call("GET", "/api/auth/me");
+    const b = await client(handlers);
+    await b.call("POST", "/api/auth/register", { email: "b@example.test", password: PW });
+    await b.call("GET", "/api/auth/me");
+    await b.call("POST", "/api/company/claim", { bizNo: validBiz("220811234") });
+    const claim = ((await admin.call("GET", "/api/admin/claims")).body.items as any[]).find((x) => x.email === "b@example.test");
+    await admin.call("POST", "/api/admin/claims", { userId: claim.user_id, companyId: claim.company_id, decision: "approve" });
+    expect((await b.call("GET", "/api/pipeline")).body.items).toEqual([]);
+    expect((await b.call("DELETE", "/api/pipeline/notes", { noteId: note })).status).toBe(404);
+    await b.call("DELETE", "/api/pipeline", { announcementId: id }); // B사 기준으로만 삭제 → A사 데이터 영향 없음
+    expect((await b.call("POST", "/api/pipeline", { announcementId: id, assigneeUserId: (await a.call("GET", "/api/pipeline")).body.members[0].id })).status).toBe(400); // 타사 구성원 담당자 지정 불가
+    const mine = (await a.call("GET", "/api/pipeline")).body.items;
+    expect(mine).toHaveLength(1);
+    expect(mine[0]).toMatchObject({ stage: "reviewing", note_count: 1 });
+    const detail = JSON.stringify((await b.call("GET", "/api/announcements/" + id)).body);
+    expect(detail).not.toContain("A사 내부 메모");
+  });
+
   it("현재 검색 조건으로 CSV/XLSX/PDF 내보내기", async () => {
     const c = await member();
     await c.call("PUT", "/api/company", { region_sido: "경기도", established_at: "2024-01-01" });
