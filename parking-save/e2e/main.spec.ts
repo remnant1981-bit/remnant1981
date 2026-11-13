@@ -66,3 +66,11 @@ test("헬스체크·관리자 API 보호", async ({ request }) => {
   expect(["ok", "degraded"]).toContain(h.status);
   expect((await request.get("/api/admin/db-check")).status()).toBe(401);
 });
+
+test("한눈에 보기와 도보 시간 추정이 결과에 표시됨", async ({ page }) => {
+  await page.goto(`/search?${Q}`);
+  const picks = page.locator("section[aria-labelledby=picks-h]");
+  await expect(picks.getByText("최저 요금", { exact: true })).toBeVisible();
+  await expect(picks).toContainText(/도보 약 \d+분 추정/);
+  await expect(page.locator("main li").first()).toContainText(/도보 약 \d+분 추정/);
+});

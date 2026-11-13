@@ -17,6 +17,8 @@ import { labelsFor } from "@/lib/labels";
 import { getLang } from "@/i18n/server";
 import { dict } from "@/i18n/dict";
 import { logError } from "@/server/log";
+import { resolveDestination } from "@/server/place";
+import { walkMinutesEstimate } from "@/domain/geo";
 
 export async function generateMetadata(): Promise<Metadata> { return { title: dict(await getLang()).search.title }; }
 const FIRST_LIMIT = 20, MORE_LIMIT = 50;
@@ -44,7 +46,11 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   const pageLimit = g("limit") === String(MORE_LIMIT) ? MORE_LIMIT : FIRST_LIMIT;
   qs.set("limit", String(pageLimit));
   if (lang === "en") qs.set("lang", "en");
-  const parsed = parseSearchParams(qs);
+  // 목적지 문자열 → 보유 주차장 주소 데이터로 대략 위치 찾기(외부 지오코딩 없음). DB 오류면 찾지 못한 것으로 처리
+  let resolved = null;
+  const destText = g("destination")?.trim();
+  if (destText && !g("lat") && !g("lng")) { try { resolved = await resolveDestination(await getAppDb(), destText); } catch (e) { logError("search_page.resolve_error", e); } }
+  const parsed = parseSearchParams(qs, resolved);
   const form = <SearchForm lang={lang} defaults={defaults} places={mockEnabled() ? Object.keys(MOCK_PLACES) : []} />;
 
   if (!parsed.ok) {
@@ -87,6 +93,12 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       <h1 className="text-xl font-bold">{S.heading(centerLabel)}</h1>
       <RecentSearchRecorder query={pageQs.toString()} label={centerLabel} period={periodText} />
       <p className="mt-1 text-sm text-gray-700">{periodText} {S.kst} · {S.radius(t.dist(parsed.params.radiusMeters))}</p>
+      {res.searchCenter.place && (
+        <p className="mt-1 text-xs text-gray-700" role="note">
+          {S.placeNote(res.searchCenter.place.region, res.searchCenter.place.matches)}
+          {res.searchCenter.place.otherRegions.length > 0 && <> {S.placeOthers} <span lang="ko">{res.searchCenter.place.otherRegions.join(", ")}</span></>}
+        </p>
+      )}
       <details className="my-4 rounded border border-gray-300 p-3"><summary className="cursor-pointer font-semibold">{S.change}</summary><div className="mt-3">{form}</div></details>
 
       <p className="text-sm" role="status">
@@ -100,6 +112,24 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       {res.warnings.filter((w) => !w.startsWith("MOCK_DATA") && !w.startsWith("EMPTY")).map((w) => (
         <p key={w} className="mt-2 rounded border border-amber-400 bg-amber-50 p-2 text-sm" role="note">{(lang === "ko" ? null : S.warnings[w.slice(0, w.indexOf(":"))]) ?? w.slice(w.indexOf(":") + 1).trim()}</p>
       ))}
+      {(res.picks.cheapest || res.picks.nearestFree) && (
+        <section className="mt-3 rounded border border-gray-300 p-3 text-sm" aria-labelledby="picks-h">
+          <h2 id="picks-h" className="font-semibold">{S.picksTitle}</h2>
+          <dl className="mt-1 grid gap-x-3 gap-y-1 sm:grid-cols-[auto_1fr]">
+            {([["cheapest", S.pickCheapest], ["nearest", S.pickNearest], ["nearestFree", S.pickNearestFree]] as const).map(([k, label]) => {
+              const x = res.picks[k];
+              if (!x || (k === "nearestFree" && (x.id === res.picks.nearest?.id || x.id === res.picks.cheapest?.id))) return null;
+              return (
+                <div key={k} className="contents">
+                  <dt className="text-gray-600">{label}</dt>
+                  <dd><Link href={`/lots/${x.id}?${detailQuery}`} className="underline" lang="ko">{x.name}</Link> · {x.amount == null ? t.fee.unknown : x.isFree ? t.fee.free : t.money(x.amount)} · {t.dist(x.distanceMeters)} ({S.walk(walkMinutesEstimate(x.distanceMeters))})</dd>
+                </div>
+              );
+            })}
+          </dl>
+          <p className="mt-1 text-xs text-gray-600">{S.picksNote}</p>
+        </section>
+      )}
       {view === "map" && res.items.length > 0 && (
         <ResultsMap lang={lang} center={{ lat: res.searchCenter.lat, lng: res.searchCenter.lng, label: centerLabel }} radiusMeters={parsed.params.radiusMeters} items={mapItems} />
       )}

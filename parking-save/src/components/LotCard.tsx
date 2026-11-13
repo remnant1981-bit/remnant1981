@@ -3,6 +3,7 @@ import type { LotItem } from "@/server/search";
 import { labelsFor } from "@/lib/labels";
 import { formatKst } from "@/lib/time";
 import type { Lang } from "@/i18n";
+import { walkMinutesEstimate } from "@/domain/geo";
 import { FavoriteButton } from "./FavoriteButton";
 import { CompareToggle } from "./CompareControls";
 
@@ -16,7 +17,7 @@ export function LotCard({ item, query, lang = "ko" }: { item: LotItem; query: st
     <li className="rounded-lg border border-gray-300 p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h2 className="text-lg font-semibold"><Link href={`/lots/${item.id}?${query}`} className="underline" lang="ko">{item.name}</Link></h2>
-        <span className="flex items-center gap-2"><span className="text-sm text-gray-700">{t.dist(item.distanceMeters)} <span className="text-xs">{c.straight}</span></span>
+        <span className="flex items-center gap-2"><span className="text-sm text-gray-700">{t.dist(item.distanceMeters)} <span className="text-xs">{c.straight} · {t.search.walk(walkMinutesEstimate(item.distanceMeters))}</span></span>
           <FavoriteButton lang={lang} id={item.id} name={item.name} address={item.address} /><CompareToggle lang={lang} id={item.id} name={item.name} /></span>
       </div>
       <p className="mt-1 text-sm text-gray-700" lang={item.address ? "ko" : undefined}>{item.address ?? c.noAddress}</p>

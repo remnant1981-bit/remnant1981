@@ -24,6 +24,7 @@ export const MAX_RADIUS = 5000;
 export const MAX_STAY_DAYS = 31;
 import { staleDaysFor } from "./freshness";
 import { dayKind, occupancyTrend, TREND_WINDOW_DAYS, type Trend } from "@/domain/occupancy-trend";
+import type { ResolvedPlace } from "./place";
 
 export interface SearchParams {
   center: LatLng; centerLabel: string; centerKind: "current_location" | "destination";
@@ -31,24 +32,28 @@ export interface SearchParams {
   freeOnly: boolean; realtimeOnly: boolean; operatingOnly: boolean; limit: number;
   /** 추천 사유 문구 언어(화면 언어). 없으면 한국어 */
   lang?: "ko" | "en";
+  /** 목적지를 보유 주소 데이터로 찾은 경우(대략 위치 안내·다른 후보 지역 표시용) */
+  place?: ResolvedPlace;
 }
 export type ParseResult = { ok: true; params: SearchParams } | { ok: false; code: string; message: string };
 const bad = (code: string, message: string): ParseResult => ({ ok: false, code, message });
 
-export function parseSearchParams(q: URLSearchParams): ParseResult {
+/** @param resolved 목적지 문자열을 보유 주소 데이터로 찾은 위치(resolveDestination). 목업 장소가 우선 */
+export function parseSearchParams(q: URLSearchParams, resolved?: ResolvedPlace | null): ParseResult {
   const lat = q.get("lat"), lng = q.get("lng"), dest = q.get("destination")?.trim();
-  let center: LatLng, label: string, kind: SearchParams["centerKind"];
+  let center: LatLng, label: string, kind: SearchParams["centerKind"], place: ResolvedPlace | undefined;
   if (lat != null && lat !== "" || lng != null && lng !== "") {
     center = { lat: Number(lat), lng: Number(lng) };
     if (lat === "" || lng === "" || lat == null || lng == null || !isValidCoord(center)) return bad("INVALID_COORDINATES", "위치 좌표가 올바르지 않습니다.");
     label = "현재 위치"; kind = "current_location";
   } else if (dest) {
     if (dest.length > 100) return bad("INVALID_DESTINATION", "목적지가 너무 깁니다.");
-    const p = mockEnabled() ? MOCK_PLACES[dest] : undefined; // 실제 지오코딩 미연동(D7)
+    const p = (mockEnabled() ? MOCK_PLACES[dest] : undefined) ?? (resolved ? { lat: resolved.lat, lng: resolved.lng } : undefined); // 정식 지오코딩 미연동(D7) — 보유 주소 데이터로 찾음
     if (!p) return bad("DESTINATION_NOT_FOUND", mockEnabled()
-      ? `목적지를 찾을 수 없습니다. (목업 모드: ${Object.keys(MOCK_PLACES).join(", ")}만 검색 가능)`
-      : "목적지 검색은 준비 중입니다(주소·장소 검색 미연동). '현재 위치 사용'으로 검색해 주세요.");
+      ? `목적지를 찾을 수 없습니다. (목업 모드: ${Object.keys(MOCK_PLACES).join(", ")} 또는 주차장 이름·주소에 있는 말로 검색)`
+      : "입력한 말이 들어간 주차장 이름·주소를 찾지 못했습니다. 동·도로명·시설 이름(예: 역삼동, 세종대로)으로 다시 검색하거나 '현재 위치 사용'을 눌러 주세요.");
     center = p; label = dest; kind = "destination";
+    if (resolved && !(mockEnabled() && MOCK_PLACES[dest])) place = resolved;
   } else return bad("MISSING_CENTER", "현재 위치 또는 목적지를 입력하세요.");
 
   const rad = q.get("radiusMeters") ? Number(q.get("radiusMeters")) : DEFAULT_RADIUS;
@@ -66,7 +71,7 @@ export function parseSearchParams(q: URLSearchParams): ParseResult {
   const limit = q.get("limit") ? Number(q.get("limit")) : 50;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) return bad("INVALID_LIMIT", "limit은 1~100입니다.");
   const flag = (k: string) => q.get(k) === "true" || q.get(k) === "1" || q.get(k) === "on";
-  return { ok: true, params: { center, centerLabel: label, centerKind: kind, radiusMeters: rad, startAt, endAt, sort, type, freeOnly: flag("freeOnly"), realtimeOnly: flag("realtimeOnly"), operatingOnly: flag("operatingOnly"), limit, lang: q.get("lang") === "en" ? "en" : "ko" } };
+  return { ok: true, params: { center, centerLabel: label, centerKind: kind, radiusMeters: rad, startAt, endAt, sort, type, freeOnly: flag("freeOnly"), realtimeOnly: flag("realtimeOnly"), operatingOnly: flag("operatingOnly"), limit, lang: q.get("lang") === "en" ? "en" : "ko", place } };
 }
 
 interface LotRow {
@@ -193,10 +198,28 @@ async function evaluateLot(db: Db, lot: LotRow, p: Pick<SearchParams, "startAt" 
 
 export interface SearchResponse {
   items: LotItem[];
-  searchCenter: { lat: number; lng: number; label: string; kind: SearchParams["centerKind"] };
+  searchCenter: { lat: number; lng: number; label: string; kind: SearchParams["centerKind"]; place: { region: string; matches: number; otherRegions: string[] } | null };
+  picks: Picks;
   requestedPeriod: { startAt: string; endAt: string; timezone: "Asia/Seoul" };
   dataCoverage: { candidates: number; returned: number; feeCalculable: number; feeUnknown: number; withValidRealtime: number; holidayDataAvailable: boolean; isMockData: boolean; excludedNoCoordinates: number };
   warnings: string[];
+}
+
+export interface PickItem { id: number; name: string; distanceMeters: number; amount: number | null; isFree: boolean }
+export interface Picks { cheapest: PickItem | null; nearest: PickItem | null; nearestFree: PickItem | null }
+/**
+ * 한눈에 보기: 조건에 맞는 전체 후보(표시 개수 제한 전) 중 최저 요금·가장 가까운 곳·가장 가까운 무료.
+ * 요금 계산 불가 시설은 최저 요금 후보에서 제외(0원으로 보지 않음), 원천 요금 값이 이상한 시설도 제외. 후보가 2곳 미만이면 표시하지 않음.
+ */
+export function pickHighlights(items: LotItem[]): Picks {
+  if (items.length < 2) return { cheapest: null, nearest: null, nearestFree: null };
+  const toPick = (i: LotItem): PickItem => ({ id: i.id, name: i.name, distanceMeters: i.distanceMeters, amount: i.fee.status === "OK" ? i.fee.amount! : null, isFree: i.fee.status === "OK" && !!i.fee.isFree });
+  const byDist = (a: LotItem, b: LotItem) => a.distanceMeters - b.distanceMeters || a.id - b.id;
+  const priced = items.filter((i) => i.fee.status === "OK" && i.feeWarnings.length === 0);
+  const cheapest = [...priced].sort((a, b) => a.fee.amount! - b.fee.amount! || byDist(a, b))[0];
+  const nearest = [...items].sort(byDist)[0];
+  const nearestFree = priced.filter((i) => i.fee.isFree).sort(byDist)[0];
+  return { cheapest: cheapest ? toPick(cheapest) : null, nearest: toPick(nearest), nearestFree: nearestFree ? toPick(nearestFree) : null };
 }
 
 export async function searchLots(db: Db, p: SearchParams, now = new Date()): Promise<SearchResponse> {
@@ -236,6 +259,7 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
   if (p.operatingOnly) items = items.filter((i) => i.operating === "OPERATING");
   items.sort(comparator(p.sort));
   items = await groupSimilar(db, items);
+  const picks = pickHighlights(items);
   items = items.slice(0, p.limit);
   const why = explainAll(items, p.lang ?? "ko"); // 표시되는 시설 집합 기준 설명(정렬에는 영향 없음)
   for (const i of items) i.explanation = why.get(i.id)!;
@@ -249,7 +273,8 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
   if (candidates === 0) warnings.push("EMPTY: 조건에 맞는 주차장이 없습니다.");
   return {
     items,
-    searchCenter: { lat: p.center.lat, lng: p.center.lng, label: p.centerLabel, kind: p.centerKind },
+    searchCenter: { lat: p.center.lat, lng: p.center.lng, label: p.centerLabel, kind: p.centerKind, place: p.place ? { region: p.place.region, matches: p.place.matches, otherRegions: p.place.otherRegions } : null },
+    picks,
     requestedPeriod: { startAt: p.startAt.toISOString(), endAt: p.endAt.toISOString(), timezone: "Asia/Seoul" },
     dataCoverage: {
       candidates, returned: items.length,
