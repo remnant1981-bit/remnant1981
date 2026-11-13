@@ -3,6 +3,7 @@ import { isGuardError, requireAdmin } from "@/server/admin-guard";
 import { internalError } from "@/server/http";
 import { listPending } from "@/server/duplicates";
 import { listReports } from "@/server/reports";
+import { listOverrides } from "@/server/overrides";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,11 @@ export async function GET(req: Request) {
        JOIN (SELECT source_name, MAX(id) AS id FROM source_sync_logs GROUP BY source_name) m ON m.id = s.id ORDER BY s.source_name`);
     const counts = await g.db.get<{ reports: number; duplicates: number }>(
       "SELECT (SELECT COUNT(*) FROM lot_reports WHERE status='NEW') AS reports, (SELECT COUNT(*) FROM duplicate_candidates WHERE status='PENDING') AS duplicates");
-    return NextResponse.json({ counts, sync, reports: await listReports(g.db, "NEW", 50), duplicates: await listPending(g.db, 50) }, { headers: { "Cache-Control": "no-store" } });
+    // 수집 이력(원천별 최근 14회): 받은 건수 추이 그래프용
+    const history = await g.db.all<{ source_name: string; status: string; started_at: string; records_received: number | null }>(
+      `SELECT source_name, status, started_at, records_received FROM (
+         SELECT source_name, status, started_at, records_received, ROW_NUMBER() OVER (PARTITION BY source_name ORDER BY id DESC) AS rn FROM source_sync_logs WHERE status <> 'RUNNING')
+       WHERE rn <= 14 ORDER BY source_name, started_at`);
+    return NextResponse.json({ counts, sync, syncHistory: history, reports: await listReports(g.db, "NEW", 50), duplicates: await listPending(g.db, 50), overrides: await listOverrides(g.db, 50) }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) { return internalError(e); }
 }

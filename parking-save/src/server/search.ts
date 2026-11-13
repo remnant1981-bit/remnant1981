@@ -25,6 +25,7 @@ export const MAX_STAY_DAYS = 31;
 import { staleDaysFor } from "./freshness";
 import { dayKind, occupancyTrend, TREND_WINDOW_DAYS, type Trend } from "@/domain/occupancy-trend";
 import type { ResolvedPlace } from "./place";
+import { activeOverrides } from "./overrides";
 
 export interface SearchParams {
   center: LatLng; centerLabel: string; centerKind: "current_location" | "destination";
@@ -404,6 +405,7 @@ export async function getLotDetail(db: Db, id: number, period: { startAt: Date; 
     requestedPeriod: period ? { startAt: period.startAt.toISOString(), endAt: period.endAt.toISOString(), timezone: "Asia/Seoul" } : null,
     feeCurve, timer, cheaper, feeWarnings, discounts: discountTargets(lot.fee_note), monthlyPass, passHint,
     occupancyTrend: period ? await occupancyTrendFor(db, id, period.startAt, now) : null,
+    overrides: await activeOverrides(db, id),
   };
 }
 export const FEE_CURVE_HOURS = 12;

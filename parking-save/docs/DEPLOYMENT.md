@@ -154,7 +154,7 @@ curl -s https://<도메인>/api/health
 | `sudo parking-alert` | 헬스체크 + 품질 리포트 ERROR 점검 후 `ALERT_WEBHOOK_URL`로 전송(15분마다 자동, 같은 내용은 6시간에 1회). `parking-alert "메시지"`로 즉시 전송. 기록: `/var/log/parking-save-alert.log` |
 | `curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:3000/api/admin/db-check` | DB 무결성 전체 점검(수 초). 이상 시 HTTP 500 |
 | `docker logs --tail 100 parking-save` | 앱 로그(한 줄 JSON: `ts·level·event` + 필드). 좌표·검색어·토큰·인증키는 기록하지 않음(가림 처리). 오류만: `docker logs parking-save 2>&1 \| grep '"level":"error"'` |
-| 관리자 화면 | 외부에서는 404(nginx 차단). PC에서 `ssh -L 3000:127.0.0.1:3000 <서버>` 후 브라우저로 `http://localhost:3000/admin` → `/etc/parking-save/env`의 `ADMIN_API_TOKEN` 입력. 신고·중복 후보 처리, 수집 상태, 품질 리포트 |
+| 관리자 화면 | 외부에서는 404(nginx 차단). PC에서 `ssh -L 3000:127.0.0.1:3000 <서버>` 후 브라우저로 `http://localhost:3000/admin` → `/etc/parking-save/env`의 `ADMIN_API_TOKEN` 입력. 신고·중복 후보 처리, 수집 상태·이력 그래프, 품질 리포트, **요금·운영시간 수동 보정**(확인 근거 필수, 되돌리기 가능, 수집 후에도 유지) |
 
 - **검색 엔진 등록**: 도메인 연결 후 `SITE_URL`을 실제 주소(https)로 설정해야 sitemap·공유 이미지 주소가 맞음. 네이버 서치어드바이저·구글 서치 콘솔에 `https://<도메인>/sitemap.xml` 제출(사용자 작업).
 - **알림 웹훅**: `/etc/parking-save/env`의 `ALERT_WEBHOOK_URL`에 Slack(Incoming Webhook)·Discord 웹훅 주소 입력(본문에 `text`·`content` 둘 다 넣어 양쪽 호환). 비워 두면 로그 파일에만 기록. 웹훅 주소도 비밀값으로 취급.
