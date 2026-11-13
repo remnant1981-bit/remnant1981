@@ -54,22 +54,27 @@
   };
 
 
-  // 체험용 예시(데모). 정상 편성 1건, 점검 오류 확인용 1건
+  // 체험용 예시(데모). 정상 편성(2기관·2연차), 점검 오류 확인용(1기관·1연차)
+  const P = (name, salary, months, rate, otherRate, kind) => ({ name, salary, months, rate, otherRate, kind });
   const EXAMPLES = {
-    ok: { label: '정상 편성 예시(중소기업)', state: { ruleset: 'sme', title: '[예시] 액체수소 이송용 극저온 펌프 개발', gov: '300000',
-      people: [
-        { name: '김책임', salary: '84000', months: 12, rate: 30, otherRate: 40, kind: 'existing' },
-        { name: '이선임', salary: '62000', months: 12, rate: 50, otherRate: 30, kind: 'existing' },
-        { name: '박연구', salary: '48000', months: 12, rate: 60, otherRate: 20, kind: 'existing' },
-        { name: '신규연구원', salary: '42000', months: 10, rate: 100, otherRate: 0, kind: 'new' },
-      ],
-      items: { equipment: { cash: '60000', inkind: '15000' }, material: { cash: '120000', inkind: '10000' }, outsource: { cash: '40000' }, activity: { cash: '25000' }, allowance: { cash: '9000' } } } },
-    error: { label: '오류 점검 예시(중견 3천억 미만)', state: { ruleset: 'midS', title: '[예시] 점검 오류 확인용', gov: '400000',
-      people: [
-        { name: '최수석', salary: '90000', months: 12, rate: 70, otherRate: 50, kind: 'existing' },
-        { name: '정선임', salary: '60000', months: 12, rate: 50, otherRate: 0, kind: 'existingCash' },
-      ],
-      items: { equipment: { inkind: '40000' }, material: { cash: '150000', inkind: '60000' }, outsource: { cash: '160000' }, activity: { cash: '10000' }, allowance: { cash: '30000' } } } },
+    ok: { label: '정상 편성 예시(주관 중소 + 공동 대학, 2개 연차)', state: { v: 2, title: '[예시] 액체수소 이송용 극저온 펌프 개발', years: 2, insts: [
+      { name: '(주)예시테크', role: 'lead', ruleset: 'sme', data: [
+        { gov: '300000', people: [P('김책임', '84000', 12, 30, 40, 'existing'), P('이선임', '62000', 12, 50, 30, 'existing'), P('박연구', '48000', 12, 60, 20, 'existing'), P('신규연구원', '42000', 10, 100, 0, 'new')],
+          items: { equipment: { cash: '60000', inkind: '15000' }, material: { cash: '120000', inkind: '10000' }, outsource: { cash: '40000' }, activity: { cash: '25000' }, allowance: { cash: '9000' } } },
+        { gov: '300000', people: [P('김책임', '87000', 12, 30, 40, 'existing'), P('이선임', '64000', 12, 50, 30, 'existing'), P('박연구', '50000', 12, 60, 20, 'existing'), P('신규연구원', '44000', 12, 100, 0, 'new')],
+          items: { equipment: { cash: '30000', inkind: '10000' }, material: { cash: '140000', inkind: '15000' }, outsource: { cash: '40000' }, activity: { cash: '30000' }, allowance: { cash: '9000' } } },
+      ] },
+      { name: '예시대학교 산학협력단', role: 'joint', ruleset: 'univ', data: [
+        { gov: '100000', people: [], items: { student: { cash: '50000' }, material: { cash: '30000' }, activity: { cash: '10239' }, allowance: { cash: '5000' } } },
+        { gov: '100000', people: [], items: { student: { cash: '52000' }, material: { cash: '28000' }, activity: { cash: '10239' }, allowance: { cash: '5000' } } },
+      ] },
+    ] } },
+    error: { label: '오류 점검 예시(중견 3천억 미만)', state: { v: 2, title: '[예시] 점검 오류 확인용', years: 1, insts: [
+      { name: '(주)예시중견', role: 'lead', ruleset: 'midS', data: [
+        { gov: '400000', people: [P('최수석', '90000', 12, 70, 50, 'existing'), P('정선임', '60000', 12, 50, 0, 'existingCash')],
+          items: { equipment: { inkind: '40000' }, material: { cash: '150000', inkind: '60000' }, outsource: { cash: '160000' }, activity: { cash: '10000' }, allowance: { cash: '30000' } } },
+      ] },
+    ] } },
   };
 
   const DEFAULT_RULES = { indirectPct: 10, allowanceMaxPct: LIMITS.allowancePct };
@@ -195,6 +200,86 @@
     return out;
   }
 
+  // ---------- 과제(연차 × 기관) ----------
+  // project v2: { v:2, title, years, insts:[{ name, role:'lead'|'joint', ruleset, govMaxPct, cashMinPct, indirectPct, allowanceMaxPct, data:[{gov, people, items}] }] }
+  const MAX_YEARS = 5, MAX_INSTS = 10;
+  const ROLES = { lead: '주관연구개발기관', joint: '공동연구개발기관' };
+  const blankYear = () => ({ gov: '', people: [{ name: '', salary: '', months: 12, rate: '', otherRate: '', kind: 'existing' }], items: {} });
+  const newInst = (role = 'joint', n = 1) => ({ name: role === 'lead' ? '주관기관' : `공동기관 ${n}`, role, ruleset: 'sme', govMaxPct: '', cashMinPct: '', indirectPct: '', allowanceMaxPct: '', data: [blankYear()] });
+
+  /** 이전 버전(단일 기관·단일 연차) 저장값 포함 → v2 로 정리 */
+  function normalizeProject(raw) {
+    const s = raw && typeof raw === 'object' ? JSON.parse(JSON.stringify(raw)) : {};
+    let p;
+    if (s.v === 2 && Array.isArray(s.insts)) p = s;
+    else {
+      const ruleset = s.ruleset || ({ sme: 'sme', mid: 'midL', large: 'large', custom: 'custom' })[s.orgType] || 'sme';
+      p = { v: 2, title: s.title || '', years: 1, insts: [{ name: '주관기관', role: 'lead', ruleset, govMaxPct: s.govMaxPct ?? '', cashMinPct: s.cashMinPct ?? '', indirectPct: s.indirectPct ?? '', allowanceMaxPct: s.allowanceMaxPct ?? '',
+        data: [{ gov: s.gov ?? '', people: Array.isArray(s.people) ? s.people : blankYear().people, items: s.items && typeof s.items === 'object' ? s.items : {} }] }] };
+    }
+    p.title = String(p.title || '').slice(0, 80);
+    p.years = Math.min(MAX_YEARS, Math.max(1, Math.floor(Number(p.years) || 1)));
+    p.insts = (p.insts || []).slice(0, MAX_INSTS);
+    if (!p.insts.length) p.insts = [newInst('lead')];
+    for (const inst of p.insts) {
+      if (!RULESETS[inst.ruleset]) inst.ruleset = 'sme';
+      if (!ROLES[inst.role]) inst.role = 'joint';
+      inst.name = String(inst.name || '').slice(0, 40) || '기관';
+      inst.data = Array.isArray(inst.data) ? inst.data.slice(0, MAX_YEARS) : [];
+      while (inst.data.length < p.years) inst.data.push(blankYear());
+      for (const d of inst.data) { d.people = Array.isArray(d.people) ? d.people : []; d.items = d.items && typeof d.items === 'object' ? d.items : {}; }
+    }
+    return p;
+  }
+
+  /** 한 기관·한 연차의 계산용 상태(calcBudget 입력) */
+  function sheetState(p, i, y) {
+    const inst = p.insts[i], d = inst.data[y];
+    return { ruleset: inst.ruleset, govMaxPct: inst.govMaxPct, cashMinPct: inst.cashMinPct, indirectPct: inst.indirectPct, allowanceMaxPct: inst.allowanceMaxPct, gov: d.gov, people: d.people, items: d.items };
+  }
+
+  const sumT = (list) => list.reduce((a, t) => ({ gov: a.gov + t.gov, orgCash: a.orgCash + t.orgCash, inkind: a.inkind + t.inkind, total: a.total + t.total }), { gov: 0, orgCash: 0, inkind: 0, total: 0 });
+
+  /** 과제 전체 계산: 기관·연차별 결과, 연차·기관·전체 합계, 과제 단위 점검 */
+  function calcProject(raw) {
+    const p = normalizeProject(raw);
+    const insts = p.insts.map((inst, i) => {
+      const years = [];
+      for (let y = 0; y < p.years; y++) {
+        const r = calcBudget(sheetState(p, i, y));
+        const gov = r.funding.gov;
+        r.sum = { gov, orgCash: Math.max(0, r.total.cash - gov), inkind: r.total.inkind, total: r.total.total };
+        r.errors = r.checks.filter((c) => c.level === 'error').length;
+        years.push(r);
+      }
+      return { name: inst.name, role: inst.role, rules: years[0].rules, years, total: sumT(years.map((r) => r.sum)) };
+    });
+    const yearTotals = Array.from({ length: p.years }, (_, y) => sumT(insts.map((it) => it.years[y].sum)));
+    const total = sumT(yearTotals);
+    const checks = [];
+    const leads = p.insts.filter((x) => x.role === 'lead').length;
+    if (leads !== 1) checks.push({ level: 'warn', msg: `주관연구개발기관은 1곳이어야 합니다(현재 ${leads}곳).` });
+    const errs = insts.reduce((a, it) => a + it.years.reduce((b, r) => b + r.errors, 0), 0);
+    if (errs) checks.push({ level: 'error', msg: `기관·연차별 편성에 오류 ${errs}건이 있습니다. 총괄표에서 ✖ 표시된 칸을 눌러 확인하세요.` });
+    else if (total.gov) checks.push({ level: 'ok', msg: '모든 기관·연차 편성이 점검을 통과했습니다.' });
+    return { project: p, insts, yearTotals, total, checks };
+  }
+
+  /** 계획서용 비목 배분: 현금을 정부지원·기관부담 현금으로 비례 배분(나머지는 가장 큰 비목) */
+  function splitCash(r) {
+    const rows = r.rows.map((x) => ({ ...x, gov: 0, orgCash: 0 }));
+    const cashTotal = rows.reduce((a, x) => a + x.cash, 0);
+    const gov = Math.min(r.funding.gov, cashTotal);
+    if (cashTotal > 0) {
+      let used = 0;
+      for (const x of rows) { x.gov = Math.floor((x.cash * gov) / cashTotal); used += x.gov; }
+      const big = rows.reduce((a, x) => (x.cash > a.cash ? x : a), rows[0]);
+      big.gov += gov - used;
+    }
+    for (const x of rows) x.orgCash = x.cash - x.gov;
+    return rows;
+  }
+
   // ---------- XLSX — 의존성 없는 최소 생성기(무압축 ZIP) ----------
   const CRC_TABLE = (() => {
     const t = new Uint32Array(256);
@@ -248,50 +333,141 @@
 
   /** 편성표 XLSX(합계는 엑셀 수식) */
   const RB_KIND_LABEL = (p) => PERSON_KINDS[personKind(p)].label;
-  function buildXlsx(state, title) {
-    const r = calcBudget(state);
-    const N = 1, B = 2; // 스타일: 1=천단위 숫자, 2=굵게
-    const t1 = [[{ v: title || 'R&D 사업비 편성표', s: B }], ['단위: 천원'], [],
-      [{ v: '구분', s: B }, { v: '금액', s: B }],
-      ['정부출연금', { v: r.funding.gov, s: N }],
-      ['기관부담금', { f: 'B12-B5', s: N }],
-      [], [{ v: '비목', s: B }, { v: '현금', s: B }, { v: '현물', s: B }, { v: '합계', s: B }, { v: '비율(%)', s: B }]];
-    const start = t1.length + 1; // 엑셀 행 번호(1부터)
-    r.rows.forEach((row, i) => {
-      const n = start + i;
-      t1.push([row.label, { v: row.cash, s: N }, { v: row.inkind, s: N }, { f: `B${n}+C${n}`, s: N }, { f: `IF($D$${start + r.rows.length}=0,0,ROUND(D${n}/$D$${start + r.rows.length}*100,1))` }]);
-    });
-    const end = start + r.rows.length - 1;
-    // 합계 행(정부출연금 행 B5, 기관부담금 B6이 B12 를 참조하므로 합계 행 위치를 고정하기 위해 아래에 둠)
-    t1.push([{ v: '합계', s: B }, { f: `SUM(B${start}:B${end})`, s: N }, { f: `SUM(C${start}:C${end})`, s: N }, { f: `SUM(D${start}:D${end})`, s: N }, 100]);
-    const totalRow = end + 1;
-    t1[5][1] = { f: `D${totalRow}-B5`, s: N };
-    t1.push([], ['정부출연금 비율(%)', { f: `IF(D${totalRow}=0,0,ROUND(B5/D${totalRow}*100,1))` }], ['기관부담 현금 비율(%)', { f: `IF(B6=0,0,ROUND((B${totalRow}-B5)/B6*100,1))` }],
-      [], ['적용 기준', r.rules.label], ['정부지원 비율', r.rules.basis.gov], ['현금 부담', r.rules.basis.cash], ['간접비', r.rules.basis.indirect], ['근거 법령', `${SOURCES.decreeT1} / ${SOURCES.std} (기준일 ${BASIS_DATE})`],
-      [], ['※ 참고용 계산입니다. 사업별 공고문·운영요령이 우선합니다.']);
+  const STYLES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="맑은 고딕"/></font><font><b/><sz val="11"/><name val="맑은 고딕"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE8EFFF"/></patternFill></fill></fills><borders count="2"><border/><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/></border></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="6"><xf/><xf numFmtId="3" applyNumberFormat="1"/><xf fontId="1" applyFont="1"/><xf borderId="1" applyBorder="1"/><xf numFmtId="3" borderId="1" applyNumberFormat="1" applyBorder="1"/><xf fontId="1" fillId="2" borderId="1" applyFont="1" applyFill="1" applyBorder="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+  // 스타일 번호: 1 숫자, 2 굵게, 3 테두리, 4 테두리+숫자, 5 표 머리(굵게·배경·테두리)
+  const sheetName = (s, used) => {
+    let n = String(s).replace(/[\[\]:*?\/\\]/g, ' ').trim().slice(0, 28) || '시트';
+    let k = n, i = 2;
+    while (used.has(k)) k = `${n.slice(0, 26)}(${i++})`;
+    used.add(k);
+    return k;
+  };
 
-    const t2 = [[{ v: '참여연구원 인건비', s: B }], ['단위: 천원'], [],
-      [{ v: '성명', s: B }, { v: '연봉', s: B }, { v: '참여개월', s: B }, { v: '참여율(%)', s: B }, { v: '다른 과제 참여율(%)', s: B }, { v: '구분', s: B }, { v: '인건비', s: B }]];
-    r.people.forEach((p, i) => {
-      const n = 5 + i;
-      t2.push([p.name || '', { v: int(p.salary), s: N }, int(p.months), pct(p.rate), pct(p.otherRate), RB_KIND_LABEL(p), { f: `ROUND(B${n}/12*C${n}*D${n}/100,0)`, s: N }]);
-    });
-    if (r.people.length) t2.push([{ v: '합계', s: B }, '', '', '', '', '', { f: `SUM(G5:G${4 + r.people.length})`, s: N }]);
-
-    const styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="맑은 고딕"/></font><font><b/><sz val="11"/><name val="맑은 고딕"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="3"><xf/><xf numFmtId="3" applyNumberFormat="1"/><xf fontId="1" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
-    const files = [
-      { name: '[Content_Types].xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>' },
+  function workbook(sheets) {
+    const n = sheets.length;
+    const ct = sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('');
+    const wbSheets = sheets.map((s, i) => `<sheet name="${esc(s.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('');
+    const rels = sheets.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('');
+    return zip([
+      { name: '[Content_Types].xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${ct}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>` },
       { name: '_rels/.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
-      { name: 'xl/workbook.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="사업비 편성표" sheetId="1" r:id="rId1"/><sheet name="인건비" sheetId="2" r:id="rId2"/></sheets><calcPr fullCalcOnLoad="1"/></workbook>' },
-      { name: 'xl/_rels/workbook.xml.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>' },
-      { name: 'xl/styles.xml', data: styles },
-      { name: 'xl/worksheets/sheet1.xml', data: sheetXml(t1, [24, 14, 14, 14, 10]) },
-      { name: 'xl/worksheets/sheet2.xml', data: sheetXml(t2, [14, 12, 10, 10, 18, 10, 12]) },
-    ];
-    return zip(files);
+      { name: 'xl/workbook.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${wbSheets}</sheets><calcPr fullCalcOnLoad="1"/></workbook>` },
+      { name: 'xl/_rels/workbook.xml.rels', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels}<Relationship Id="rId${n + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
+      { name: 'xl/styles.xml', data: STYLES },
+      ...sheets.map((s, i) => ({ name: `xl/worksheets/sheet${i + 1}.xml`, data: sheetXml(s.rows, s.widths) })),
+    ]);
   }
 
-  const RB = { EXAMPLES, BASIS_DATE, SOURCES, RULESETS, LIMITS, ITEMS, PERSON_KINDS, DEFAULT_RULES, int, pct, effectiveRules, calcFunding, personCost, calcBudget, buildXlsx, crc32 };
+  /**
+   * 계획서 양식 엑셀: ① 연구개발비 총괄표(연차·기관별 정부지원/기관부담 현금·현물) ② 기관별 비목 사용계획(연차별 + 전체)
+   * ③ 참여연구원 인건비 명세 ④ 적용 기준·근거. 합계·소계는 엑셀 수식.
+   */
+  function buildXlsx(raw) {
+    const P = calcProject(raw);
+    const p = P.project;
+    const N = 1, B = 2, T = 3, TN = 4, H = 5;
+    const title = p.title || 'R&D 과제';
+    const used = new Set();
+    const yl = (y) => `${y + 1}차년도`;
+    const head = (...v) => v.map((x) => ({ v: x, s: H }));
+    const num = (v) => ({ v, s: TN });
+    const f = (x) => ({ f: x, s: TN });
+    const txt = (v) => ({ v, s: T });
+
+    // ① 총괄표
+    const t1 = [[{ v: `${title} — 연구개발비 총괄표`, s: B }], ['단위: 천원'], [],
+      head('연차', '기관명', '역할', '정부지원연구개발비', '기관부담 현금', '기관부담 현물', '합계', '정부지원 비율(%)')];
+    const subRows = [];
+    for (let y = 0; y < p.years; y++) {
+      const first = t1.length + 1;
+      P.insts.forEach((it) => {
+        const n = t1.length + 1, s = it.years[y].sum;
+        t1.push([txt(yl(y)), txt(it.name), txt(ROLES[it.role]), num(s.gov), num(s.orgCash), num(s.inkind), f(`SUM(D${n}:F${n})`), f(`IF(G${n}=0,0,ROUND(D${n}/G${n}*100,1))`)]);
+      });
+      const last = t1.length, n = last + 1;
+      t1.push([{ v: `${yl(y)} 소계`, s: H }, txt(''), txt(''), f(`SUM(D${first}:D${last})`), f(`SUM(E${first}:E${last})`), f(`SUM(F${first}:F${last})`), f(`SUM(G${first}:G${last})`), f(`IF(G${n}=0,0,ROUND(D${n}/G${n}*100,1))`)]);
+      subRows.push(n);
+    }
+    const gt = t1.length + 1;
+    const sumOf = (c) => subRows.map((r) => `${c}${r}`).join('+');
+    t1.push([{ v: '총 합계', s: H }, txt(''), txt(''), f(sumOf('D')), f(sumOf('E')), f(sumOf('F')), f(sumOf('G')), f(`IF(G${gt}=0,0,ROUND(D${gt}/G${gt}*100,1))`)]);
+    t1.push([], ['※ 기관부담 현금 = 현금 편성액 − 정부지원연구개발비. 사업별 공고문·운영요령이 우선합니다.']);
+    const sheets = [{ name: sheetName('총괄표', used), rows: t1, widths: [12, 26, 18, 18, 15, 15, 16, 14] }];
+
+    // ② 기관별 비목 사용계획
+    P.insts.forEach((it, i) => {
+      const rows = [[{ v: `${title} — ${it.name}(${ROLES[it.role]}) 연구개발비 사용계획`, s: B }], [`단위: 천원 · 적용 기준: ${it.rules.label}`], []];
+      const blocks = [];
+      const block = (label, getRows) => {
+        rows.push([{ v: label, s: B }]);
+        rows.push(head('구분', '비목', '정부지원연구개발비', '기관부담 현금', '기관부담 현물', '합계'));
+        const start = rows.length + 1;
+        const list = getRows();
+        const directRows = [];
+        let indirectRow = 0;
+        list.forEach((x) => {
+          const n = rows.length + 1;
+          if (x.key === 'indirect') {
+            const ds = rows.length + 1;
+            rows.push([txt('직접비'), { v: '소계', s: H }, f(`SUM(C${start}:C${ds - 1})`), f(`SUM(D${start}:D${ds - 1})`), f(`SUM(E${start}:E${ds - 1})`), f(`SUM(F${start}:F${ds - 1})`)]);
+            indirectRow = rows.length + 1;
+            rows.push([txt('간접비'), txt('간접비'), x.cGov, x.cOrg, x.cInk, f(`SUM(C${indirectRow}:E${indirectRow})`)]);
+            blocks.push({ ds, indirectRow });
+            return;
+          }
+          rows.push([txt('직접비'), txt(x.label), x.cGov, x.cOrg, x.cInk, f(`SUM(C${n}:E${n})`)]);
+          directRows.push(n);
+        });
+        const { ds } = blocks[blocks.length - 1];
+        const tn = rows.length + 1;
+        rows.push([{ v: '합계', s: H }, txt(''), f(`C${ds}+C${indirectRow}`), f(`D${ds}+D${indirectRow}`), f(`E${ds}+E${indirectRow}`), f(`F${ds}+F${indirectRow}`)]);
+        rows.push([]);
+        return { start, tn, count: list.length };
+      };
+      const yearBlocks = [];
+      for (let y = 0; y < p.years; y++) {
+        const r = it.years[y];
+        const split = splitCash(r);
+        yearBlocks.push(block(`■ ${yl(y)}  (정부지원 ${r.funding.gov.toLocaleString('ko-KR')}천원)`, () => split.map((x) => ({ key: x.key, label: x.label, cGov: num(x.gov), cOrg: num(x.orgCash), cInk: num(x.inkind) }))));
+      }
+      if (p.years > 1) {
+        const labels = it.years[0].rows.map((x) => ({ key: x.key, label: x.label }));
+        // 전체 연차 합계: 각 연차 블록의 같은 행(비목 순서 동일)을 더함. 소계 행이 끼어 있어 간접비는 +1 오프셋
+        block('■ 전체 연차 합계', () => labels.map((x, k) => {
+          const off = x.key === 'indirect' ? k + 1 : k;
+          const ref = (c) => ({ f: yearBlocks.map((b) => `${c}${b.start + off}`).join('+'), s: TN });
+          return { key: x.key, label: x.label, cGov: ref('C'), cOrg: ref('D'), cInk: ref('E') };
+        }));
+      }
+      rows.push(['※ 현금 편성액을 정부지원·기관부담 현금으로 비례 배분한 값입니다. 계획서 작성 시 비목별로 조정하세요(합계는 유지).']);
+      sheets.push({ name: sheetName(`${i + 1}.${it.name}`, used), rows, widths: [10, 20, 18, 15, 15, 16] });
+    });
+
+    // ③ 인건비 명세
+    const t3 = [[{ v: `${title} — 참여연구원 인건비 명세`, s: B }], ['단위: 천원 · 인건비 = 연봉 ÷ 12 × 참여개월 × 참여율'], [],
+      head('기관명', '연차', '성명', '연봉', '참여개월', '참여율(%)', '다른 과제 참여율(%)', '구분', '인건비')];
+    const pStart = t3.length + 1;
+    p.insts.forEach((inst) => inst.data.slice(0, p.years).forEach((d, y) => d.people.filter((x) => x.name || int(x.salary)).forEach((x) => {
+      const n = t3.length + 1;
+      t3.push([txt(inst.name), txt(yl(y)), txt(x.name || ''), num(int(x.salary)), { v: Math.min(int(x.months), 12), s: T }, { v: pct(x.rate), s: T }, { v: pct(x.otherRate), s: T }, txt(RB_KIND_LABEL(x)), f(`ROUND(D${n}/12*E${n}*F${n}/100,0)`)]);
+    })));
+    if (t3.length >= pStart) t3.push([{ v: '합계', s: H }, txt(''), txt(''), txt(''), txt(''), txt(''), txt(''), txt(''), f(`SUM(I${pStart}:I${t3.length})`)]);
+    sheets.push({ name: sheetName('인건비 명세', used), rows: t3, widths: [24, 10, 12, 12, 10, 10, 18, 22, 12] });
+
+    // ④ 적용 기준
+    const t4 = [[{ v: '적용 기준·근거', s: B }], [], head('기관명', '기관 유형', '정부지원 상한(%)', '기관부담 현금(%)', '간접비율(%)', '근거')];
+    P.insts.forEach((it) => {
+      const r = it.rules;
+      t4.push([txt(it.name), txt(r.label), { v: r.govMaxPct, s: T }, { v: r.cashMinPct, s: T }, { v: r.indirectPct, s: T }, txt(`${r.basis.gov} / ${r.basis.cash} / ${r.basis.indirect}`)]);
+    });
+    t4.push([], ['공통 한도', '연구수당: 수정인건비의 20% 이내(사용 기준 제26조①) · 위탁연구개발비: (직접비 − 위탁)의 40% 이하(제27조①) · 영리기관 총 참여율 100% 이하(제65조⑦)'],
+      ['근거 법령', `${SOURCES.decreeT1} / ${SOURCES.std}`], ['기준일', BASIS_DATE],
+      [], ['※ 참고용 계산입니다. 사업별 공고문·운영요령·협약이 우선합니다.']);
+    sheets.push({ name: sheetName('적용 기준', used), rows: t4, widths: [24, 30, 16, 16, 12, 90] });
+    return workbook(sheets);
+  }
+
+  const RB = { MAX_YEARS, MAX_INSTS, ROLES, blankYear, newInst, normalizeProject, sheetState, calcProject, splitCash, EXAMPLES, BASIS_DATE, SOURCES, RULESETS, LIMITS, ITEMS, PERSON_KINDS, DEFAULT_RULES, int, pct, effectiveRules, calcFunding, personCost, calcBudget, buildXlsx, crc32 };
   if (typeof module !== 'undefined' && module.exports) module.exports = RB;
   else root.RB = RB;
 })(typeof self !== 'undefined' ? self : this);

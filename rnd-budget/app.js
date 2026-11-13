@@ -1,4 +1,5 @@
 // 화면 처리. 계산은 logic.js(RB), 설정은 config.js(RB_CONFIG)
+// 상태: 과제(project v2) = 연차 수 × 기관 목록. 화면 1~4단계는 '편집 중' 기관·연차 1개를 편집.
 (function () {
   'use strict';
   const RB = window.RB, CFG = window.RB_CONFIG || {};
@@ -18,45 +19,115 @@
     return e;
   };
   const groupDigits = (v) => { const n = RB.int(v); return n ? fmt(n) : String(v ?? '').replace(/[^\d]/g, ''); };
+  const yl = (y) => `${y + 1}차년도`;
 
-  const blank = () => ({
-    ruleset: 'sme', title: '', gov: '', govMaxPct: '', cashMinPct: '', indirectPct: '', allowanceMaxPct: '',
-    people: [{ name: '', salary: '', months: 12, rate: '', otherRate: '', kind: 'existing' }],
-    items: {},
-  });
-  // 이전 버전 저장값(orgType) 호환
-  const loaded = store.get('rb.current', {});
-  if (loaded.orgType && !loaded.ruleset) loaded.ruleset = { sme: 'sme', mid: 'midL', large: 'large', custom: 'custom' }[loaded.orgType] || 'sme';
-  let S = Object.assign(blank(), loaded);
-  if (!RB.RULESETS[S.ruleset]) S.ruleset = 'sme';
-  const save = () => store.set('rb.current', S);
+  let S = RB.normalizeProject(store.get('rb.current', {}));
+  let C = Object.assign({ i: 0, y: 0 }, store.get('rb.cur', {}));
+  const clampCur = () => { C.i = Math.min(Math.max(0, C.i | 0), S.insts.length - 1); C.y = Math.min(Math.max(0, C.y | 0), S.years - 1); };
+  clampCur();
+  const I = () => S.insts[C.i];
+  const Y = () => I().data[C.y];
+  const save = () => { store.set('rb.current', S); store.set('rb.cur', C); };
+  const replaceProject = (p) => { S = RB.normalizeProject(p); C = { i: 0, y: 0 }; save(); location.reload(); };
 
   $('basisLine').textContent = `적용 법령: ${RB.SOURCES.decreeT1} · ${RB.SOURCES.std} — 기준일 ${RB.BASIS_DATE}`;
   $('foot').textContent = `본 도구는 참고용입니다. 사업별 공고문·부처 운영요령·협약이 우선하며, 최종 편성은 전문기관 기준을 확인하세요. 법령 기준일 ${RB.BASIS_DATE}.${CFG.contact ? ` 문의: ${CFG.contact}` : ''}`;
 
   // ---------- 예시(데모) ----------
+  const hasInput = () => S.insts.some((inst) => inst.data.some((d) => RB.int(d.gov) || d.people.some((p) => p.name || p.salary) || Object.values(d.items).some((v) => v && (v.cash || v.inkind))));
+  const isExample = () => String(S.title || '').startsWith('[예시]');
   document.querySelectorAll('[data-example]').forEach((b) => b.addEventListener('click', () => {
     const ex = RB.EXAMPLES[b.dataset.example];
-    const hasInput = RB.int(S.gov) || S.people.some((p) => p.name || p.salary) || Object.values(S.items).some((v) => v && (v.cash || v.inkind));
-    if (hasInput && !String(S.title || '').startsWith('[예시]') && !confirm(`'${ex.label}'으로 바꿀까요? 지금 입력한 내용은 지워집니다. (필요하면 먼저 '현재 안 저장')`)) return;
-    S = Object.assign(blank(), JSON.parse(JSON.stringify(ex.state))); save(); location.reload();
+    if (hasInput() && !isExample() && !confirm(`'${ex.label}'으로 바꿀까요? 지금 입력한 내용은 지워집니다. (필요하면 먼저 '현재 안 저장')`)) return;
+    replaceProject(ex.state);
   }));
-  if (String(S.title || '').startsWith('[예시]')) {
+  if (isExample()) {
     const n = $('demoNote');
     n.hidden = false;
-    n.append('예시 데이터로 체험 중입니다. 값을 바꿔 보며 점검 결과를 확인하고, 실제 작성은 ', el('button', { type: 'button', class: 'linkbtn', text: '새로 작성', onclick: () => { S = blank(); save(); location.reload(); } }), '을 누르세요.');
+    n.append('예시 데이터로 체험 중입니다. 값을 바꿔 보며 점검 결과를 확인하고, 실제 작성은 ', el('button', { type: 'button', class: 'linkbtn', text: '새로 작성', onclick: () => replaceProject({}) }), '을 누르세요.');
   }
+
+  // ---------- 0. 과제 구성 ----------
+  const titleIn = $('title');
+  titleIn.value = S.title;
+  titleIn.addEventListener('input', () => { S.title = titleIn.value; save(); });
+  const yearsSel = $('years');
+  for (let n = 1; n <= RB.MAX_YEARS; n++) yearsSel.append(el('option', { value: n, text: `${n}년(${n}개 연차)` }));
+  yearsSel.value = S.years;
+  yearsSel.addEventListener('change', () => {
+    S.years = Number(yearsSel.value);
+    S = RB.normalizeProject(S); clampCur(); renderAll();
+  });
+  const instBody = $('insts').querySelector('tbody');
+  const rulesetOptions = (selected) => [['기업(영리기관)', ['sme', 'midS', 'midL', 'large']], ['비영리기관', ['univ', 'nonprofit']], ['기타', ['custom']]]
+    .map(([g, keys]) => el('optgroup', { label: g }, ...keys.map((k) => el('option', { value: k, text: RB.RULESETS[k].label, selected: k === selected }))));
+  function renderInsts() {
+    instBody.replaceChildren();
+    S.insts.forEach((inst, i) => {
+      instBody.append(el('tr', {},
+        el('td', { 'data-label': '기관명' }, el('input', { value: inst.name, maxlength: 40, 'aria-label': `기관 ${i + 1} 이름`, oninput: (e) => { inst.name = e.target.value; renderTabs(); updateSummary(); save(); } })),
+        el('td', { 'data-label': '역할' }, el('select', { 'aria-label': `기관 ${i + 1} 역할`, onchange: (e) => { inst.role = e.target.value; renderTabs(); updateSummary(); save(); } },
+          ...Object.entries(RB.ROLES).map(([k, v]) => el('option', { value: k, text: v.replace('연구개발', ''), selected: inst.role === k })))),
+        el('td', { 'data-label': '기관 유형' }, el('select', { 'aria-label': `기관 ${i + 1} 유형`, onchange: (e) => setRuleset(i, e.target.value) }, ...rulesetOptions(inst.ruleset))),
+        el('td', { class: 'del' }, S.insts.length > 1 ? el('button', { type: 'button', class: 'icon', 'aria-label': `${inst.name} 삭제`, text: '✕', onclick: () => {
+          if (!confirm(`'${inst.name}'과 이 기관의 모든 연차 편성을 삭제할까요?`)) return;
+          S.insts.splice(i, 1); clampCur(); renderAll();
+        } }) : ''),
+      ));
+    });
+    $('addInst').disabled = S.insts.length >= RB.MAX_INSTS;
+  }
+  $('addInst').addEventListener('click', () => {
+    if (S.insts.length >= RB.MAX_INSTS) return;
+    S.insts.push(RB.newInst('joint', S.insts.filter((x) => x.role === 'joint').length + 1));
+    S = RB.normalizeProject(S);
+    C.i = S.insts.length - 1; C.y = 0;
+    renderAll();
+    instBody.lastElementChild.querySelector('input').select();
+  });
+
+  // ---------- 편집 중 탭 ----------
+  function renderTabs(P) {
+    P = P || RB.calcProject(S);
+    const chip = (label, on, errs, onclick, aria) => el('button', { type: 'button', class: `chip${on ? ' on' : ''}${errs ? ' bad' : ''}`, 'aria-pressed': on ? 'true' : 'false', 'aria-label': aria, onclick }, label, errs ? el('span', { class: 'cnt', text: `✖${errs}` }) : '');
+    $('instTabs').replaceChildren(...P.insts.map((it, i) => {
+      const errs = it.years.reduce((a, r) => a + r.errors, 0);
+      return chip(`${it.role === 'lead' ? '주관 · ' : ''}${it.name}`, i === C.i, errs, () => go(i, C.y), `${it.name} 편집${errs ? `, 오류 ${errs}건` : ''}`);
+    }));
+    $('yearTabs').replaceChildren(...Array.from({ length: S.years }, (_, y) => {
+      const errs = P.insts[C.i].years[y].errors;
+      return chip(yl(y), y === C.y, errs, () => go(C.i, y), `${yl(y)} 편집${errs ? `, 오류 ${errs}건` : ''}`);
+    }));
+    $('copyPrev').hidden = C.y === 0;
+    $('editBar').hidden = S.insts.length === 1 && S.years === 1;
+    $('curLabel').textContent = S.insts.length === 1 && S.years === 1 ? '' : `— ${I().name} · ${yl(C.y)}`;
+  }
+  function go(i, y) { C.i = i; C.y = y; clampCur(); renderAll(); }
+  $('copyPrev').addEventListener('click', () => {
+    if (C.y === 0) return;
+    if (!confirm(`${yl(C.y - 1)}의 정부출연금·인건비·비목을 ${yl(C.y)}에 복사할까요? 현재 ${yl(C.y)} 입력은 바뀝니다.`)) return;
+    I().data[C.y] = JSON.parse(JSON.stringify(I().data[C.y - 1]));
+    renderAll();
+  });
 
   // ---------- 1. 기관 유형·적용 기준 ----------
   const sel = $('ruleset');
-  const groups = [['기업(영리기관)', ['sme', 'midS', 'midL', 'large']], ['비영리기관', ['univ', 'nonprofit']], ['기타', ['custom']]];
-  for (const [g, keys] of groups) sel.append(el('optgroup', { label: g }, ...keys.map((k) => el('option', { value: k, text: RB.RULESETS[k].label }))));
-  sel.value = S.ruleset;
   const RULE_INPUTS = ['govMaxPct', 'cashMinPct', 'indirectPct', 'allowanceMaxPct'];
-
+  function setRuleset(i, value) {
+    const inst = S.insts[i];
+    const prevKey = inst.ruleset;
+    inst.ruleset = value;
+    if (RB.RULESETS[value].custom) { // 직접 입력 시작값 = 직전 법령 기준
+      const eff = RB.effectiveRules({ ...inst, ruleset: prevKey });
+      inst.govMaxPct = eff.govMaxPct; inst.cashMinPct = eff.cashMinPct; inst.indirectPct = eff.indirectPct; inst.allowanceMaxPct = eff.allowancePct;
+    } else inst.indirectPct = '';
+    renderAll();
+  }
   function syncRuleInputs() {
-    const rs = RB.RULESETS[S.ruleset];
-    const eff = RB.effectiveRules(S);
+    sel.replaceChildren(...rulesetOptions(I().ruleset));
+    sel.value = I().ruleset;
+    const rs = RB.RULESETS[I().ruleset];
+    const eff = RB.effectiveRules(I());
     const custom = !!rs.custom;
     for (const id of RULE_INPUTS) {
       const i = $(id);
@@ -73,33 +144,21 @@
     $('ruleHint').textContent = custom
       ? '공고문·운영요령에 적힌 비율을 입력하세요. 법령 기준과 다를 수 있으므로 공고문 해당 조항을 확인하세요.'
       : rs.profit
-        ? `🔒 표시 값은 법령 기준으로 고정됩니다. 간접비율은 기관 간접비 고시비율 범위(최대 ${rs.indirectMax}%) 안에서 낮출 수 있습니다.`
+        ? `🔒 표시 값은 법령 기준으로 고정됩니다. 간접비율은 기관 간접비 고시비율 범위(최대 ${rs.indirectMax}%) 안에서 낮출 수 있습니다. 기관 유형은 모든 연차에 같이 적용됩니다.`
         : '🔒 비영리기관은 기관부담 의무가 없습니다. 간접비율은 기관 고시비율이 있으면 그 값으로 바꾸세요.';
   }
-  sel.addEventListener('change', () => {
-    const prevKey = S.ruleset;
-    S.ruleset = sel.value;
-    if (RB.RULESETS[S.ruleset].custom) { // 직접 입력 시작값 = 직전 법령 기준
-      const eff = RB.effectiveRules({ ...S, ruleset: prevKey });
-      S.govMaxPct = eff.govMaxPct; S.cashMinPct = eff.cashMinPct; S.indirectPct = eff.indirectPct; S.allowanceMaxPct = eff.allowancePct;
-    } else S.indirectPct = '';
-    syncRuleInputs(); renderItems(); update();
-  });
-  for (const id of RULE_INPUTS) $(id).addEventListener('input', (e) => { if (!e.target.readOnly) { S[id] = e.target.value; update(); } });
+  sel.addEventListener('change', () => setRuleset(C.i, sel.value));
+  for (const id of RULE_INPUTS) $(id).addEventListener('input', (e) => { if (!e.target.readOnly) { I()[id] = e.target.value; update(); } });
   $('indirectPct').addEventListener('blur', syncRuleInputs); // 상한 초과 입력 시 상한값으로 표시
-
-  const bind = (id, key, digits) => {
-    const i = $(id);
-    i.value = digits ? groupDigits(S[key]) : S[key] ?? '';
-    i.addEventListener('input', () => { S[key] = i.value; if (digits) i.value = groupDigits(i.value); update(); });
-  };
-  bind('title', 'title'); bind('gov', 'gov', true);
+  const govIn = $('gov');
+  govIn.addEventListener('input', () => { Y().gov = govIn.value; govIn.value = groupDigits(govIn.value); update(); });
 
   // ---------- 2. 참여연구원 ----------
   const pBody = $('people').querySelector('tbody');
   function renderPeople() {
     pBody.replaceChildren();
-    S.people.forEach((p, idx) => {
+    const people = Y().people;
+    people.forEach((p, idx) => {
       p.kind ||= p.inkind ? 'existing' : 'new';
       const n = idx + 1;
       const inp = (key, label, mode = 'numeric', max = 12) => el('input', { value: key === 'salary' ? groupDigits(p[key]) : p[key] ?? '', 'aria-label': `연구원 ${n} ${label}`, inputmode: mode, maxlength: max,
@@ -114,13 +173,14 @@
         el('td', { 'data-label': '다른 과제 참여율(%)' }, inp('otherRate', '다른 과제 참여율')),
         el('td', { 'data-label': '구분' }, kind),
         el('td', { 'data-cost': idx, 'data-label': '인건비(천원)' }),
-        el('td', { class: 'del' }, el('button', { type: 'button', class: 'icon', 'aria-label': `연구원 ${n} 삭제`, text: '✕', onclick: () => { S.people.splice(idx, 1); renderPeople(); update(); } })),
+        el('td', { class: 'del' }, el('button', { type: 'button', class: 'icon', 'aria-label': `연구원 ${n} 삭제`, text: '✕', onclick: () => { people.splice(idx, 1); renderPeople(); update(); } })),
       ));
     });
   }
   $('addPerson').addEventListener('click', () => {
-    if (S.people.length >= 50) return;
-    S.people.push({ name: '', salary: '', months: 12, rate: '', otherRate: '', kind: 'existing' });
+    const people = Y().people;
+    if (people.length >= 50) return;
+    people.push({ name: '', salary: '', months: 12, rate: '', otherRate: '', kind: RB.effectiveRules(I()).profit ? 'existing' : 'new' });
     renderPeople(); update();
     pBody.lastElementChild.querySelector('input').focus();
   });
@@ -130,9 +190,10 @@
   let cells = {};
   function renderItems() {
     iBody.replaceChildren(); cells = {};
-    const profit = RB.effectiveRules(S).profit;
+    const profit = RB.effectiveRules(I()).profit;
+    const items = Y().items;
     for (const it of [...RB.ITEMS.filter((x) => !(x.nonprofitOnly && profit)), { key: 'indirect', label: '간접비' }]) {
-      const v = (S.items[it.key] ||= {});
+      const v = (items[it.key] ||= {});
       const auto = it.key === 'personnel' || it.key === 'indirect';
       const num = (side) => {
         if (auto || (side === 'inkind' && !it.inkind)) return el('td', { 'data-cell': `${it.key}.${side}`, class: side === 'inkind' && !it.inkind && !auto ? 'na' : '' });
@@ -148,7 +209,7 @@
 
   // ---------- 계산·표시 ----------
   function update() {
-    const r = RB.calcBudget(S);
+    const r = RB.calcBudget(RB.sheetState(S, C.i, C.y));
     const f = r.funding;
     const kp = [['최소 총사업비', f.total], ['기관부담금(최소)', f.org]];
     if (r.rules.cashMinPct) kp.push(['그중 현금(최소)', f.cashMin], ['현물 가능(최대)', f.inkindMax]);
@@ -168,18 +229,46 @@
       remain.className = 'remain ' + (lack > 0 ? 'todo' : 'done');
     } else remain.textContent = '';
     $('checks').replaceChildren(...r.checks.map((c) => el('li', { class: c.level }, el('span', { text: c.msg }), c.basis ? el('small', { class: 'cite', text: c.basis }) : '')));
+    updateSummary();
     save();
     return r;
   }
 
-  // ---------- 5. 엑셀·저장 ----------
+  // ---------- 5. 총괄표 ----------
+  function updateSummary() {
+    const P = RB.calcProject(S);
+    renderTabs(P);
+    const multi = S.years > 1;
+    const head = el('tr', {}, el('th', { text: '기관' }), ...Array.from({ length: S.years }, (_, y) => el('th', { text: yl(y) })), ...(multi ? [el('th', { text: '합계' })] : []));
+    const cell = (s, errs, onclick, label) => el('td', {}, el('button', { type: 'button', class: `sumcell${errs ? ' bad' : ''}`, onclick, 'aria-label': label },
+      el('strong', { text: fmt(s.total) }), el('small', { text: `정부 ${fmt(s.gov)} · 현금 ${fmt(s.orgCash)} · 현물 ${fmt(s.inkind)}` }), errs ? el('span', { class: 'cnt', text: `✖ 오류 ${errs}` }) : ''));
+    const plain = (s, strong) => el('td', {}, el(strong ? 'strong' : 'span', { text: fmt(s.total) }), el('small', { text: `정부 ${fmt(s.gov)}${s.total ? ` (${((s.gov / s.total) * 100).toFixed(1)}%)` : ''}` }));
+    const rows = P.insts.map((it, i) => el('tr', {},
+      el('th', { scope: 'row', text: `${it.role === 'lead' ? '주관 · ' : ''}${it.name}` }),
+      ...it.years.map((r, y) => cell(r.sum, r.errors, () => { go(i, y); $('s1').scrollIntoView({ behavior: 'smooth' }); }, `${it.name} ${yl(y)} 편집`)),
+      ...(multi ? [plain(it.total)] : [])));
+    const foot = el('tr', { class: 'total' }, el('th', { scope: 'row', text: '합계' }), ...P.yearTotals.map((t) => plain(t, true)), ...(multi ? [plain(P.total, true)] : []));
+    $('summary').replaceChildren(el('caption', { text: '단위: 천원 · 칸을 누르면 해당 기관·연차 편집' }), el('thead', {}, head), el('tbody', {}, ...rows), el('tfoot', {}, foot));
+    $('projChecks').replaceChildren(...P.checks.map((c) => el('li', { class: c.level }, el('span', { text: c.msg }))));
+  }
+
+  function renderAll() {
+    clampCur();
+    renderInsts();
+    yearsSel.value = S.years;
+    syncRuleInputs();
+    govIn.value = groupDigits(Y().gov);
+    renderPeople(); renderItems(); update();
+  }
+
+  // ---------- 엑셀·저장 ----------
   $('print').addEventListener('click', () => window.print());
   $('reset').addEventListener('click', () => {
     if (!confirm('입력한 내용을 모두 지우고 새로 작성할까요? (저장한 안은 유지)')) return;
-    S = blank(); save(); location.reload();
+    replaceProject({});
   });
   $('xlsx').addEventListener('click', () => {
-    const bytes = RB.buildXlsx(S, S.title ? `${S.title} 사업비 편성표` : 'R&D 사업비 편성표');
+    const bytes = RB.buildXlsx(S);
     const url = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
     const a = el('a', { href: url, download: `${(S.title || '사업비편성표').replace(/[\\/:*?"<>|]/g, '_')}_${today()}.xlsx` });
     document.body.append(a); a.click(); a.remove();
@@ -189,11 +278,11 @@
   function renderScenarios() {
     const list = store.get('rb.scenarios', []);
     $('scenarios').replaceChildren(...list.map((sc, i) => {
-      const r = RB.calcBudget(sc.state);
+      const P = RB.calcProject(sc.state);
       return el('li', {},
-        el('span', {}, el('strong', { text: sc.name }), ' ', el('span', { class: 'meta', text: `${r.rules.label} · 정부 ${fmt(r.funding.gov)} · 총 ${fmt(r.total.total)}천원 · ${sc.savedAt}` })),
+        el('span', {}, el('strong', { text: sc.name }), ' ', el('span', { class: 'meta', text: `기관 ${P.insts.length} · ${P.project.years}개 연차 · 정부 ${fmt(P.total.gov)} · 총 ${fmt(P.total.total)}천원 · ${sc.savedAt}` })),
         el('span', {},
-          el('button', { type: 'button', class: 'btn ghost', text: '불러오기', onclick: () => { if (confirm(`'${sc.name}'을 불러올까요? 현재 입력은 바뀝니다.`)) { S = Object.assign(blank(), sc.state); save(); location.reload(); } } }), ' ',
+          el('button', { type: 'button', class: 'btn ghost', text: '불러오기', onclick: () => { if (confirm(`'${sc.name}'을 불러올까요? 현재 입력은 바뀝니다.`)) replaceProject(sc.state); } }), ' ',
           el('button', { type: 'button', class: 'icon', 'aria-label': `${sc.name} 삭제`, text: '✕', onclick: () => { list.splice(i, 1); store.set('rb.scenarios', list); renderScenarios(); } })));
     }));
   }
@@ -223,5 +312,5 @@
     document.head.append(s);
   }
 
-  syncRuleInputs(); renderPeople(); renderItems(); renderScenarios(); update();
+  renderAll(); renderScenarios();
 })();
