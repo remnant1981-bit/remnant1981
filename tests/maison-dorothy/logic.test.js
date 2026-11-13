@@ -86,3 +86,14 @@ test('orderNo·orderText: 형식, 가격 문의 표기, 빈 컬러 생략', () =
   assert.match(txt, /주소: 내포/);
   assert.doesNotMatch(txt, /메모/);
 });
+
+test('changeQty: 증가·감소·0이면 삭제·최대 9', () => {
+  let c = L.addLine([], A, '블랙', '프리');
+  c = L.changeQty(c, 0, 1);
+  assert.equal(c[0].q, 2);
+  c = L.changeQty(c, 0, 20);
+  assert.equal(c[0].q, 9);
+  c = L.changeQty(c, 0, -9);
+  assert.equal(c.length, 0);
+  assert.deepEqual(L.changeQty([], 3, 1), []);
+});

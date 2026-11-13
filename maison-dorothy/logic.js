@@ -26,6 +26,16 @@
     return next;
   }
 
+  // 수량 조절: delta 만큼 더하고 0 이하면 줄 삭제
+  function changeQty(cart, i, delta) {
+    const next = cart.map(x => ({ ...x }));
+    if (!next[i]) return next;
+    next[i].q += delta;
+    if (next[i].q <= 0) next.splice(i, 1);
+    else if (next[i].q > 9) next[i].q = 9;
+    return next;
+  }
+
   // 가격 문의 상품이 섞이면 택배비·입금액은 null(확인 후 안내). 픽업은 언제나 택배비 0
   function totals(cart, shipping, pickup) {
     const count = cart.reduce((s, x) => s + x.q, 0);
@@ -87,7 +97,7 @@
     ].join('\n');
   }
 
-  const api = { won, hasPrice, priceLabel, lineKey, addLine, removeOne, totals, sizeOptions, fitLabel, fitsSize, isPhone, validate, orderNo, orderText };
+  const api = { won, hasPrice, priceLabel, lineKey, addLine, removeOne, changeQty, totals, sizeOptions, fitLabel, fitsSize, isPhone, validate, orderNo, orderText };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.DLogic = api;
 })(typeof self !== 'undefined' ? self : this);

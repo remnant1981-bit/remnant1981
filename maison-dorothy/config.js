@@ -32,6 +32,16 @@ window.DOROTHY = {
     photoAlt: '내포모터페스티벌 프리마켓에 나온 메종도로시 부스'
   },
 
+  /* 이번 주 사장님 픽 (상품 id) */
+  pick: 'p06',
+
+  /* 함께 입는 코디 — 사진 한 장에 같이 입은 옷들 */
+  looks: [
+    { title: '주말 커피 코디', img: 'check-shirt-denim.jpg', items: ['p01', 'p02'], note: '울 체크남방에 소세지 청바지, 소매 한 번 접고 스니커즈' },
+    { title: '원피스에 조끼 한 장', img: 'dress-quilted-vest.jpg', items: ['p04', 'p05'], note: '올리브 원피스 위에 네이비 퀼팅 조끼, 가방과 부츠는 브라운' },
+    { title: '꽃무늬 나들이룩', img: 'flower-fleece-jacket.jpg', items: ['p08'], note: '꽃 양털 자켓에 크림색 바지, 빈티지한 나들이룩' }
+  ],
+
   shipping: { fee: 3500, freeOver: 70000 },
 
   /* 주문 접수 주소: 구글 Apps Script 웹앱 URL (order-apps-script.gs 안내 참고).
@@ -50,12 +60,12 @@ window.DOROTHY = {
       desc: '스판력이 좋아 앉았다 일어날 때도 편하고, 안쪽은 포근한 기모라 한겨울까지 입어요. 은은한 워싱에 밑단까지 자연스럽게 퍼지는 라인.',
       tip: '매장에서 입어보고 앉아도 보세요. 편안함은 그때 바로 느껴지실 거예요.',
       post: 'https://www.instagram.com/p/Dfoa23gRqvn/' },
-    { id: 'p01', cat: '상의', name: '울 체크남방', price: null, badge: 'NEW', img: 'check-shirt-denim.jpg',
+    { id: 'p01', cat: '상의', name: '울 체크남방', price: null, badge: 'NEW', img: 'check-shirt.jpg', gallery: ['check-shirt-denim.jpg'],
       colors: [], pair: ['p02'],
       desc: '보송한 울 체크남방. 차분한 브라운 체크에 짙은 데님을 더하면 편하게 입어도 멋이 나요.',
       tip: '저라면 소매를 한 번 접고 스니커즈를 신을래요. 주말에 커피 한잔하러 나갈 때 딱 좋은 코디예요.',
       post: 'https://www.instagram.com/p/DfrSS26RkXT/' },
-    { id: 'p02', cat: '하의', name: '소세지 청바지', price: null, badge: 'NEW', img: 'check-shirt-denim.jpg',
+    { id: 'p02', cat: '하의', name: '소세지 청바지', price: null, badge: 'NEW', img: 'sausage-denim.jpg', gallery: ['check-shirt-denim.jpg'],
       colors: [], pair: ['p01'],
       desc: '밑단이 동글하게 모이는 소세지 핏. 체크남방이나 니트와 귀엽게 어울려요.',
       tip: '청바지 핏이 궁금하시면 매장에서 편하게 입어보세요.',
