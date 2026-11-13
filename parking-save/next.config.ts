@@ -25,6 +25,8 @@ const config: NextConfig = {
     return [
       { source: "/:path*", headers: securityHeaders },
       // 서비스 워커는 항상 최신본을 받도록(배포 후 옛 워커가 남지 않게)
+      // 아이콘은 파일명이 고정이라 하루만 캐시(교체 시 최대 하루 뒤 반영)
+      { source: "/icons/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=86400" }] },
       { source: "/sw.js", headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }, { key: "Service-Worker-Allowed", value: "/" }] },
     ];
   },
