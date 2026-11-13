@@ -54,7 +54,7 @@ const ko = {
     source: (at: string | null) => `주차장 정보: 공공데이터포털 전국주차장정보표준데이터${at ? ` (${at} 수집)` : ""}. 요금은 예상 금액이며 현장 안내가 우선합니다.`,
   },
   form: {
-    aria: "주차장 검색", where: "어디에 주차할까요?", destination: "목적지", placeholder: (p: string | null) => (p ? `예: ${p}` : "목적지 검색 준비 중 — 아래 '현재 위치 사용'을 눌러 주세요"),
+    aria: "주차장 검색", where: "어디에 주차할까요?", destination: "목적지", placeholder: (p: string | null) => (p ? `예: ${p}` : "동·도로명·주차장 이름 (예: 역삼동, 세종대로)"), destHint: "주차장 이름·주소에 있는 말로 찾습니다(건물·상호 이름은 찾지 못할 수 있음).",
     useLocation: "현재 위치 사용", geoUnsupported: "이 브라우저는 위치 조회를 지원하지 않습니다. 목적지를 직접 입력하세요.", geoLoading: "위치 확인 중…", geoOk: "현재 위치를 사용합니다.",
     geoDenied: "위치 권한이 거부되었습니다. 목적지를 직접 입력해 검색하세요.", geoFail: "위치를 가져오지 못했습니다. 목적지를 직접 입력하세요.",
     when: "주차 시간 (한국 시간)", start: "시작 일시", end: "종료 일시", quickAria: "빠른 주차 시간 선택",
@@ -77,6 +77,9 @@ const ko = {
       `${c.candidates > c.returned ? `후보 ${c.candidates}곳 중 ` : ""}${c.returned}곳 · 요금 계산 가능 ${c.feeCalculable}곳 · 요금 정보 없음/계산 불가 ${c.feeUnknown}곳 · 실시간 잔여면수 ${c.withValidRealtime}곳`,
     viewNav: "결과 보기 방식", list: "목록", map: "지도", shareTitle: (label: string) => `${label} 주변 주차장 요금 비교`,
     distNote: "거리는 직선거리이며 실제 이동 거리와 다릅니다.", valueNote: (w: string) => ` 가성비 순: 걸어가는 거리 100m를 ${w}으로 환산해 예상 요금에 더한 순서이며, 요금 계산 불가 시설은 뒤로 보냅니다.`,
+    walk: (m: number) => `도보 약 ${m}분 추정`, picksTitle: "한눈에 보기", pickCheapest: "최저 요금", pickNearest: "가장 가까움", pickNearestFree: "가장 가까운 무료",
+    picksNote: "조건에 맞는 전체 후보 기준입니다. 도보 시간은 직선거리의 1.3배를 분속 67m로 걷는다고 가정한 추정이며 실제 경로와 다를 수 있습니다. 요금을 계산할 수 없는 시설은 최저 요금에서 제외합니다.",
+    placeNote: (region: string, n: number) => `목적지 위치는 이름·주소에 입력어가 들어간 주차장 ${n}곳(${region || "지역 미상"})의 중심으로 잡은 대략 위치입니다.`, placeOthers: "같은 말이 있는 다른 지역(지역명을 함께 입력하면 바뀝니다):",
     empty: "조건에 맞는 주차장이 없습니다.", emptyHint: "반경을 넓히거나 ‘무료만’·‘실시간 확인 가능만’·‘운영 중인 곳만’ 필터를 해제해 보세요.", home: "처음으로",
     more: (n: number) => `결과 더 보기 (최대 ${n}곳)`,
     warnings: {} as Record<string, string>, // 한국어는 서버 문구 그대로
@@ -213,7 +216,7 @@ const en: Dict = {
     source: (at: string | null) => `Parking data: National Parking Lot Standard Data, data.go.kr${at ? ` (collected ${at})` : ""}. Fees are estimates; on-site notices take precedence.`,
   },
   form: {
-    aria: "Search parking", where: "Where do you want to park?", destination: "Destination", placeholder: (p: string | null) => (p ? `e.g. ${p}` : "Destination search coming soon — tap ‘Use my location’ below"),
+    aria: "Search parking", where: "Where do you want to park?", destination: "Destination", placeholder: (p: string | null) => (p ? `e.g. ${p}` : "Neighbourhood, road or lot name in Korean (e.g. 역삼동)"), destHint: "Matches Korean text in parking lot names and addresses (buildings and shops may not be found).",
     useLocation: "Use my location", geoUnsupported: "This browser cannot get your location. Enter a destination instead.", geoLoading: "Getting your location…", geoOk: "Using your current location.",
     geoDenied: "Location permission was denied. Enter a destination to search.", geoFail: "Could not get your location. Enter a destination instead.",
     when: "Parking time (Korea time)", start: "Start", end: "End", quickAria: "Quick duration",
@@ -235,6 +238,9 @@ const en: Dict = {
     coverage: (c) => `${c.candidates > c.returned ? `${c.returned} of ${c.candidates} lots` : `${c.returned} lots`} · fee calculable ${c.feeCalculable} · no fee info ${c.feeUnknown} · live spaces ${c.withValidRealtime}`,
     viewNav: "Result view", list: "List", map: "Map", shareTitle: (label: string) => `Parking fees near ${label}`,
     distNote: "Distances are straight-line and differ from actual travel.", valueNote: (w: string) => ` Value order: each 100 m of walking counts as ${w} added to the estimated fee; lots without a calculable fee go last.`,
+    walk: (m: number) => `about ${m} min walk (est.)`, picksTitle: "At a glance", pickCheapest: "Lowest fee", pickNearest: "Nearest", pickNearestFree: "Nearest free",
+    picksNote: "Based on all lots matching your conditions. Walking time assumes 1.3× the straight-line distance at 67 m/min and may differ from the real route. Lots without a calculable fee are left out of the lowest fee.",
+    placeNote: (region: string, n: number) => `The destination is an approximate point: the centre of ${n} parking lot(s) whose name or address contains your text (${region || "region unknown"}).`, placeOthers: "Other areas with the same text (add the area name to switch):",
     empty: "No parking lots match your conditions.", emptyHint: "Try a larger radius or turn off ‘Free only’, ‘Live spaces only’ or ‘Open only’.", home: "Home",
     more: (n: number) => `Show more results (up to ${n})`,
     warnings: {
@@ -246,7 +252,7 @@ const en: Dict = {
     },
     errors: {
       INVALID_COORDINATES: "The location coordinates are invalid.", INVALID_DESTINATION: "The destination is too long.",
-      DESTINATION_NOT_FOUND: "Destination search is not available yet. Please search with ‘Use my location’.",
+      DESTINATION_NOT_FOUND: "No parking lot name or address contains that text. Try a neighbourhood, road or lot name in Korean, or use ‘Use my location’.",
       MISSING_CENTER: "Enter a destination or use your current location.", INVALID_RADIUS: "The search radius is out of range.",
       INVALID_PERIOD: "Enter a valid start and end, with the end after the start.", PERIOD_TOO_LONG: "The parking period is too long.",
       INVALID_SORT: "Unsupported sort order.", INVALID_TYPE: "Unsupported lot type.", INVALID_LIMIT: "Invalid result limit.",

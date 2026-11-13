@@ -15,3 +15,11 @@ export function distanceMeters(a: LatLng, b: LatLng): number {
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
+
+/** 도보 시간 추정에 쓰는 가정(임시값 — OPEN_ISSUES): 실제 보행 경로는 직선의 약 1.3배, 보행 속도 분속 67m(시속 4km) */
+export const WALK_DETOUR_FACTOR = 1.3;
+export const WALK_METERS_PER_MIN = 67;
+/** 직선거리 → 도보 시간(분) 추정. 경로 탐색이 아니므로 화면에 '추정'으로 표시한다 */
+export function walkMinutesEstimate(straightMeters: number): number {
+  return Math.max(1, Math.round((straightMeters * WALK_DETOUR_FACTOR) / WALK_METERS_PER_MIN));
+}

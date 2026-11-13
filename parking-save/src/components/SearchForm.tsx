@@ -47,8 +47,9 @@ export function SearchForm({ defaults = {}, places = PLACES, lang = "ko" }: { de
       <fieldset className="space-y-2">
         <legend className="font-semibold">{f.where}</legend>
         <label htmlFor="destination" className="block text-sm">{f.destination}</label>
-        <input id="destination" name="destination" list="places" className={field} value={dest} placeholder={f.placeholder(places[0] ?? null)}
+        <input id="destination" name="destination" list="places" aria-describedby="dest-hint" className={field} value={dest} placeholder={f.placeholder(places[0] ?? null)}
           onChange={(e) => { setDest(e.target.value); if (e.target.value) setCoords(null); }} autoComplete="off" />
+        <p id="dest-hint" className="text-xs text-gray-600">{f.destHint}</p>
         <datalist id="places">{places.map((p) => <option key={p} value={p} />)}</datalist>
         <div className="flex flex-wrap items-center gap-3">
           <button type="button" onClick={useLocation} className="rounded border border-gray-500 px-3 py-2 text-sm">{f.useLocation}</button>
