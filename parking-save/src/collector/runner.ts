@@ -6,8 +6,9 @@ import { normalizeStandardRow } from "./standard-parking";
 import { findCandidates } from "./dedupe";
 import { resolveKeyCollisions, type Candidate } from "./collisions";
 import { errText, logError, logWarn } from "../server/log";
+import { reapplyOverrides } from "../server/overrides";
 
-export interface SyncSummary { status: "SUCCESS" | "PARTIAL" | "FAILED"; keyCollisions: number; collisionSuperseded: number; collisionSplit: number; received: number; inserted: number; updated: number; unchanged: number; excluded: number; invalid: number; errors: number; duplicateCandidates: number }
+export interface SyncSummary { status: "SUCCESS" | "PARTIAL" | "FAILED"; keyCollisions: number; collisionSuperseded: number; collisionSplit: number; received: number; inserted: number; updated: number; unchanged: number; excluded: number; invalid: number; errors: number; duplicateCandidates: number; overridesReapplied: number }
 
 const stable = (row: RawRow) => JSON.stringify(Object.keys(row).sort().map((k) => [k, row[k] ?? null]));
 const sha = (x: string) => createHash("sha256").update(x).digest("hex");
@@ -19,7 +20,7 @@ const sha = (x: string) => createHash("sha256").update(x).digest("hex");
 export async function runSync(db: Db, adapter: SourceAdapter, now = new Date()): Promise<SyncSummary> {
   const startedAt = now.toISOString();
   const t0 = performance.now(); // 종료 시각 = 주입된 시작 시각 + 실제 경과(테스트에서 시계 주입 시 결정적, 운영에서는 실제 시각과 같음)
-  const sum: SyncSummary = { status: "SUCCESS", keyCollisions: 0, collisionSuperseded: 0, collisionSplit: 0, received: 0, inserted: 0, updated: 0, unchanged: 0, excluded: 0, invalid: 0, errors: 0, duplicateCandidates: 0 };
+  const sum: SyncSummary = { status: "SUCCESS", keyCollisions: 0, collisionSuperseded: 0, collisionSplit: 0, received: 0, inserted: 0, updated: 0, unchanged: 0, excluded: 0, invalid: 0, errors: 0, duplicateCandidates: 0, overridesReapplied: 0 };
   const logId = (await db.run("INSERT INTO source_sync_logs(source_name, started_at, status) VALUES (?,?, 'RUNNING')", [adapter.sourceName, startedAt])).lastId; // 동시 수집에서도 자기 로그 행을 가리킴
   const touched: number[] = [];
   let fatal: string | null = null;
@@ -98,6 +99,8 @@ export async function runSync(db: Db, adapter: SourceAdapter, now = new Date()):
       }
     }
     });
+    // 관리자 수동 보정이 걸린 시설을 원천 값으로 다시 썼다면: 새 원천 값을 스냅샷으로 남기고 보정을 다시 적용
+    sum.overridesReapplied = await reapplyOverrides(db, touched);
     // 중복 후보 탐지(자동 병합 없음)
     for (const id of touched) {
       const me = await db.get<{ id: number; name: string; road_address: string | null; latitude: number | null; longitude: number | null }>("SELECT id,name,road_address,latitude,longitude FROM parking_lots WHERE id=?", [id]);

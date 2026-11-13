@@ -132,6 +132,7 @@ export default async function LotPage({ params, searchParams }: { params: Promis
           </>
         ) : <p className="text-sm">{D.needPeriod}</p>}
         <h3 className="mt-3 text-sm font-semibold">{D.rules}</h3>
+        {d.overrides.filter((o) => o.kind === "FEE").map((o) => <p key={o.id} className="text-xs text-blue-900">{D.overridden(o.created_at.slice(0, 10))}</p>)}
         {d.lot.qualityFlags.includes("FEE_PER_UNIT_FROM_START") && <p className="text-xs text-gray-600">{D.perUnitNote}</p>}
         {d.feeRules.length === 0 ? <p className="text-sm">{D.noRules}</p> : (
           <table className="mt-1 w-full text-sm"><caption className="sr-only">{D.rules}</caption>
@@ -157,6 +158,7 @@ export default async function LotPage({ params, searchParams }: { params: Promis
       <ParkingTimerPanel lang={lang} lotId={lot.id} name={lot.name} rules={d.timer?.rules ?? null} holidays={d.timer?.holidays ?? null} schedules={d.timer?.schedules} />
 
       <section className="mt-4" aria-labelledby="op"><h2 id="op" className="font-semibold">{D.hours}</h2>
+        {d.overrides.filter((o) => o.kind === "HOURS").map((o) => <p key={o.id} className="text-xs text-blue-900">{D.overridden(o.created_at.slice(0, 10))}</p>)}
         {d.operatingSchedules.length === 0 ? <p className="text-sm">{D.noHours}</p> : (
           <ul className="text-sm">{d.operatingSchedules.map((o, i) => <li key={i}>{t.day[o.dayType]}: {o.closed ? D.closed : o.allDay ? D.h24 : `${o.openTime ?? "?"} ~ ${o.closeTime ?? "?"}`}{o.assumed && <span className="text-amber-800">{D.holidayAssumed}</span>}</li>)}</ul>)}
       </section>
