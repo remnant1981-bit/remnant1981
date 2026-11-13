@@ -123,6 +123,21 @@ th { color: var(--muted); font-weight: 500; }
 .compare { display: grid; gap: 8px; }
 .compare h2 { font-size: 16px; margin: 0; }
 .compare table th[scope="row"] { white-space: nowrap; color: var(--muted); font-weight: 600; }
+.mapview { padding: 10px; }
+.mapview svg { width: 100%; height: auto; display: block; background: var(--bg); border-radius: 8px; }
+.mapview .ring { fill: none; stroke: var(--line); stroke-dasharray: 4 4; }
+.mapview .pin { cursor: pointer; stroke: var(--surface); stroke-width: 2; }
+.mapview .pin.free { fill: var(--free); } .mapview .pin.paid { fill: var(--accent); } .mapview .pin.unknown { fill: var(--muted); }
+.mapview .ctr { fill: var(--bad); }
+.mapview text { font-size: 10px; fill: var(--ink); pointer-events: none; }
+.mapview .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 6px; }
+.mapview .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+.viewtabs { display: flex; gap: 6px; }
+.viewtabs button { font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 4px 12px; }
+.viewtabs button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.timer { border-color: var(--accent); }
+.timer .big { font-size: 22px; font-weight: 700; }
+.card.flash { outline: 3px solid var(--accent); outline-offset: 2px; }
 .picks { font-size: 13px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
 .picks dl { margin: 4px 0; display: grid; gap: 2px; }
 .picks dl div { display: flex; gap: 8px; }
@@ -171,8 +186,8 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
       <legend>어디 근처에 주차할까요?</legend>
       <div class="chips" id="presets" role="group" aria-label="주요 장소"></div>
       <div class="place">
-        <label for="q">주차장 이름·주소로 찾기</label>
-        <input id="q" type="search" autocomplete="off" placeholder="예: 송정역, 해운대, 중앙시장" aria-controls="suggest">
+        <label for="q">목적지(동·도로명) 또는 주차장 이름으로 찾기</label>
+        <input id="q" type="search" autocomplete="off" placeholder="예: 세종대로, 해운대, 중앙시장" aria-controls="suggest">
         <ul class="suggest" id="suggest" hidden></ul>
       </div>
       <p class="center" id="centerLabel" aria-live="polite"></p>
@@ -210,9 +225,11 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
     <button class="go" type="submit">주차장 비교하기</button>
   </form>
 
+  <section class="panel timer" id="timer" aria-labelledby="timer-h" hidden></section>
   <section class="panel saved" id="saved" aria-label="즐겨찾기와 최근 검색" hidden></section>
   <section class="summary" id="summary" aria-live="polite"></section>
   <section class="panel compare" id="compare" aria-label="주차장 나란히 비교" hidden></section>
+  <section class="panel mapview" id="mapview" aria-label="검색 결과 위치 보기(목록과 같은 결과)" hidden></section>
   <ul class="results" id="results"></ul>
 
   <footer>
@@ -231,6 +248,7 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
 <script>
 (() => {
   "use strict";
+  if (!document.documentElement.lang) document.documentElement.lang = "ko"; // 페이지 틀(게시 시 감싸짐)에 언어가 없을 때 대비
   const D = JSON.parse(document.getElementById("data").textContent);
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -281,6 +299,27 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
     $("q").value = ""; hideSuggest(); run();
   });
 
+  // 목적지(동·도로명) 검색: 이름·주소에 입력어가 모두 들어간 주차장을 시·군·구로 묶어 가장 많은 지역의 가운데 주차장 위치를 중심으로(앱 resolveDestination과 같은 방식)
+  let lastArea = null;
+  const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
+  function resolveArea(text) {
+    const toks = text.trim().split(/\s+/).filter(Boolean).slice(0, 4).map(norm);
+    if (!toks.length || toks.join("").length < 2) return null;
+    const groups = new Map();
+    for (let i = 0; i < SEARCH.length; i++) {
+      const [n, a] = SEARCH[i];
+      if (!toks.every((t) => n.includes(t) || a.includes(t))) continue;
+      const g = PS.regionOf(LOTS[i].addr), k = g ? (g.sido === g.sigungu ? g.sido : `${g.sido} ${g.sigungu}`) : "";
+      (groups.get(k) ?? groups.set(k, []).get(k)).push(LOTS[i]);
+    }
+    if (!groups.size) return null;
+    const ranked = [...groups].sort((a, b) => Number(b[0] !== "") - Number(a[0] !== "") || b[1].length - a[1].length || a[0].localeCompare(b[0], "ko"));
+    const [region, list] = ranked[0];
+    const mLat = median(list.map((l) => l.lat)), mLng = median(list.map((l) => l.lng));
+    const c = list.reduce((best, l) => (Math.hypot(l.lat - mLat, (l.lng - mLng) * 0.8) < Math.hypot(best.lat - mLat, (best.lng - mLng) * 0.8) ? l : best));
+    return { lat: c.lat, lng: c.lng, label: text.trim().replace(/\s+/g, " "), region, n: list.length, others: ranked.slice(1).map(([k]) => k).filter(Boolean).slice(0, 4) };
+  }
+
   // 주차장 이름·주소 검색 → 그 시설을 중심으로
   const sug = $("suggest");
   const hideSuggest = () => { sug.hidden = true; sug.innerHTML = ""; };
@@ -295,11 +334,16 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
     }
     hits.sort((x, y) => x[0] - y[0]);
     const top = hits.slice(0, 8);
-    sug.innerHTML = top.length ? top.map(([, i]) => `<li><button type="button" data-i="${i}">${esc(LOTS[i].name)}<small>${esc(LOTS[i].addr ?? "주소 없음")}</small></button></li>`).join("")
+    const area = resolveArea($("q").value);
+    const areaRow = area ? `<li><button type="button" data-area="1"><b>‘${esc(area.label)}’ 주변으로 검색</b><small>${esc(area.region || "지역 미상")} · 이름·주소에 이 말이 있는 주차장 ${area.n}곳의 가운데(대략 위치)${area.others.length ? ` · 다른 지역: ${esc(area.others.join(", "))}` : ""}</small></button></li>` : "";
+    lastArea = area;
+    sug.innerHTML = top.length ? areaRow + top.map(([, i]) => `<li><button type="button" data-i="${i}">${esc(LOTS[i].name)}<small>${esc(LOTS[i].addr ?? "주소 없음")}</small></button></li>`).join("")
       : `<li><span class="center" style="display:block;padding:8px">일치하는 주차장이 없습니다. 다른 이름이나 동 이름으로 찾아보세요.</span></li>`;
     sug.hidden = false;
   });
   sug.addEventListener("click", (e) => {
+    const ab = e.target.closest("button[data-area]");
+    if (ab && lastArea) { setCenter({ lat: lastArea.lat, lng: lastArea.lng, label: lastArea.label }, -1); hideSuggest(); run(); return; }
     const b = e.target.closest("button[data-i]"); if (!b) return;
     const l = LOTS[Number(b.dataset.i)];
     setCenter({ lat: l.lat, lng: l.lng, label: l.name }, -1);
@@ -523,6 +567,7 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
           ${l.pass != null ? `<p>월 정기권: ${won(l.pass)} (원천 기재 금액 · 판매 여부·자격 조건은 현장 확인)</p>` : ""}
           ${l.note ? `<p>원천 특기사항: “${esc(l.note)}”</p>` : ""}
           ${l.operator || l.phone ? `<p>관리기관: ${esc(l.operator ?? "-")}${l.phone ? ` · 전화 <span style="user-select:all">${esc(l.phone)}</span>` : ""}</p>` : ""}
+          ${l.rules.length ? `<p><button type="button" class="cmpbtn" data-timer="${l.i}">여기 주차 시작(타이머)</button></p>` : ""}
           <div class="links">
             <a href="https://map.naver.com/p/search/${q}" target="_blank" rel="noopener">네이버 지도 웹에서 보기</a>
             ${links.car ? `<a href="${esc(links.car.scheme)}">네이버 지도 앱 길찾기</a>` : ""}
@@ -566,6 +611,9 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
       <p>거리는 직선거리입니다. 요금을 계산할 수 없는 시설은 0원으로 보지 않고 비교에서 제외합니다.${p.sort === "value_asc" ? ` 가성비 순: 걸어가는 거리 100m를 ${won(WALK_WON_PER_100M)}으로 환산해 예상 요금에 더한 순서이며, 요금 계산 불가 시설은 뒤로 보냅니다.` : ""}</p>`;
     lastP = p; renderCompare();
     const dest = { lat: center.lat, lng: center.lng, name: center.label };
+    lastRun = { r, p };
+    $("summary").insertAdjacentHTML("beforeend", r.items.length ? `<div class="viewtabs" role="group" aria-label="결과 보기 방식"><button type="button" data-view="list" aria-pressed="${view === "list"}">목록</button><button type="button" data-view="map" aria-pressed="${view === "map"}">위치 보기</button></div>` : "");
+    renderMap();
     $("results").innerHTML = r.items.length ? r.items.map((it) => card(it, dest)).join("")
       : `<li class="empty">조건에 맞는 주차장이 없습니다. 반경을 넓히거나 ‘무료만’·‘운영 중인 곳만’을 해제해 보세요.</li>`;
   }
@@ -614,8 +662,74 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
     syncCmpButtons(); renderCompare();
   });
 
-  $("form").addEventListener("submit", (e) => { e.preventDefault(); hideSuggest(); run(); });
+  $("form").addEventListener("submit", (e) => {
+    e.preventDefault(); hideSuggest();
+    // 입력란에 목적지를 적고 바로 '비교하기'를 누르면 그 지역으로
+    const q = $("q").value.trim();
+    if (q && q !== center.label) { const a = resolveArea(q); if (a) setCenter({ lat: a.lat, lng: a.lng, label: a.label }, -1); else { const er = $("formError"); er.textContent = `‘${q}’이(가) 들어간 주차장 이름·주소가 없습니다. 동·도로명으로 다시 찾아보세요.`; er.hidden = false; return; } }
+    run();
+  });
   ["radius", "type", "sort", "freeOnly", "operatingOnly"].forEach((id) => $(id).addEventListener("change", run));
+  // 위치 보기: 외부 지도 없이 검색 중심 기준 상대 위치를 그림(데모 전용 — 실서비스는 지도 타일 사용)
+  let view = "list", lastRun = null;
+  function renderMap() {
+    const el = $("mapview");
+    if (view !== "map" || !lastRun || !lastRun.r.items.length) { el.hidden = true; el.innerHTML = ""; $("results").hidden = false; return; }
+    const { r, p } = lastRun, W = 360, H = 360, cx = W / 2, cy = H / 2, R = 160;
+    const kx = Math.cos((p.center.lat * Math.PI) / 180) * 111320, ky = 111320, s = R / p.radius;
+    const pins = r.items.map((it, k) => {
+      const x = cx + (it.lot.lng - p.center.lng) * kx * s, y = cy - (it.lot.lat - p.center.lat) * ky * s;
+      const tone = it.fee.status !== "OK" ? "unknown" : it.fee.isFree ? "free" : "paid";
+      const feeT = it.fee.status !== "OK" ? "요금 정보 없음" : it.fee.isFree ? "무료" : won(it.fee.amount);
+      return `<g><circle class="pin ${tone}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="8" data-pin="${it.id}" tabindex="0" role="button" aria-label="${k + 1}. ${esc(it.lot.name)} ${feeT} ${dist(it.distanceMeters)}"><title>${esc(it.lot.name)} · ${feeT}</title></circle><text x="${x.toFixed(1)}" y="${(y + 3.5).toFixed(1)}" text-anchor="middle" style="fill:#fff;font-weight:700">${k + 1}</text></g>`;
+    }).join("");
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="group" aria-label="${esc(p.center.label ?? center.label)} 중심 반경 ${dist(p.radius)} 안 주차장 ${r.items.length}곳의 상대 위치">
+      <circle class="ring" cx="${cx}" cy="${cy}" r="${R}"/><circle class="ring" cx="${cx}" cy="${cy}" r="${R / 2}"/>
+      <text x="${cx + 4}" y="${cy - R / 2 + 12}">${dist(Math.round(p.radius / 2))}</text><text x="${cx + 4}" y="${cy - R + 12}">${dist(p.radius)}</text>
+      <circle class="ctr" cx="${cx}" cy="${cy}" r="5"/><text x="${cx}" y="${cy - 9}" text-anchor="middle">${esc(center.label)}</text>${pins}</svg>
+      <div class="legend"><span><i style="background:var(--free)"></i>무료</span><span><i style="background:var(--accent)"></i>유료</span><span><i style="background:var(--muted)"></i>요금 정보 없음</span><span>위가 북쪽 · 직선거리 기준 · 번호는 목록 순서 · 누르면 목록으로</span></div>`;
+    el.hidden = false; $("results").hidden = true;
+  }
+  $("summary").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-view]"); if (!b) return;
+    view = b.dataset.view; $("summary").querySelectorAll("button[data-view]").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.view === view))); renderMap();
+  });
+  const goPin = (id) => { view = "list"; $("summary").querySelectorAll("button[data-view]").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.view === "list"))); renderMap();
+    const c = $("results").querySelector(`button[data-fav="${id}"]`)?.closest(".card"); if (c) { c.scrollIntoView({ block: "center" }); c.classList.add("flash"); setTimeout(() => c.classList.remove("flash"), 1600); } };
+  $("mapview").addEventListener("click", (e) => { const pin = e.target.closest("[data-pin]"); if (pin) goPin(pin.dataset.pin); });
+  $("mapview").addEventListener("keydown", (e) => { const pin = e.target.closest("[data-pin]"); if (pin && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); goPin(pin.dataset.pin); } });
+
+  // 주차 타이머: 이 브라우저에만 저장. 앱과 같은 요금 엔진으로 지금까지 요금·다음 인상 시각 계산
+  const TKEY = "ps-demo:timer";
+  const loadTimer = () => { try { const v = JSON.parse(localStorage.getItem(TKEY) || "null"); return v && LOTS[v.i] && LOTS[v.i].name === v.name && !Number.isNaN(Date.parse(v.at)) ? v : null; } catch { return null; } };
+  const saveTimer = (v) => { try { if (v) localStorage.setItem(TKEY, JSON.stringify(v)); else localStorage.removeItem(TKEY); } catch { /* 저장 불가 */ } };
+  const clock = (ms) => new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }).format(ms);
+  function renderTimer() {
+    const t = loadTimer(), el = $("timer");
+    if (!t) { el.hidden = true; el.innerHTML = ""; return; }
+    const l = LOTS[t.i], s = Date.parse(t.at), now = Date.now(), end = Math.max(now, s + 60000);
+    const fee = (e) => PS.calculateFee({ startAt: new Date(s), endAt: new Date(e), rules: l.rules, holidays: holidaysFor(new Date(s), new Date(e)) });
+    const cur = fee(end), el2 = Math.floor((now - s) / 60000);
+    let next = null;
+    if (cur.status === "OK") for (let m = 1; m <= 1440; m++) { const e = Math.ceil(end / 60000) * 60000 + m * 60000, r = fee(e); if (r.status !== "OK") break; if (r.amount > cur.amount) { next = { at: e - 60000, fee: r.amount }; break; } }
+    el.innerHTML = `<h2 id="timer-h" style="margin:0;font-size:16px">주차 중: ${esc(l.name)}</h2>
+      <p style="margin:4px 0;color:var(--muted)">${clock(s)} 시작 · 경과 ${el2 >= 60 ? Math.floor(el2 / 60) + "시간 " : ""}${el2 % 60}분</p>
+      ${cur.status === "OK" ? `<p class="big" style="margin:0">지금 나가면 ${cur.amount === 0 ? "무료" : won(cur.amount)}</p><p style="margin:4px 0">${next ? `다음 인상: <b>${clock(next.at)}</b> 이후 ${won(next.fee)}` : "24시간 안에 더 오르지 않습니다."}</p>`
+        : `<p>요금을 계산할 수 없습니다(${esc(FEE_REASON[cur.reason] ?? cur.reason)}).</p>`}
+      <p style="margin:4px 0;font-size:12px;color:var(--muted)">이 브라우저에만 저장됩니다. 원천 데이터 기준 예상 금액이며 현장 요금과 다를 수 있습니다.</p>
+      <button type="button" class="cmpbtn" data-timer-stop>주차 종료(타이머 끄기)</button>`;
+    el.hidden = false;
+  }
+  $("results").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-timer]"); if (!b) return;
+    const l = LOTS[Number(b.dataset.timer)];
+    saveTimer({ i: l.i, name: l.name, at: new Date().toISOString() }); renderTimer();
+    $("timer").scrollIntoView({ block: "start" });
+  });
+  $("timer").addEventListener("click", (e) => { if (e.target.closest("button[data-timer-stop]")) { saveTimer(null); renderTimer(); } });
+  setInterval(renderTimer, 15000);
+  renderTimer();
+
   setCenter(center, 0);
   run();
 })();

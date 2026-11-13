@@ -1,7 +1,7 @@
 importScripts('logic.js', 'store.js');
 
 const CACHE = `coupon-wallet-${CW.VERSION}`;
-const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'logic.js', 'store.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'logic.js', 'store.js', 'scan.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 const NET_TIMEOUT = 3000;
 
 self.addEventListener('install', e => {

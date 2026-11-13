@@ -8,6 +8,9 @@ import { getLang } from "@/i18n/server";
 import { dict } from "@/i18n/dict";
 import { defaultStayInputs } from "@/lib/time";
 import { areaHref, siteUrl } from "@/lib/site";
+import { headers } from "next/headers";
+import { clientKey, pageLimiter } from "@/server/rate-limit";
+import { TooManyRequests } from "@/components/TooManyRequests";
 
 export const dynamic = "force-dynamic";
 type P = Promise<{ sido: string; sigungu: string }>;
@@ -33,6 +36,8 @@ export async function generateMetadata({ params }: { params: P }): Promise<Metad
 function median(xs: number[]) { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; }
 
 export default async function AreaPage({ params }: { params: P }) {
+  const rl = pageLimiter.check(clientKey(await headers()));
+  if (!rl.ok) return <TooManyRequests lang={await getLang()} retryAfterSec={rl.retryAfterSec} />;
   const r = await region(params);
   if (!r) notFound();
   const lots = await areaLots(await getAppDb(), r);

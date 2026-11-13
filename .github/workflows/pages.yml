@@ -1,10 +1,11 @@
-name: Deploy 쿠폰 지갑 to GitHub Pages
+name: Deploy 쿠폰 지갑·R&D 사업비 계산기 to GitHub Pages
 
 on:
   push:
     branches: [main]
     paths:
       - 'coupon-wallet/**'
+      - 'rnd-budget/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -26,9 +27,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
-      # coupon-wallet/ 폴더만 게시 (저장소의 다른 파일은 게시되지 않음)
+      # 게시 대상만 모음: coupon-wallet/ → 루트(기존 주소 유지), rnd-budget/ → /rnd-budget/
+      - run: |
+          mkdir _site
+          cp -r coupon-wallet/. _site/
+          cp -r rnd-budget _site/rnd-budget
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: coupon-wallet
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@v4
