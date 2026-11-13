@@ -32,6 +32,11 @@ const ICON = path.join(ROOT, 'icon-192.png');
   await p.addInitScript(() => {
     window.__notes = [];
     Object.defineProperty(Notification, 'permission', { get: () => 'granted' });
+    // 헤드리스 Chromium에는 BarcodeDetector가 없으므로 스텁 (window.__barcodes로 판독 결과 제어, null이면 판독 실패)
+    window.BarcodeDetector = class {
+      static async getSupportedFormats() { return ['code_128', 'ean_13', 'qr_code']; }
+      async detect() { return window.__barcodes === undefined ? [{ format: 'code_128', rawValue: '123456789012' }] : window.__barcodes; }
+    };
     ServiceWorkerRegistration.prototype.showNotification = async function (title, opts) { window.__notes.push({ title, body: opts && opts.body }); };
   });
   const errors = [];
@@ -190,6 +195,108 @@ const ICON = path.join(ROOT, 'icon-192.png');
   check('저장 실패 후 재시도 성공', (await db()).coupons.length === cntBefore + 1);
   await settle();
 
+  /* --- 기프티콘 자동 인식 (Anthropic API는 목으로 대체) --- */
+  const apiCalls = []; let apiMode = 'ok';
+  const okPayload = { is_coupon: true, brand: '스타벅스', title: '아이스 아메리카노 T', value: 4700, expires: dstr(20), code: '1234 5678 9012', memo: '전국 매장 사용', confidence: 'high' };
+  await ctx.route('https://api.anthropic.com/**', async route => {
+    const req = route.request();
+    const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-expose-headers': '*' };
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+    apiCalls.push({ url: req.url(), headers: await req.allHeaders(), body: JSON.parse(req.postData() || '{}') });
+    const json = { ...cors, 'content-type': 'application/json' };
+    if (apiMode === '401') return route.fulfill({ status: 401, headers: json, body: JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } }) });
+    if (apiMode === 'slow') await new Promise(r => setTimeout(r, 900));
+    const text = apiMode === 'garbage' ? '죄송하지만 읽을 수 없음' : JSON.stringify(apiMode === 'notcoupon' ? { ...okPayload, is_coupon: false } : okPayload);
+    route.fulfill({ status: 200, headers: json, body: JSON.stringify({ id: 'msg_test', type: 'message', role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'text', text }], stop_reason: 'end_turn', stop_sequence: null, usage: { input_tokens: 100, output_tokens: 50 } }) });
+  });
+  const KEY = 'sk-ant-api03-TESTKEY1234';
+  const scanStatusText = () => p.locator('#scan-status').innerText();
+  const openCouponForm = async () => { await gotoTab('coupons'); await p.click('#fab'); await p.waitForSelector('#dlg-coupon[open]'); };
+  const closeCouponForm = async () => { await p.click('#dlg-coupon [data-action=close-dialog]'); await dlgClosed('#dlg-coupon'); await settle(); };
+  const scanWith = async () => { await p.setInputFiles('#scan-file', ICON); await p.waitForFunction(() => !document.querySelector('#scan-status').textContent.includes('분석하는 중')); };
+
+  await p.click('[data-action=open-settings]');
+  await p.fill('#api-key', 'abc');
+  await p.click('[data-action=save-key]');
+  await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('형식이 올바르지 않음'));
+  check('API 키: 형식이 잘못되면 저장 거부', (await text('#toast')).includes('형식이 올바르지 않음') && !(await p.evaluate(() => CWStore.getMeta('apiKey'))));
+  await p.fill('#api-key', KEY);
+  await p.click('[data-action=save-key]');
+  await p.waitForFunction(() => document.querySelector('#scan-state').textContent.includes('…1234'));
+  check('API 키: 저장·마스킹 표시·입력칸 비움', (await p.evaluate(() => CWStore.getMeta('apiKey'))) === KEY && (await p.inputValue('#api-key')) === '' && (await text('#scan-state')).includes('claude-opus-5-5'));
+  const [dl2] = await Promise.all([p.waitForEvent('download'), p.click('[data-action=export]')]);
+  check('백업 파일에 API 키가 포함되지 않음', !fs.readFileSync(await dl2.path(), 'utf8').includes('TESTKEY'));
+  await p.click('#dlg-settings [data-action=close-dialog]'); await settle();
+
+  await openCouponForm();
+  await scanWith();
+  check('인식: 폼 자동 입력 (브랜드·상품·금액·유효기간·메모)',
+    await p.inputValue('#form-coupon [name=brand]') === '스타벅스' && await p.inputValue('#form-coupon [name=title]') === '아이스 아메리카노 T' &&
+    await p.inputValue('#form-coupon [name=value]') === '4700' && await p.inputValue('#form-coupon [name=expires]') === dstr(20) &&
+    await p.inputValue('#form-coupon [name=memo]') === '전국 매장 사용');
+  check('인식: 번호는 바코드 판독값, 사진 자동 첨부, 완료 안내',
+    await p.inputValue('#form-coupon [name=code]') === '123456789012' && await p.locator('#img-preview img').count() === 1 && (await scanStatusText()).includes('인식 완료'));
+  const call = apiCalls[0];
+  check('요청: Opus 5.5 + 이미지 + 구조화 출력 + 거절 fallback', call && call.url.endsWith('/v1/messages') &&
+    call.body.model === 'claude-opus-5-5' && call.body.fallbacks === 'default' && call.headers['anthropic-beta'].includes('server-side-fallback-2026-07-01') &&
+    call.body.output_config.format.type === 'json_schema' && call.body.output_config.effort === 'low' && call.body.max_tokens >= 4096, JSON.stringify(call && call.body).slice(0, 300));
+  const content0 = call.body.messages[0].content;
+  check('요청: base64 이미지 블록 + 시스템 프롬프트, 금지 파라미터 없음',
+    content0[0].type === 'image' && content0[0].source.type === 'base64' && content0[0].source.media_type === 'image/png' && content0[0].source.data.length > 100 &&
+    typeof call.body.system === 'string' && call.body.system.includes('지시') && !('thinking' in call.body) && !('temperature' in call.body));
+  check('요청: 사용자 API 키 헤더(SDK 1.x는 Authorization Bearer)와 브라우저 직접 호출 헤더', call.headers['authorization'] === `Bearer ${KEY}` && call.headers['anthropic-dangerous-direct-browser-access'] === 'true');
+  await p.click('#form-coupon button[type=submit]'); await dlgClosed('#dlg-coupon'); await settle();
+  d = await db();
+  const scanned = d.coupons.find(c => c.title === '아이스 아메리카노 T');
+  check('인식 결과 저장: 번호·이미지·메모 포함', scanned && scanned.code === '123456789012' && scanned.value === 4700 && scanned.image.startsWith('data:image/') && scanned.memo === '전국 매장 사용');
+
+  await openCouponForm();
+  await p.evaluate(() => { window.__barcodes = [{ format: 'code_128', rawValue: '999999999999' }]; });
+  await scanWith();
+  check('인식: 바코드와 AI 번호가 다르면 바코드 값 + 경고', await p.inputValue('#form-coupon [name=code]') === '999999999999' && (await scanStatusText()).includes('달라'));
+  await p.evaluate(() => { window.__barcodes = undefined; });
+  apiMode = 'notcoupon'; await scanWith();
+  check('인식: 쿠폰 사진이 아니면 입력하지 않고 안내', (await scanStatusText()).includes('이미지가 아닌 것 같음') && await p.inputValue('#form-coupon [name=brand]') === '스타벅스'); // 앞선 값 유지
+  await closeCouponForm();
+
+  await openCouponForm();
+  apiMode = '401'; await scanWith();
+  check('오류(401): 키 안내 + 바코드 번호는 입력', (await scanStatusText()).includes('API 키가 올바르지 않음') && await p.inputValue('#form-coupon [name=code]') === '123456789012' && await p.inputValue('#form-coupon [name=brand]') === '');
+  apiMode = 'garbage'; await scanWith();
+  check('오류(응답 해석 실패): 직접 입력 안내', (await scanStatusText()).includes('인식 결과를 읽지 못함'));
+  await closeCouponForm();
+
+  // 중도 취소: 응답 전에 팝업을 닫으면 결과를 무시하고 다음 폼은 깨끗해야 함
+  await openCouponForm();
+  apiMode = 'slow'; await p.setInputFiles('#scan-file', ICON);
+  await closeCouponForm();
+  await p.waitForTimeout(1300);
+  await openCouponForm();
+  check('중도 취소: 늦게 온 결과가 다음 폼에 반영되지 않음', await p.inputValue('#form-coupon [name=brand]') === '' && await p.locator('#scan-status').isHidden());
+  await closeCouponForm();
+
+  // Haiku: 거절 대체(fallbacks) 미지원 모델은 일반 엔드포인트로 호출
+  apiMode = 'ok'; apiCalls.length = 0;
+  await p.click('[data-action=open-settings]'); await p.selectOption('#api-model', 'claude-haiku-5-5'); await p.click('[data-action=save-key]');
+  await p.waitForFunction(() => document.querySelector('#scan-state').textContent.includes('claude-haiku-5-5'));
+  await p.click('#dlg-settings [data-action=close-dialog]'); await settle();
+  await openCouponForm(); await scanWith();
+  check('모델 변경(Haiku): fallback 베타 헤더·파라미터 없음', apiCalls.length === 1 && !(apiCalls[0].headers['anthropic-beta'] || '').includes('server-side-fallback') && apiCalls[0].body.model === 'claude-haiku-5-5' && !('fallbacks' in apiCalls[0].body));
+  await closeCouponForm();
+
+  // 키 삭제 → 바코드만
+  apiCalls.length = 0;
+  await p.click('[data-action=open-settings]'); await p.click('[data-action=clear-key]'); await p.waitForSelector('#dlg-confirm[open]'); await p.click('#confirm-ok');
+  await p.waitForFunction(() => document.querySelector('#scan-state').textContent.includes('미등록'));
+  await p.click('#dlg-settings [data-action=close-dialog]'); await settle();
+  await openCouponForm(); await scanWith();
+  check('키 없음: API 호출 없이 바코드 번호만 입력 + 안내', apiCalls.length === 0 && await p.inputValue('#form-coupon [name=code]') === '123456789012' && (await scanStatusText()).includes('API 키를 등록'));
+  await p.evaluate(() => { window.__barcodes = []; });
+  await scanWith();
+  check('키·바코드 모두 없음: 사진만 첨부 안내', (await scanStatusText()).includes('사진만 첨부') && await p.locator('#img-preview img').count() === 1);
+  await p.evaluate(() => { window.__barcodes = undefined; });
+  await closeCouponForm();
+
   /* --- 영속성 --- */
   await settle();
   const countBefore = (await db()).coupons.length;
@@ -276,7 +383,7 @@ const ICON = path.join(ROOT, 'icon-192.png');
   await p.goto(base + '?tab=loyalty'); await p.waitForSelector('.tabs button.on');
   check('바로가기(?tab=loyalty): 적립 탭', (await text('.tabs button.on')) === '적립');
 
-  const unexpected = errors.filter(e => !e.includes('QuotaExceededError')); // 저장 실패 테스트에서 의도적으로 주입한 오류는 제외
+  const unexpected = errors.filter(e => !e.includes('QuotaExceededError') && !e.includes('status of 401')); // 저장 실패 테스트에서 의도적으로 주입한 오류는 제외
   check('콘솔 오류·CSP 위반 없음', unexpected.length === 0, unexpected.join(' | '));
 
   await browser.close(); server.close();
