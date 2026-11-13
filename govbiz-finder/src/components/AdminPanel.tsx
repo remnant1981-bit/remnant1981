@@ -90,11 +90,12 @@ export function AdminPanel() {
 
       <section aria-labelledby="sb"><h2 id="sb" className="mb-2 text-lg font-bold">요금제 관리 <span className="text-sm font-normal text-[var(--muted)]">{subs.enabled ? "한도 적용 중(PLANS_ENABLED=true)" : "한도 미적용(판매 전) — 설정만 저장됨"}</span></h2>
         <p className="mb-2 text-xs text-[var(--muted)]">입금 확인 후 요금제·이용 종료일을 저장합니다. 체험은 체험 종료일만 넣습니다. 종료일이 지나면 자동으로 무료 한도가 적용되고 데이터는 유지됩니다.</p>
-        <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left"><th>기업</th><th>구성원</th><th>요금제</th><th>인원</th><th>체험 종료</th><th>이용 종료</th><th>메모</th><th></th></tr></thead>
+        <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left"><th>기업</th><th>구성원</th><th>현재 적용</th><th>요금제</th><th>인원</th><th>체험 종료</th><th>이용 종료</th><th>메모</th><th></th></tr></thead>
           <tbody>{subs.items.map((r) => (
             <tr key={r.company_id} className="border-b align-top">
               <td>{r.company_name ?? "(이름 없음)"}<br /><span className="text-xs text-[var(--muted)]">{r.business_number_masked}</span></td>
               <td>{r.members}{r.seats && r.members > r.seats ? " ⚠" : ""}</td>
+              <td className="whitespace-nowrap">{r.effective ? <>{r.effective.label}<br /><span className={`text-xs ${r.effective.status === "expired" ? "text-red-700" : "text-[var(--muted)]"}`}>{({ free: "무료", active: "결제", trial: "체험", expired: "만료→무료 한도" } as Record<string, string>)[r.effective.status]}{r.effective.endsAt ? ` ~${r.effective.endsAt}` : ""}</span></> : "-"}</td>
               <td><select id={`sp-${r.company_id}`} defaultValue={r.plan ?? "free"} className="input !w-auto !py-1"><option value="free">무료</option><option value="pro">Pro</option><option value="team">Team</option></select></td>
               <td><input id={`ss-${r.company_id}`} type="number" min={1} max={100} defaultValue={r.seats ?? 1} className="input !w-20 !py-1" /></td>
               <td><input id={`st-${r.company_id}`} type="date" defaultValue={r.trial_ends_at ?? ""} className="input !w-auto !py-1" /></td>
