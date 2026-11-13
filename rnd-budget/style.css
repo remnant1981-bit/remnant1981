@@ -41,18 +41,13 @@ input:focus,select:focus,.btn:focus-visible,summary:focus-visible{outline:2px so
 .checks .ok{background:var(--ok-bg);color:var(--ok)}.checks .warn{background:var(--warn-bg);color:var(--warn)}.checks .error{background:var(--err-bg);color:var(--err);font-weight:600}
 .checks .ok::before{content:"✔ "}.checks .warn::before{content:"⚠ "}.checks .error::before{content:"✖ "}
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-.pro{border:2px solid var(--brand)}
 .badge{font-size:.75rem;background:var(--brand-soft);color:var(--brand);border-radius:99px;padding:2px 8px;vertical-align:middle}
-.pro-list{margin:0;padding-left:20px}
-.price{font-weight:700;font-size:1.05rem;margin:12px 0 0}
-.code{margin-top:14px}
-#activate{margin-top:8px}
 .scenarios{list-style:none;padding:0;margin:12px 0 0;display:grid;gap:6px}
 .scenarios li{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
 .scenarios .meta{color:var(--muted);font-size:.85rem}
 .ad{min-height:100px;margin-bottom:16px;text-align:center}
 .foot{color:var(--muted);font-size:.82rem;margin:8px 0 40px}
-@media print{.top .sub,.rules,.actions,#addPerson,.pro,.ad,.icon,.skip{display:none!important}body{background:#fff;color:#000}.card{border:0;padding:0}.tbl input{border:0}}
+@media print{.top .sub,.steps,.guide,.faq,.actions,#addPerson,.ad,.icon,.skip,.scenarios,.hint{display:none!important}body{background:#fff;color:#000}.card{border:0;padding:0}.tbl input{border:0}}
 .badge:empty{display:none}
 @media (max-width:639px){
   #people{min-width:0}#people thead{display:none}
@@ -67,3 +62,35 @@ input:focus,select:focus,.btn:focus-visible,summary:focus-visible{outline:2px so
   #items td:first-child{white-space:normal;min-width:76px}.computed{display:block}
   #items input{padding:6px 6px}
 }
+
+.basis-line{color:var(--muted);font-size:.78rem;margin:6px 0 0}
+.steps{display:flex;flex-wrap:wrap;gap:6px;list-style:none;padding:0;margin:0 0 14px;counter-reset:st}
+.steps li{counter-increment:st}.steps a{display:inline-block;padding:4px 10px;border:1px solid var(--line);border-radius:99px;background:var(--card);color:var(--ink);text-decoration:none;font-size:.85rem}
+.steps a::before{content:counter(st) ". ";color:var(--brand);font-weight:700}
+h2 .no{display:inline-grid;place-items:center;width:1.6em;height:1.6em;border-radius:50%;background:var(--brand);color:#fff;font-size:.85rem;margin-right:8px;vertical-align:1px}
+@media (prefers-color-scheme:dark){h2 .no{color:#0e1420}}
+.rulebox{margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.rulebox h3{margin:0 0 8px;font-size:.95rem}
+.badge.warn{background:var(--warn-bg);color:var(--warn)}
+.rules-tbl{width:100%;border-collapse:collapse;font-size:.9rem}
+.rules-tbl th,.rules-tbl td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+.rules-tbl th{font-weight:600;white-space:nowrap;width:9.5em}
+.rules-tbl td:nth-child(2){white-space:nowrap;width:9em}
+.rules-tbl input{width:4.6em;text-align:right;padding:5px 6px}
+.rules-tbl input.locked{background:var(--brand-soft);border-color:transparent;font-weight:700;cursor:not-allowed}
+.rules-tbl .fixed{display:inline-block;width:4.6em;text-align:right;padding:5px 6px;font-weight:700;background:var(--brand-soft);border-radius:8px}
+.unit{margin-left:4px;color:var(--muted);font-size:.85rem}
+.basis{color:var(--muted);font-size:.8rem}
+@media (max-width:639px){.rules-tbl tr{display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:8px 0;border-bottom:1px solid var(--line)}.rules-tbl th,.rules-tbl td{border:0;padding:0;width:auto}.rules-tbl .basis{grid-column:1/-1}}
+.guide{margin-top:14px;background:var(--bg);border-radius:10px;padding:10px 14px}
+.guide summary{cursor:pointer;font-weight:600;color:var(--brand)}
+.guide ul{margin:8px 0 0;padding-left:18px;font-size:.88rem}.guide li{margin:4px 0}
+.remain{margin:10px 0 0;font-weight:600}.remain.todo{color:var(--warn)}.remain.done{color:var(--ok)}
+.checks li{display:grid;gap:2px}.checks .cite{font-weight:400;opacity:.85;font-size:.78rem}
+.checks .cite::before{content:"근거: "}
+td.na{color:var(--muted)}
+#people select{font-size:.85rem;padding:6px}
+.faq details{border-bottom:1px solid var(--line);padding:10px 0}.faq summary{cursor:pointer;font-weight:600}.faq p{margin:6px 0 0;color:var(--muted);font-size:.9rem}
+.checks li{display:block}.checks .cite{display:block;margin-top:2px}
+#people select{min-width:10.5em}
+@media (max-width:639px){#people select{min-width:0;width:100%}}

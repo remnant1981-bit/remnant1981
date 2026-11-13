@@ -2,10 +2,10 @@ name: R&D Budget CI
 
 on:
   pull_request:
-    paths: ['rnd-budget/**', 'tests/rnd-budget/**', 'scripts/rnd-budget/**', '.github/workflows/rnd-budget-ci.yml']
+    paths: ['rnd-budget/**', 'tests/rnd-budget/**', '.github/workflows/rnd-budget-ci.yml']
   push:
     branches: [main]
-    paths: ['rnd-budget/**', 'tests/rnd-budget/**', 'scripts/rnd-budget/**']
+    paths: ['rnd-budget/**', 'tests/rnd-budget/**']
 
 permissions:
   contents: read

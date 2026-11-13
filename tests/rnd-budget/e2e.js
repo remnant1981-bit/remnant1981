@@ -1,7 +1,6 @@
 // E2E: 실제 Chromium에서 계산기 전체 흐름 검증.  실행: node tests/rnd-budget/e2e.js   (playwright 필요)
 const http = require('http');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { chromium } = require('playwright');
 
@@ -18,74 +17,77 @@ const results = [];
 const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok || !detail ? '' : '  → ' + detail}`); };
 
 (async () => {
-  const { keygen, issue } = await import('../../scripts/rnd-budget/license.mjs');
-  const keyPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'rb-e2e-')), 'k.jwk');
-  const pub = await keygen(keyPath);
-  const { code } = await issue('E2E-1', 30, keyPath);
-
   await new Promise((r) => server.listen(0, r));
   const base = `http://localhost:${server.address().port}/`;
   const browser = await chromium.launch();
   const errors = [];
-
-  // 1) 기본 설정(판매 준비 중) — 모바일
   const ctx = await browser.newContext({ viewport: { width: 390, height: 800 }, acceptDownloads: true });
   const p = await ctx.newPage();
   p.on('pageerror', (e) => errors.push(e.message));
   p.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   p.on('dialog', (d) => d.accept(d.type() === 'prompt' ? '1안' : undefined));
   await p.goto(base);
+
+  // 1. 법령 기준 고정
+  check('기본 중소기업·법령 기준 고정', (await p.inputValue('#ruleset')) === 'sme' && (await p.textContent('#ruleMode')) === '법령 기준 고정');
+  check('정부지원 75%·현금 10% 잠금', (await p.inputValue('#govMaxPct')) === '75' && (await p.inputValue('#cashMinPct')) === '10' && await p.$eval('#govMaxPct', (e) => e.readOnly));
+  check('근거 조문 표시', (await p.textContent('[data-basis="cash"]')).includes('시행령 별표 1'));
   await p.fill('#gov', '300000');
   check('정부출연금 천단위 표시', (await p.inputValue('#gov')) === '300,000');
   const kpi = await p.textContent('#funding');
-  check('최소 총사업비·기관부담금 계산', kpi.includes('400,000천원') && kpi.includes('100,000천원') && kpi.includes('10,000천원'), kpi);
-  await p.selectOption('#orgType', 'mid');
-  check('중견기업 선택 시 70%/13%', (await p.inputValue('#govMaxPct')) === '70' && (await p.inputValue('#cashMinPct')) === '13');
-  await p.selectOption('#orgType', 'sme');
-  // 인건비: 기존 인력 현물 90,000
+  check('최소 총사업비·기관부담금·현금', kpi.includes('400,000천원') && kpi.includes('100,000천원') && kpi.includes('10,000천원'), kpi);
+  await p.selectOption('#ruleset', 'midS');
+  check('중견(3천억 미만) 70%/10%', (await p.inputValue('#govMaxPct')) === '70' && (await p.inputValue('#cashMinPct')) === '10');
+  await p.selectOption('#ruleset', 'midL');
+  check('중견(3천억 이상) 13%', (await p.inputValue('#cashMinPct')) === '13');
+  await p.selectOption('#ruleset', 'custom');
+  check('직접 입력: 편집 가능·직전 값 유지', !(await p.$eval('#govMaxPct', (e) => e.readOnly)) && (await p.inputValue('#cashMinPct')) === '13');
+  await p.fill('#govMaxPct', '80');
+  check('직접 입력 비율 반영', (await p.textContent('#funding')).includes('375,000천원'));
+  await p.selectOption('#ruleset', 'univ');
+  check('대학: 학생인건비 비목 표시', (await p.locator('#items tbody tr', { hasText: '학생인건비' }).count()) === 1);
+  await p.selectOption('#ruleset', 'sme');
+  check('기업: 학생인건비 비목 없음', (await p.locator('#items tbody tr', { hasText: '학생인건비' }).count()) === 0);
+  await p.fill('#indirectPct', '30'); await p.locator('#indirectPct').blur();
+  check('간접비율 상한(10%) 초과 입력 시 10%', (await p.inputValue('#indirectPct')) === '10');
+
+  // 2~4. 편성·점검
   const row = p.locator('#people tbody tr').first();
-  await row.locator('input').nth(0).fill('홍길동');
-  await row.locator('input').nth(1).fill('90000');
-  await row.locator('input').nth(3).fill('100');
-  await row.locator('input[type=checkbox]').check();
-  await p.click('.rules summary');
+  await row.getByLabel('연구원 1 성명').fill('홍길동');
+  await row.getByLabel('연구원 1 연봉(천원)').fill('90000');
+  check('연봉 천단위', (await row.getByLabel('연구원 1 연봉(천원)').inputValue()) === '90,000');
+  await row.getByLabel('연구원 1 참여율').fill('100');
   await p.fill('#indirectPct', '0');
   await p.getByLabel('연구재료비 현금(천원)').fill('300000');
+  check('남은 편성액 안내', (await p.textContent('#remain')).includes('10,000천원 더'));
   await p.getByLabel('연구활동비 현금(천원)').fill('10000');
-  const checks = await p.textContent('#checks');
-  check('정상 편성 → 오류 없음', (await p.locator('#checks .error').count()) === 0, checks);
-  check('합계 400,000', (await p.textContent('#items tfoot')).includes('400,000'));
+  check('정상 편성 → 오류 없음', (await p.locator('#checks .error').count()) === 0, await p.textContent('#checks'));
+  check('합계 400,000·충족 안내', (await p.textContent('#items tfoot')).includes('400,000') && (await p.textContent('#remain')).includes('충족'));
   await p.getByLabel('연구수당 현금(천원)').fill('30000');
-  check('연구수당 한도 초과 경고', (await p.textContent('#checks .error')).includes('연구수당'));
+  const err = await p.textContent('#checks .error');
+  check('연구수당 한도 초과 + 근거', err.includes('연구수당') && err.includes('제26조'), err);
   await p.getByLabel('연구수당 현금(천원)').fill('');
-  check('Pro 판매 준비 중 표시', (await p.textContent('#buy')) === '판매 준비 중' && (await p.locator('#proTools').isHidden()));
-  await p.fill('#licenseCode', code);
-  await p.click('#activate');
-  await p.waitForTimeout(200);
-  check('공개키 미설정 시 코드 등록 안 됨', (await p.textContent('#licenseMsg')).includes('준비 중'));
+  await row.getByLabel('연구원 1 구분').selectOption('existingCash');
+  check('기존 인력 현금 경고', (await p.textContent('#checks')).includes('부처(전문기관)가 인정한 경우'));
+  await row.getByLabel('연구원 1 구분').selectOption('existing');
   const sw = await p.evaluate(() => document.documentElement.scrollWidth);
   check('390px 가로 스크롤 없음', sw <= 390, String(sw));
   await p.reload();
   check('새로고침 후 입력 유지', (await p.inputValue('#gov')) === '300,000' && (await p.locator('#checks .error').count()) === 0);
 
-  // 2) 판매 설정(공개키·스토어) — Pro 등록·엑셀·시나리오
-  await p.route('**/config.js', (r) => r.fulfill({ contentType: 'text/javascript', body: `window.RB_CONFIG=${JSON.stringify({ licensePublicKey: pub, storeUrl: 'https://store.example.test/rnd', priceText: '1년 이용권 9,900원' })};` }));
-  await p.reload();
-  check('구매 버튼 활성', (await p.getAttribute('#buy', 'href')) === 'https://store.example.test/rnd');
-  await p.fill('#licenseCode', code.slice(0, -4) + 'AAAA');
-  await p.click('#activate'); await p.waitForTimeout(200);
-  check('위조 코드 거부', (await p.textContent('#licenseMsg')).includes('유효하지 않은') && (await p.locator('#proTools').isHidden()));
-  await p.fill('#licenseCode', code);
-  await p.click('#activate'); await p.waitForTimeout(300);
-  check('정상 코드 등록 → Pro 기능 표시', await p.locator('#proTools').isVisible());
+  // 5. 엑셀·저장(무료)
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#xlsx')]);
-  const file = await dl.path();
-  const head = fs.readFileSync(file).subarray(0, 4);
-  check('엑셀 다운로드(.xlsx ZIP)', dl.suggestedFilename().endsWith('.xlsx') && head.readUInt32LE(0) === 0x04034b50, dl.suggestedFilename());
+  const head = fs.readFileSync(await dl.path()).subarray(0, 4);
+  check('엑셀 다운로드(.xlsx)', dl.suggestedFilename().endsWith('.xlsx') && head.readUInt32LE(0) === 0x04034b50, dl.suggestedFilename());
   await p.click('#saveScenario');
-  check('시나리오 저장', (await p.textContent('#scenarios')).includes('1안'));
+  check('안 저장', (await p.textContent('#scenarios')).includes('1안'));
+  check('광고 미설정 시 광고 영역 숨김', (await p.locator('#ad-top').isHidden()) && (await p.locator('#ad-bottom').isHidden()));
+
+  // 광고 설정 시
+  await p.route('**/config.js', (r) => r.fulfill({ contentType: 'text/javascript', body: 'window.RB_CONFIG={adsenseClient:"ca-pub-0000000000000000",adsenseSlots:{top:"111",bottom:"222"}};' }));
+  await p.route('https://pagead2.googlesyndication.com/**', (r) => r.fulfill({ contentType: 'text/javascript', body: 'window.__adLoaded=true;' }));
   await p.reload();
-  check('재방문 시 이용권 유지', await p.locator('#proTools').isVisible());
+  check('광고 설정 시 2곳 표시·스크립트 로드', (await p.locator('#ad-top ins.adsbygoogle').count()) === 1 && (await p.locator('#ad-bottom ins.adsbygoogle').count()) === 1 && await p.evaluate(() => window.__adLoaded === true));
 
   check('콘솔·스크립트 오류 없음', errors.length === 0, errors.join(' | '));
   await browser.close(); server.close();
