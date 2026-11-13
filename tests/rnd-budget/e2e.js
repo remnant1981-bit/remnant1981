@@ -97,6 +97,40 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   await p.click('#demoNote .linkbtn'); await p.waitForLoadState();
   check('새로 작성 → 빈 화면', (await p.inputValue('#gov')) === '' && await p.locator('#demoNote').isHidden());
 
+  // 연차·공동기관
+  check('단일 기관·1개 연차는 편집 탭 숨김', await p.locator('#editBar').isHidden());
+  await p.fill('#gov', '100000');
+  await p.getByLabel('연구재료비 현금(천원)').fill('130000');
+  await p.selectOption('#years', '2');
+  check('2개 연차 → 편집 탭 표시', (await p.locator('#editBar').isVisible()) && (await p.locator('#yearTabs .chip').count()) === 2);
+  await p.click('#yearTabs .chip >> nth=1');
+  check('2차년도는 빈 입력', (await p.inputValue('#gov')) === '' && (await p.textContent('#curLabel')).includes('2차년도'));
+  await p.click('#copyPrev');
+  check('이전 연차 복사', (await p.inputValue('#gov')) === '100,000' && (await p.getByLabel('연구재료비 현금(천원)').inputValue()) === '130,000');
+  await p.fill('#gov', '120000');
+  await p.click('#addInst');
+  check('공동기관 추가 → 해당 기관 편집', (await p.locator('#instTabs .chip').count()) === 2 && (await p.textContent('#curLabel')).includes('공동기관 1 · 1차년도'));
+  await p.getByLabel('기관 2 유형').selectOption('univ');
+  check('기관별 유형: 대학 → 학생인건비·정부 100%', (await p.inputValue('#govMaxPct')) === '100' && (await p.locator('#items tbody tr', { hasText: '학생인건비' }).count()) === 1);
+  await p.fill('#gov', '50000');
+  await p.getByLabel('학생인건비 현금(천원)').fill('40000');
+  const sum = await p.textContent('#summary');
+  check('총괄표: 기관 2 × 연차 2 + 합계', (await p.locator('#summary tbody tr').count()) === 2 && sum.includes('합계'), sum);
+  check('오류 있는 칸 표시', (await p.locator('#summary .sumcell.bad').count()) >= 1 && (await p.textContent('#projChecks')).includes('오류'));
+  await p.locator('#summary tbody tr').first().locator('.sumcell').nth(1).click();
+  check('총괄표 칸 클릭 → 주관 2차년도 편집', (await p.textContent('#curLabel')).includes('2차년도') && (await p.inputValue('#gov')) === '120,000' && (await p.inputValue('#ruleset')) === 'sme');
+  const [dl2] = await Promise.all([p.waitForEvent('download'), p.click('#xlsx')]);
+  const wbx = fs.readFileSync(await dl2.path()).toString('latin1');
+  check('엑셀: 총괄표·기관별·인건비·기준 시트', ['sheet5.xml'].every((n) => wbx.includes(n)));
+  await p.reload();
+  check('새로고침 후 편집 위치·구성 유지', (await p.locator('#instTabs .chip').count()) === 2 && (await p.textContent('#curLabel')).includes('2차년도'));
+  await p.getByLabel('공동기관 1 삭제').click();
+  check('기관 삭제', (await p.locator('#insts tbody tr').count()) === 1);
+  const sw2 = await p.evaluate(() => document.documentElement.scrollWidth);
+  check('다기관 화면 390px 가로 스크롤 없음', sw2 <= 390, String(sw2));
+  await p.click('[data-example="ok"]'); await p.waitForLoadState();
+  check('정상 예시(2기관·2연차): 총괄 오류 0', (await p.locator('#summary .sumcell.bad').count()) === 0 && (await p.locator('#summary tbody tr').count()) === 2 && (await p.textContent('#projChecks')).includes('통과'));
+
   check('콘솔·스크립트 오류 없음', errors.length === 0, errors.join(' | '));
   await browser.close(); server.close();
   const fail = results.filter((x) => !x).length;

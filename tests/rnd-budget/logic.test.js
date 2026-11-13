@@ -65,11 +65,9 @@ test('정부출연금 미입력 시 안내만', () => {
   assert.equal(r.checks[0].level, 'info');
 });
 
-test('XLSX: 올바른 ZIP 구조·CRC·수식·한글', () => {
-  const bytes = RB.buildXlsx(base({ title: '테스트', people: [{ name: '홍길동', salary: 60000, months: 12, rate: 50 }], items: { material: { cash: 100000 } } }), '테스트 <편성표>');
+function unzip(bytes) {
   const buf = Buffer.from(bytes);
   assert.equal(buf.readUInt32LE(0), 0x04034b50);
-  // 로컬 헤더를 따라가며 파일 목록·CRC 검증(무압축)
   const files = {}; let off = 0;
   while (buf.readUInt32LE(off) === 0x04034b50) {
     const crc = buf.readUInt32LE(off + 14), size = buf.readUInt32LE(off + 18), nlen = buf.readUInt16LE(off + 26);
@@ -79,14 +77,63 @@ test('XLSX: 올바른 ZIP 구조·CRC·수식·한글', () => {
     files[name] = data.toString('utf8');
     off += 30 + nlen + size;
   }
-  assert.deepEqual(Object.keys(files).sort(), ['[Content_Types].xml', '_rels/.rels', 'xl/_rels/workbook.xml.rels', 'xl/styles.xml', 'xl/workbook.xml', 'xl/worksheets/sheet1.xml', 'xl/worksheets/sheet2.xml']);
-  const s1 = files['xl/worksheets/sheet1.xml'];
-  assert.match(s1, /테스트 &lt;편성표&gt;/); // XML 이스케이프
-  assert.match(s1, /시행령 별표 1 제1호: 정부지원 75% 이하/); // 적용 기준·근거 포함
-  assert.match(s1, /<f>SUM\(B9:B15\)<\/f>/);
-  assert.match(s1, /<f>D16-B5<\/f>/); // 기관부담금 = 합계 − 정부출연금
-  assert.match(files['xl/worksheets/sheet2.xml'], /홍길동.*신규 채용\(현금\).*<f>ROUND\(B5\/12\*C5\*D5\/100,0\)<\/f>/);
+  return files;
+}
+
+test('XLSX(계획서 양식): 시트 구성·CRC·수식·이스케이프', () => {
+  const files = unzip(RB.buildXlsx(RB.EXAMPLES.ok.state));
+  const wb = files['xl/workbook.xml'];
+  for (const n of ['총괄표', '1.(주)예시테크', '2.예시대학교 산학협력단', '인건비 명세', '적용 기준']) assert.match(wb, new RegExp(`name="${n.replace(/[().]/g, '\\$&')}"`), n);
+  assert.ok(files['xl/worksheets/sheet5.xml']);
+  const t1 = files['xl/worksheets/sheet1.xml'];
+  assert.match(t1, /1차년도 소계/); assert.match(t1, /2차년도 소계/); assert.match(t1, /총 합계/);
+  assert.match(t1, /<f>SUM\(D5:F5\)<\/f>/);
+  const s2 = files['xl/worksheets/sheet2.xml'];
+  assert.match(s2, /■ 1차년도/); assert.match(s2, /■ 전체 연차 합계/); assert.match(s2, /정부지원연구개발비/);
+  assert.match(files['xl/worksheets/sheet4.xml'], /김책임.*기존 인력\(현물\).*<f>ROUND\(D5\/12\*E5\*F5\/100,0\)<\/f>/);
+  assert.match(files['xl/worksheets/sheet5.xml'], /시행령 별표 1 제1호: 정부지원 75% 이하/);
+  // 이스케이프·시트명 금지문자 처리
+  const f2 = unzip(RB.buildXlsx({ v: 2, title: 'A<B>&"C"', years: 1, insts: [{ name: '연구[소]/A:B', role: 'lead', ruleset: 'sme', data: [{ gov: '1000', people: [], items: { material: { cash: '1500' } } }] }] }));
+  assert.match(f2['xl/worksheets/sheet1.xml'], /A&lt;B&gt;&amp;&quot;C&quot;/);
+  assert.match(f2['xl/workbook.xml'], /name="1\.연구 소  A B"/);
   assert.equal(RB.crc32(new TextEncoder().encode('123456789')), 0xcbf43926);
+});
+
+test('계획서 비목 배분: 정부지원·기관 현금 합계 보존', () => {
+  for (const ex of [RB.EXAMPLES.ok.state, RB.EXAMPLES.error.state]) {
+    const P = RB.calcProject(ex);
+    for (const it of P.insts) for (const r of it.years) {
+      const rows = RB.splitCash(r);
+      const g = rows.reduce((a, x) => a + x.gov, 0), o = rows.reduce((a, x) => a + x.orgCash, 0);
+      assert.equal(g, Math.min(r.funding.gov, r.total.cash));
+      assert.equal(g + o, r.total.cash);
+      assert.ok(rows.every((x) => x.gov >= 0 && x.orgCash >= 0));
+    }
+  }
+});
+
+test('과제 단위: 이전 저장값 변환·연차/기관 합계·주관기관 점검', () => {
+  // v1(단일 기관·단일 연차) → v2
+  const p = RB.normalizeProject({ ruleset: 'midS', title: 'T', gov: '1000', people: [{ name: 'A' }], items: { material: { cash: '5' } } });
+  assert.equal(p.v, 2); assert.equal(p.years, 1); assert.equal(p.insts[0].ruleset, 'midS'); assert.equal(p.insts[0].role, 'lead');
+  assert.equal(p.insts[0].data[0].gov, '1000'); assert.equal(p.title, 'T');
+  assert.equal(RB.normalizeProject({ orgType: 'mid' }).insts[0].ruleset, 'midL');
+  // 연차 늘리면 빈 연차 추가, 범위 제한
+  const q = RB.normalizeProject({ v: 2, years: 9, insts: [{ name: 'X', role: 'lead', ruleset: 'zzz', data: [] }] });
+  assert.equal(q.years, 5); assert.equal(q.insts[0].data.length, 5); assert.equal(q.insts[0].ruleset, 'sme');
+  // 합계
+  const P = RB.calcProject(RB.EXAMPLES.ok.state);
+  assert.equal(P.insts.length, 2); assert.equal(P.yearTotals.length, 2);
+  assert.equal(P.total.gov, 800000);
+  assert.equal(P.total.total, P.insts[0].total.total + P.insts[1].total.total);
+  assert.equal(P.yearTotals[0].total + P.yearTotals[1].total, P.total.total);
+  assert.equal(P.insts[1].rules.label, '대학'); // 기관별 기준 적용
+  // 주관기관 0곳·2곳 경고
+  const two = JSON.parse(JSON.stringify(RB.EXAMPLES.ok.state)); two.insts[1].role = 'lead';
+  assert.ok(RB.calcProject(two).checks.some((c) => /주관연구개발기관은 1곳/.test(c.msg)));
+  // 기관·연차별 데이터 독립
+  const sh = RB.sheetState(P.project, 1, 1);
+  assert.equal(sh.ruleset, 'univ'); assert.equal(sh.gov, '100000');
 });
 
 test('법령 기준 고정: 기관 유형별 비율·근거, 직접 입력 시에만 변경', () => {
@@ -134,9 +181,10 @@ test('위탁연구개발비 40%·기존 인력 현금·장비 3천만 원 안내
   assert.ok(r.checks.some((c) => /제114조/.test(c.basis)));
 });
 
-test('체험 예시: 정상 예시는 오류 0건, 오류 예시는 주요 오류 모두 표시', () => {
-  const ok = RB.calcBudget(RB.EXAMPLES.ok.state);
-  assert.equal(ok.checks.filter((c) => c.level === 'error').length, 0);
-  const err = RB.calcBudget(RB.EXAMPLES.error.state).checks.filter((c) => c.level === 'error').map((c) => c.msg).join('\n');
+test('체험 예시: 정상 예시는 모든 기관·연차 오류 0건, 오류 예시는 주요 오류 모두 표시', () => {
+  const ok = RB.calcProject(RB.EXAMPLES.ok.state);
+  for (const it of ok.insts) for (const r of it.years) assert.equal(r.errors, 0, `${it.name}`);
+  assert.equal(ok.checks[0].level, 'ok');
+  const err = RB.calcBudget(RB.sheetState(RB.normalizeProject(RB.EXAMPLES.error.state), 0, 0)).checks.filter((c) => c.level === 'error').map((c) => c.msg).join('\n');
   for (const re of [/최소 총사업비보다/, /현금 .*부족/, /연구수당/, /위탁연구개발비/, /총 참여율/]) assert.match(err, re);
 });
