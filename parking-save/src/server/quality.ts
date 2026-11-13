@@ -8,6 +8,7 @@ import { staleDaysFor } from "./freshness";
 import { calculateFee } from "@/domain/fee";
 import { NON_PRODUCTION_SOURCES } from "./mock";
 import { kstYmd } from "@/lib/time";
+import { hoursAnomaly } from "@/domain/hours-check";
 
 /** 운영 알림 임계값 — 임시값(실데이터 분포 확인 후 조정) */
 export const QUALITY_THRESHOLDS = { syncMaxAgeDays: 3, recordsDropRatio: 0.3, badCoordRatio: 0.05, feeUnknownRatio: 0.5 };
@@ -123,6 +124,11 @@ export async function buildQualityReport(db: Db, now = new Date()): Promise<Qual
   for (const r of feeRows) { const a = byLot.get(r.id) ?? []; a.push({ ruleType: r.t as FeeRule["ruleType"], amount: r.a, durationMinutes: r.m, dayType: r.d as FeeRule["dayType"] }); byLot.set(r.id, a); }
   const suspect = [...byLot.values()].filter((rs) => feeAnomalies(rs).length > 0).length;
   if (suspect > 0) alerts.push({ code: "FEE_SUSPECT", level: "INFO", message: `원천 요금 값이 이상해 보이는 시설 ${suspect}곳(시간당 2만 원 초과·추가단가 급등·일 최대 < 1시간 요금) — 화면에 확인 필요 경고` });
+  // 운영시간 이상치(여는 시각=닫는 시각, 1시간 미만, 형식 오류). 자정 넘김 운영은 정상
+  const hoursRows = await db.all<{ parking_lot_id: number; open_time: string | null; close_time: string | null; all_day_flag: number | null; closed_flag: number | null }>(
+    `SELECT o.parking_lot_id, o.open_time, o.close_time, o.all_day_flag, o.closed_flag FROM operating_schedules o JOIN parking_lots l ON l.id=o.parking_lot_id WHERE l.${live}`);
+  const hoursSuspect = new Set(hoursRows.filter((r) => hoursAnomaly({ openTime: r.open_time, closeTime: r.close_time, allDay: r.all_day_flag === 1, closed: r.closed_flag === 1 })).map((r) => r.parking_lot_id)).size;
+  if (hoursSuspect > 0) alerts.push({ code: "HOURS_SUSPECT", level: "WARN", message: `운영시간 값이 이상해 보이는 시설 ${hoursSuspect}곳(여는 시각=닫는 시각·1시간 미만·형식 오류) — 운영 여부는 '확인 불가'로 표시됨` });
   const reports = Number((await db.get<{ c: number }>("SELECT COUNT(*) AS c FROM lot_reports WHERE status='NEW'"))?.c ?? 0);
   if (reports > 0) alerts.push({ code: "REPORTS_PENDING", level: "INFO", message: `이용자 정보 오류 신고 ${reports}건 검토 대기(npm run reports)` });
 

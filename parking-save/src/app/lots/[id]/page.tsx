@@ -132,6 +132,7 @@ export default async function LotPage({ params, searchParams }: { params: Promis
           </>
         ) : <p className="text-sm">{D.needPeriod}</p>}
         <h3 className="mt-3 text-sm font-semibold">{D.rules}</h3>
+        {d.lot.qualityFlags.includes("FEE_PER_UNIT_FROM_START") && <p className="text-xs text-gray-600">{D.perUnitNote}</p>}
         {d.feeRules.length === 0 ? <p className="text-sm">{D.noRules}</p> : (
           <table className="mt-1 w-full text-sm"><caption className="sr-only">{D.rules}</caption>
             <thead><tr className="text-left text-gray-600">{D.ruleCols.map((c) => <th key={c} scope="col">{c}</th>)}</tr></thead>

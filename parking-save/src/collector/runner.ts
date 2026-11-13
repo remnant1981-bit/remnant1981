@@ -60,8 +60,9 @@ export async function runSync(db: Db, adapter: SourceAdapter, now = new Date()):
         await db.run("INSERT OR IGNORE INTO source_raw_records(source_name, source_record_id, payload_json, payload_hash, source_updated_at, collected_at) VALUES (?,?,?,?,?,?)",
           [adapter.sourceName, key, JSON.stringify(row), hash, lot.sourceUpdatedAt, startedAt]);
         const raw = (await db.get<{ id: number }>("SELECT id FROM source_raw_records WHERE source_name=? AND source_record_id=? AND payload_hash=?", [adapter.sourceName, key, hash]))!;
-        const existing = await db.get<{ id: number; raw_record_id: number | null }>("SELECT id, raw_record_id FROM parking_lots WHERE source_name=? AND source_record_id=?", [adapter.sourceName, key]);
-        if (existing && existing.raw_record_id === raw.id) {
+        const existing = await db.get<{ id: number; raw_record_id: number | null; quality_flags: string | null }>("SELECT id, raw_record_id, quality_flags FROM parking_lots WHERE source_name=? AND source_record_id=?", [adapter.sourceName, key]);
+        // 원문이 같아도 정규화 결과(품질 플래그)가 달라졌으면 다시 저장 — 정규화 규칙을 고친 뒤 기존 시설에도 반영되게
+        if (existing && existing.raw_record_id === raw.id && existing.quality_flags === JSON.stringify(lot.qualityFlags)) {
           await db.run("UPDATE parking_lots SET collected_at=?, data_status='ACTIVE', fee_note=?, quality_flags=? WHERE id=?", [startedAt, lot.feeNote, JSON.stringify(lot.qualityFlags), existing.id]);
           sum.unchanged++; continue;
         }
