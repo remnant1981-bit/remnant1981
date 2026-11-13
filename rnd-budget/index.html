@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://pagead2.googlesyndication.com https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://*.googlesyndication.com https://*.doubleclick.net; frame-src https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="color-scheme" content="light dark">
+<title>R&amp;D 사업비 계산기 — 정부출연금·기관부담금·간접비 편성 점검</title>
+<meta name="description" content="정부 R&D 과제 사업비를 바로 계산합니다. 정부출연금으로 최소 총사업비·기관부담금·현금/현물, 참여연구원 인건비, 연구수당 한도, 간접비를 자동 계산하고 편성 오류를 점검합니다.">
+<link rel="canonical" href="https://remnant1981-bit.github.io/remnant1981/rnd-budget/">
+<meta property="og:title" content="R&amp;D 사업비 계산기">
+<meta property="og:description" content="정부출연금 → 기관부담금·현금/현물·간접비 자동 계산과 편성 점검">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">본문 바로가기</a>
+<header class="top">
+  <div class="wrap">
+    <h1>R&amp;D 사업비 계산기</h1>
+    <p class="sub">정부출연금 → 기관부담금·현금/현물·인건비·간접비를 계산하고 편성 오류를 점검합니다. <strong>무료</strong>, 입력값은 이 브라우저에만 저장됩니다.</p>
+  </div>
+</header>
+
+<main id="main" class="wrap">
+  <section class="card" aria-labelledby="h-fund">
+    <h2 id="h-fund">1. 정부출연금과 기관 유형</h2>
+    <div class="grid3">
+      <label>정부출연금(천원)<input id="gov" inputmode="numeric" placeholder="예: 300,000" autocomplete="off"></label>
+      <label>기관 유형<select id="orgType"></select></label>
+      <label>사업명(선택)<input id="title" maxlength="80" placeholder="예: 액체수소 펌프 개발"></label>
+    </div>
+    <details class="rules">
+      <summary>비율 기준 수정(공고문 기준이 다르면 변경)</summary>
+      <div class="grid4">
+        <label>정부출연금 최대 비율(%)<input id="govMaxPct" inputmode="decimal"></label>
+        <label>기관부담금 중 최소 현금(%)<input id="cashMinPct" inputmode="decimal"></label>
+        <label>간접비율(%)<input id="indirectPct" inputmode="decimal"></label>
+        <label>연구수당 한도(인건비의 %)<input id="allowanceMaxPct" inputmode="decimal"></label>
+      </div>
+      <p class="hint">기본값: 중소 75%/10%, 중견 70%/13%, 대기업 50%/15%, 간접비 10%(고시 비율 없는 기관 가정), 연구수당 20%. 사업·기관마다 다르므로 공고문과 기관 고시 비율을 확인하세요.</p>
+    </details>
+    <dl class="kpis" id="funding" aria-live="polite"></dl>
+  </section>
+
+  <section class="card" aria-labelledby="h-people">
+    <h2 id="h-people">2. 참여연구원 인건비</h2>
+    <p class="hint">기존 인력 인건비는 현물로 계상할 수 있습니다(공고 기준 확인). 신규 채용 인력은 현금.</p>
+    <div class="tbl-wrap"><table class="tbl" id="people">
+      <thead><tr><th>성명</th><th>연봉(천원)</th><th>참여개월</th><th>참여율(%)</th><th>다른 과제 참여율(%)</th><th>현물</th><th>인건비</th><th><span class="sr">삭제</span></th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <button type="button" class="btn ghost" id="addPerson">＋ 연구원 추가</button>
+  </section>
+
+  <section class="card" aria-labelledby="h-items">
+    <h2 id="h-items">3. 비목별 편성</h2>
+    <div class="tbl-wrap"><table class="tbl" id="items">
+      <thead><tr><th>비목</th><th>현금(천원)</th><th>현물(천원)</th><th>합계</th><th>비율</th></tr></thead>
+      <tbody></tbody>
+      <tfoot></tfoot>
+    </table></div>
+  </section>
+
+  <section class="card" aria-labelledby="h-check">
+    <h2 id="h-check">4. 편성 점검</h2>
+    <ul id="checks" class="checks" aria-live="polite"></ul>
+    <div class="actions">
+      <button type="button" class="btn ghost" id="print">인쇄·PDF 저장</button>
+      <button type="button" class="btn ghost" id="reset">초기화</button>
+    </div>
+  </section>
+
+  <aside class="ad" id="ad" hidden aria-label="광고"></aside>
+
+  <section class="card pro" aria-labelledby="h-pro" id="proCard">
+    <h2 id="h-pro">Pro 이용권 <span class="badge" id="proBadge"></span></h2>
+    <ul class="pro-list">
+      <li><strong>엑셀 편성표 내보내기</strong> — 합계·비율이 수식으로 들어간 .xlsx(사업비 편성표·인건비 2개 시트), 계획서에 바로 붙여넣기</li>
+      <li><strong>시나리오 저장</strong> — 정부출연금·인력 구성별 안을 여러 개 저장·비교·불러오기</li>
+    </ul>
+    <div id="proLocked">
+      <p class="price" id="price"></p>
+      <div class="actions">
+        <a class="btn" id="buy" target="_blank" rel="noopener">이용권 구매</a>
+      </div>
+      <label class="code">이용권 코드<input id="licenseCode" autocomplete="off" spellcheck="false" placeholder="구매 후 받은 코드를 붙여 넣으세요"></label>
+      <button type="button" class="btn ghost" id="activate">코드 등록</button>
+      <p class="hint" id="licenseMsg" aria-live="polite"></p>
+    </div>
+    <div id="proTools" hidden>
+      <div class="actions">
+        <button type="button" class="btn" id="xlsx">엑셀(.xlsx) 내보내기</button>
+        <button type="button" class="btn ghost" id="saveScenario">현재 안 저장</button>
+      </div>
+      <ul id="scenarios" class="scenarios"></ul>
+      <p class="hint" id="proInfo"></p>
+    </div>
+  </section>
+
+  <p class="foot">본 계산기는 참고용입니다. 최종 편성은 공고문, 사업별 운영요령, 「국가연구개발혁신법」 및 하위 기준, 기관 간접비 고시 비율을 따르세요. <span id="contact"></span></p>
+</main>
+<script src="config.js"></script>
+<script src="logic.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
