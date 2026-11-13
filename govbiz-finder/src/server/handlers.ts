@@ -1,7 +1,6 @@
 import { route, json, readJson, type Ctx } from "./api";
 import { guestProfileFromCookie } from "./viewer";
 import { companyPlan, listSubscriptions, plansEnabled, setSubscription } from "./plans";
-import { billingStatus, cancelPlanRequest, createPlanRequest, decidePlanRequest, listPlanRequests, startTrial } from "./billing";
 import { addPipelineNote, listPipeline, removePipelineItem, removePipelineNote, savePipelineItem } from "./pipeline";
 import { guestChecksFromCookie, loadCompanyChecks, saveCompanyCheck } from "./checks";
 import type { CompanyView } from "./company";
@@ -177,10 +176,6 @@ export const handlers: Record<string, (req: Request, ...a: any[]) => Promise<Res
     return toggleBookmark(c.db, c.session!.user.id, b.announcementId, false);
   }),
   // ---------- 신청 진행 관리 ----------
-  "GET /api/billing": route({ auth: "user" }, async (_req, c) => billingStatus(c.db, c.session!.user.id)),
-  "POST /api/billing/trial": route({ auth: "user" }, async (req, c) => startTrial(c.db, c.session!.user.id, await readJson(req))),
-  "POST /api/billing/requests": route({ auth: "user" }, async (req, c) => createPlanRequest(c.db, c.session!.user.id, await readJson(req))),
-  "DELETE /api/billing/requests": route({ auth: "user" }, async (req, c) => cancelPlanRequest(c.db, c.session!.user.id, await readJson(req))),
   "GET /api/pipeline": route({ auth: "user" }, async (_req, c) => listPipeline(c.db, c.session!.user.id)),
   "POST /api/pipeline": route({ auth: "user" }, async (req, c) => savePipelineItem(c.db, c.session!.user.id, await readJson(req))),
   "DELETE /api/pipeline": route({ auth: "user" }, async (req, c) => {
@@ -269,8 +264,6 @@ export const handlers: Record<string, (req: Request, ...a: any[]) => Promise<Res
   }),
   "GET /api/admin/subscriptions": route({ auth: "admin" }, async (_req, c) => ({ items: await listSubscriptions(c.db), enabled: plansEnabled() })),
   "PUT /api/admin/subscriptions": route({ auth: "admin" }, async (req, c) => setSubscription(c.db, c.session!.user.id, await readJson(req))),
-  "GET /api/admin/plan-requests": route({ auth: "admin" }, async (_req, c) => ({ items: await listPlanRequests(c.db) })),
-  "POST /api/admin/plan-requests": route({ auth: "admin" }, async (req, c) => decidePlanRequest(c.db, c.session!.user.id, await readJson(req))),
   "GET /api/admin/duplicates": route({ auth: "admin" }, async (_req, c) => ({ items: await listDuplicates(c.db) })),
   "GET /api/admin/audit": route({ auth: "admin" }, async (_req, c) => ({
     items: await c.db.all("SELECT id,admin_user_id,action,target_type,target_id,created_at,metadata_redacted_json FROM admin_audit_logs ORDER BY created_at DESC LIMIT 100"),

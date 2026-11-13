@@ -13,15 +13,12 @@ export function AdminPanel() {
   const [dups, setDups] = useState<Any[]>([]);
   const [audit, setAudit] = useState<Any[]>([]);
   const [subs, setSubs] = useState<{ items: Any[]; enabled: boolean }>({ items: [], enabled: false });
-  const [reqs, setReqs] = useState<Any[]>([]);
   const [msg, setMsg] = useState("");
 
   const load = useCallback(async () => {
     const [a, b, c, d, e] = await Promise.all([api<Any>("GET", "/api/admin/overview"), api<Any>("GET", "/api/admin/claims"), api<Any>("GET", "/api/admin/announcements"), api<Any>("GET", "/api/admin/duplicates"), api<Any>("GET", "/api/admin/audit")]);
     const sb = await api<Any>("GET", "/api/admin/subscriptions");
     if (sb.ok) setSubs(sb.data as { items: Any[]; enabled: boolean });
-    const pr = await api<Any>("GET", "/api/admin/plan-requests");
-    if (pr.ok) setReqs(pr.data.items);
     if (a.ok) setOv(a.data); if (b.ok) setClaims(b.data.items); if (c.ok) setAnns(c.data.items); if (d.ok) setDups(d.data.items); if (e.ok) setAudit(e.data.items);
   }, []);
   // 외부(API) 데이터 동기화를 위한 최초 로드
@@ -89,25 +86,6 @@ export function AdminPanel() {
         <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-sm"><thead><tr className="border-b"><th>사업명</th><th>기관</th><th>상태</th><th>원천</th><th>활성</th><th></th></tr></thead>
           <tbody>{anns.map((a) => (<tr key={a.id} className="border-b"><td className="py-1 pr-2">{a.title}</td><td>{a.organization}</td><td>{a.application_status}</td><td>{a.source_id}</td><td>{a.is_active ? "활성" : "비활성"}</td>
             <td><button className="btn btn-ghost" onClick={() => act(api("PUT", `/api/admin/announcements/${a.id}`, { isActive: !a.is_active }))}>{a.is_active ? "비활성화" : "활성화"}</button></td></tr>))}</tbody></table></div>
-      </section>
-
-      <section aria-labelledby="pr"><h2 id="pr" className="mb-2 text-lg font-bold">이용 신청(입금 확인) <span className="text-sm font-normal text-[var(--muted)]">대기 {reqs.filter((r) => r.status === "pending").length}건</span></h2>
-        <p className="mb-2 text-xs text-[var(--muted)]">통장에서 입금자명·금액을 확인한 뒤 [입금 확인]을 누르면 요금제와 이용 종료일이 자동 설정됩니다(같은 요금제가 유효하면 이어서 연장). 세금계산서는 별도 발행 후 메모에 기록하세요.</p>
-        {reqs.length === 0 ? <p className="text-sm text-[var(--muted)]">신청이 없습니다.</p> : (
-        <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead><tr className="border-b text-left"><th>신청일</th><th>기업</th><th>내용</th><th>입금액</th><th>입금자명</th><th>세금계산서</th><th>상태</th><th>메모</th><th></th></tr></thead>
-          <tbody>{reqs.map((r) => (
-            <tr key={r.id} className="border-b align-top">
-              <td>{formatSeoul(r.created_at)}</td>
-              <td>{r.company_name ?? "(이름 없음)"}<br /><span className="text-xs text-[var(--muted)]">{r.business_number_masked} · {r.email ?? "-"}</span></td>
-              <td>{r.plan === "team" ? "Team" : "Pro"} · {r.cycle === "yearly" ? "연" : "월"} · {r.seats}명{r.memo && <><br /><span className="text-xs text-[var(--muted)]">{r.memo}</span></>}</td>
-              <td><strong>{Number(r.amount_total).toLocaleString()}원</strong><br /><span className="text-xs text-[var(--muted)]">공급가 {Number(r.amount_supply).toLocaleString()}</span></td>
-              <td className="whitespace-nowrap">{r.depositor_name}</td><td>{r.invoice_email}</td>
-              <td className="whitespace-nowrap">{({ pending: "대기", approved: "승인", rejected: "반려", cancelled: "취소" } as Any)[r.status]}</td>
-              <td>{r.status === "pending" ? <input id={`pm-${r.id}`} maxLength={500} className="input !py-1" placeholder="반려 사유·입금일" /> : <span className="text-xs">{r.admin_memo ?? ""}</span>}</td>
-              <td className="whitespace-nowrap">{r.status === "pending" && <>
-                <button className="btn" onClick={() => { if (confirm(`${Number(r.amount_total).toLocaleString()}원 입금을 확인했습니까?`)) act(api("POST", "/api/admin/plan-requests", { requestId: r.id, decision: "approve", adminMemo: (document.getElementById(`pm-${r.id}`) as HTMLInputElement).value }), "입금 확인 처리했습니다."); }}>입금 확인</button>{" "}
-                <button className="btn btn-ghost" onClick={() => { if (confirm("반려할까요?")) act(api("POST", "/api/admin/plan-requests", { requestId: r.id, decision: "reject", adminMemo: (document.getElementById(`pm-${r.id}`) as HTMLInputElement).value }), "반려했습니다."); }}>반려</button></>}</td>
-            </tr>))}</tbody></table></div>)}
       </section>
 
       <section aria-labelledby="sb"><h2 id="sb" className="mb-2 text-lg font-bold">요금제 관리 <span className="text-sm font-normal text-[var(--muted)]">{subs.enabled ? "한도 적용 중(PLANS_ENABLED=true)" : "한도 미적용(판매 전) — 설정만 저장됨"}</span></h2>
