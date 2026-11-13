@@ -5,6 +5,7 @@ import { listFacets, parseSearchParams, toQueryString } from "@/domain/search";
 import { searchWithMatches } from "@/server/recommend";
 import { getViewer } from "@/server/viewer";
 import { bookmarkedIds } from "@/server/userdata";
+import { pipelineStages } from "@/server/pipeline";
 import { AnnouncementCard } from "@/components/AnnouncementCard";
 import { SearchForm } from "@/components/SearchForm";
 import { Empty, Notice, PageTitle } from "@/components/ui";
@@ -24,6 +25,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
     listFacets(db),
     db.get<{ n: number }>("SELECT COUNT(*) AS n FROM announcements WHERE is_active=1"),
   ]);
+  const stages = v.company ? await pipelineStages(db, v.company.id) : new Map<string, string>();
   const marks = v.company && v.session ? await bookmarkedIds(db, v.session.user.id, v.company.id) : new Set<string>();
   const exportQs = toQueryString({ ...p, page: 1 });
   return (
@@ -49,7 +51,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
             : <Empty title="조건에 맞는 공고가 없습니다.">검색어나 필터를 줄여 보세요. (수집된 공고 {total?.n}건 중 일치 항목 없음)</Empty>
         ) : res.rows.map((r, i) => (
           <Fragment key={r.id}>
-            <AnnouncementCard r={r} canBookmark={!!v.company} bookmarked={marks.has(r.id)} />
+            <AnnouncementCard r={r} canBookmark={!!v.company} bookmarked={marks.has(r.id)} stage={stages.get(r.id)} />
             {i === 4 && <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_LIST} />}
           </Fragment>
         ))}

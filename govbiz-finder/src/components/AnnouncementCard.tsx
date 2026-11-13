@@ -3,13 +3,14 @@ import type { RowWithMatch } from "@/server/recommend";
 import { AccuracyChip, CategoryTags, DeadlineChip, FitChip, Provenance, StatusChip, TestBadge } from "./ui";
 import { BookmarkButton } from "./BookmarkButton";
 import { InlineFill } from "./InlineFill";
+import { StageSelect } from "./PipelineControls";
 import { ConditionCheck } from "./ConditionCheck";
 import { checkableConditions } from "@/domain/matching";
 import { deadlineDays } from "@/domain/status";
 import { seoulToday } from "@/lib/time";
 import { shortSummary } from "@/lib/format";
 
-export function AnnouncementCard({ r, canBookmark, bookmarked }: { r: RowWithMatch; canBookmark: boolean; bookmarked?: boolean }) {
+export function AnnouncementCard({ r, canBookmark, bookmarked, stage }: { r: RowWithMatch; canBookmark: boolean; bookmarked?: boolean; stage?: string | null }) {
   const d = r.application_status === "open" ? deadlineDays(r.application_end, seoulToday()) : null;
   const soon = d !== null && d >= 0 && d <= 7;
   const check = r.match?.overall === "needs_check";
@@ -55,7 +56,10 @@ export function AnnouncementCard({ r, canBookmark, bookmarked }: { r: RowWithMat
       <p className="mt-2 line-clamp-2 text-sm text-[var(--muted)]">{r.support_amount_text || shortSummary(r.support_summary) || "지원내용은 상세 페이지에서 확인하세요."}</p>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <Provenance url={r.canonical_url} sourceName={r.source_name} sourceStatus={r.source_status} checkedAt={r.last_checked_at} />
-        <BookmarkButton announcementId={r.id} initial={!!bookmarked} guest={!canBookmark} meta={{ title: r.title, organization: r.organization, end: r.application_end }} />
+        <span className="flex flex-wrap items-center gap-2">
+          {canBookmark && <StageSelect announcementId={r.id} stage={stage ?? null} compact />}
+          <BookmarkButton announcementId={r.id} initial={!!bookmarked} guest={!canBookmark} meta={{ title: r.title, organization: r.organization, end: r.application_end }} />
+        </span>
       </div>
     </article>
   );

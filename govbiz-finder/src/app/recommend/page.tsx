@@ -12,6 +12,7 @@ import { bookmarkedIds } from "@/server/userdata";
 import { profileCompleteness } from "@/domain/taxonomy";
 import { GuestProfileClear } from "@/components/GuestProfileActions";
 import { QuickFill } from "@/components/QuickFill";
+import { pipelineStages } from "@/server/pipeline";
 
 export const metadata: Metadata = { title: "맞춤 추천", alternates: { canonical: "/recommend" } };
 
@@ -36,6 +37,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
     const p = parseSearchParams({ sort: "fit", size: "20", page, status: "open,upcoming,always,unknown", });
     const res = await searchWithMatches(db, p, profile, undefined, { view: tab });
     if (member) await saveMatches(db, v.company!.id, res.rows);
+    const stages = member ? await pipelineStages(db, v.company!.id) : new Map<string, string>();
     const marks = member ? await bookmarkedIds(db, v.session!.user.id, v.company!.id) : new Set<string>();
     const c = res.counts ?? { likely_met: 0, needs_check: 0, likely_not_met: 0, insufficient: 0, possible_mismatch: 0, priority: 0, soon_met: 0 };
     const tabCount: Record<TabId, number> = { priority: c.priority, all: c.likely_met + c.needs_check - c.insufficient, met: c.likely_met, insufficient: c.insufficient, mismatch: c.possible_mismatch };
@@ -79,7 +81,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
         <p className="mt-1 text-xs text-[var(--muted)]">‘판정 정확도’ = 자동 판정한 조건 비율 × 규칙 신뢰도(참고 지표). 기업정보를 더 입력할수록 높아집니다.</p>
         {tab === "met" && <div className="mt-2"><Notice>지역·기업 규모·업력·인증 등 <strong>자동으로 확인할 수 있는 조건</strong>을 모두 충족한 공고입니다. 공고 본문의 기타 조건(업종 한정, 제출서류 등)과 최종 신청 자격은 반드시 공식 원문과 담당기관에서 확인하세요.</Notice></div>}
         <div className="mt-4 grid gap-3">
-          {res.rows.length ? res.rows.map((r) => <AnnouncementCard key={r.id} r={r} canBookmark={member} bookmarked={marks.has(r.id)} />)
+          {res.rows.length ? res.rows.map((r) => <AnnouncementCard key={r.id} r={r} canBookmark={member} bookmarked={marks.has(r.id)} stage={stages.get(r.id)} />)
             : tab === "mismatch" ? <Empty title="추정 조건 때문에 제외한 공고가 없습니다." />
             : tab === "priority" ? <Empty title="관련성 근거가 있는 공고가 아직 없습니다.">기업정보에서 <strong>주력 기술 분야·업종 분야·관심 분야</strong>를 선택하면 우선 추천이 생깁니다. 자격에 걸리지 않는 공고는 <Link className="underline" href="/recommend?tab=all">검토 가능 전체</Link>에서 볼 수 있습니다.</Empty>
             : tab === "met"
