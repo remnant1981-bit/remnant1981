@@ -29,6 +29,9 @@
   <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-6.2-6.5-11.2a6.5 6.5 0 0 1 13 0C18.5 14.8 12 21 12 21z" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="9.8" r="2.3" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
   <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4.5 18.5l1.2-3.6A7.5 7.5 0 1 1 9 18.3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
   <symbol id="i-ig" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="17.2" cy="6.8" r="1" fill="currentColor"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.4a4.3 4.3 0 0 1 7.5 2.4C19.5 15.4 12 20 12 20z" fill="var(--hf,none)" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 10.5L12 4l8 6.5V20h-5v-5.5H9V20H4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
   <symbol id="i-phone" viewBox="0 0 24 24"><path d="M6.6 3.8l2.6-.3 1.6 4-2 1.4a10 10 0 0 0 6.3 6.3l1.4-2 4 1.6-.3 2.6a2 2 0 0 1-2.2 1.8C10.6 18.6 5.4 13.4 4.8 6a2 2 0 0 1 1.8-2.2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
 </svg>
 
@@ -41,6 +44,8 @@
   </nav>
   <button type="button" class="bagbtn" id="bagBtn" aria-label="쇼핑백 열기"><svg><use href="#i-bag"/></svg><span class="bagcount" id="bagCount" hidden>0</span></button>
 </header>
+
+<nav class="stories" id="stories" aria-label="스토리로 보기"></nav>
 
 <main id="top">
   <section class="hero">
@@ -75,6 +80,11 @@
       </div>
       <p class="count" id="count"></p>
       <div class="grid" id="grid"></div>
+    </section>
+
+    <section id="recent" class="recent" aria-labelledby="recentTitle" hidden>
+      <div class="sec-head row"><h2 id="recentTitle">최근 본 옷</h2></div>
+      <div class="mini-rail" id="recentList"></div>
     </section>
 
     <section id="looks" class="looks" aria-labelledby="looksTitle">
@@ -139,12 +149,15 @@
   <p class="biz" id="biz"></p>
 </footer>
 
-<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toastMsg"></span><button type="button" id="toastGo">쇼핑백 보기</button></div>
 
-<div class="bagbar" id="bagbar" hidden><div class="in">
-  <div class="sum"><span id="barCount"></span><b id="barTotal"></b></div>
-  <button type="button" class="btn dark" id="openCart">쇼핑백 보기<svg><use href="#i-arrow"/></svg></button>
-</div></div>
+<nav class="tabbar" aria-label="메뉴">
+  <a href="#top" data-tab="home"><svg><use href="#i-home"/></svg><span>홈</span></a>
+  <a href="#shop" data-tab="shop"><svg><use href="#i-grid"/></svg><span>신상</span></a>
+  <button type="button" id="tabWish"><svg><use href="#i-heart"/></svg><span>찜</span><b class="dot" id="wishCount" hidden></b></button>
+  <button type="button" id="tabBag"><svg><use href="#i-bag"/></svg><span>쇼핑백</span><b class="dot" id="tabBagCount" hidden></b></button>
+  <a href="#visit" data-tab="visit"><svg><use href="#i-pin"/></svg><span>매장</span></a>
+</nav>
 
 <!-- 상품 상세 -->
 <div class="sheet" id="pSheet" hidden><div class="panel product" role="dialog" aria-modal="true" aria-labelledby="pName">
@@ -163,7 +176,7 @@
     <div class="opt"><span class="lab"><span id="pSizeLab">사이즈</span> <em id="pSizeSel"></em></span><div class="chips" id="pSizes"></div><p class="hint" id="pFit"></p></div>
     <p class="err" id="pErr" hidden></p>
     <div class="pactions">
-      <button type="button" class="btn dark block" id="addBtn">쇼핑백에 담기</button>
+      <div class="addrow"><button type="button" class="heart big" id="pHeart" aria-pressed="false" aria-label="찜하기"><svg><use href="#i-heart"/></svg></button><button type="button" class="btn dark block" id="addBtn">쇼핑백에 담기</button></div>
       <div class="sublinks"><a id="pAsk" href="#" target="_blank" rel="noopener"><svg><use href="#i-chat"/></svg>이 옷 물어보기</a><a id="pPost" href="#" target="_blank" rel="noopener"><svg><use href="#i-ig"/></svg>인스타 코디 보기</a></div>
     </div>
     <div class="pair" id="pPairBox"><p class="eyebrow">함께 입으면 예뻐요</p><div class="pair-list" id="pPair"></div></div>
@@ -203,6 +216,22 @@
   <button type="button" class="btn dark block" id="copyOrder">주문 내용 복사</button>
   <a class="btn line block" id="dAsk" href="#" target="_blank" rel="noopener">DM으로 보내기</a>
 </div></div>
+
+<!-- 찜 -->
+<div class="sheet side" id="wSheet" hidden><div class="panel bag" role="dialog" aria-modal="true" aria-labelledby="wTitle">
+  <div class="bag-head"><h2 id="wTitle">찜한 옷</h2><button type="button" class="x" data-close aria-label="닫기"><svg><use href="#i-x"/></svg></button></div>
+  <div class="grid wish" id="wishList"></div>
+</div></div>
+
+<!-- 스토리 -->
+<div class="sv" id="sv" hidden role="dialog" aria-modal="true" aria-label="스토리">
+  <div class="sv-bars" id="svBars"></div>
+  <div class="sv-head"><span class="sv-av" id="svAv"></span><b id="svGroup"></b><button type="button" class="sv-x" id="svClose" aria-label="스토리 닫기"><svg><use href="#i-x"/></svg></button></div>
+  <img class="sv-img" id="svImg" alt="">
+  <button type="button" class="sv-tap prev" id="svPrev" aria-label="이전"></button>
+  <button type="button" class="sv-tap next" id="svNext" aria-label="다음"></button>
+  <div class="sv-cap"><h3 id="svTitle"></h3><p id="svText"></p><button type="button" class="btn ivory" id="svGo" hidden>이 옷 자세히 보기<svg><use href="#i-arrow"/></svg></button></div>
+</div>
 
 <script src="config.js"></script>
 <script src="logic.js"></script>

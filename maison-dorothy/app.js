@@ -10,6 +10,11 @@
   const askName = S.kakaoUrl ? '카톡' : 'DM';
   const src = f => (window.__IMG && window.__IMG[f]) || `images/${f}`;   // 미리보기 번들에서는 내장 이미지 사용
   const arrow = '<svg><use href="#i-arrow"/></svg>';
+  const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') || d; } catch (e) { return d; } };
+  const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 저장 불가 */ } };
+  const wish = new Set(load('dorothy-wish', []).filter(id => byId(id)));
+  let recent = load('dorothy-recent', []).filter(id => byId(id));
+  const buzz = () => { try { navigator.vibrate && navigator.vibrate(12); } catch (e) { /* 미지원 */ } };
 
   /* ---------- 매장 정보 ---------- */
   $('previewBar').hidden = !C.preview;
@@ -47,12 +52,15 @@
     : p.badge === 'NEW' ? '<span class="tag">New</span>'
     : p.badge ? `<span class="tag rec">${esc(p.badge)}</span>` : '';
   const card = (p, i = 9) => `
-    <button type="button" class="card" data-open="${esc(p.id)}"${p.soldOut ? ' disabled' : ''}>
-      <div class="ph">${img(p.img, p.name, i > 3)}${p.gallery && p.gallery[0] ? img(p.gallery[0], '', true, 'alt') : ''}${tag(p)}<span class="quick">자세히 보기</span></div>
-      <span class="nm">${esc(p.name)}</span>
-      <span class="pr${L.hasPrice(p) ? '' : ' ask'}">${L.priceLabel(p)}</span>
-      <span class="fit">${esc(L.fitLabel(p))}</span>
-    </button>`;
+    <div class="card">
+      <button type="button" class="hit" data-open="${esc(p.id)}"${p.soldOut ? ' disabled' : ''}>
+        <div class="ph">${img(p.img, p.name, i > 3)}${p.gallery && p.gallery[0] ? img(p.gallery[0], '', true, 'alt') : ''}${tag(p)}<span class="quick">자세히 보기</span></div>
+        <span class="nm">${esc(p.name)}</span>
+        <span class="pr${L.hasPrice(p) ? '' : ' ask'}">${L.priceLabel(p)}</span>
+        <span class="fit">${esc(L.fitLabel(p))}</span>
+      </button>
+      <button type="button" class="heart" data-heart="${esc(p.id)}" aria-pressed="${wish.has(p.id)}" aria-label="${esc(p.name)} 찜하기"><svg><use href="#i-heart"/></svg></button>
+    </div>`;
 
   /* ---------- 사장님 픽 ---------- */
   const pick = byId(C.pick);
@@ -117,12 +125,43 @@
     const t = L.totals(cart, C.shipping, false);
     $('bagCount').hidden = !t.count; $('bagCount').textContent = t.count;
     if (bump) { $('bagCount').classList.remove('bump'); void $('bagCount').offsetWidth; $('bagCount').classList.add('bump'); }
-    $('bagbar').hidden = !t.count;
-    $('barCount').textContent = `쇼핑백 ${t.count}벌`;
-    $('barTotal').textContent = t.unpriced ? (t.sub ? `${L.won(t.sub)} + 가격 문의` : '가격은 확인 후 안내') : L.won(t.sub);
+    $('tabBagCount').hidden = !t.count; $('tabBagCount').textContent = t.count;
+    if (bump) { $('tabBagCount').classList.remove('bump'); void $('tabBagCount').offsetWidth; $('tabBagCount').classList.add('bump'); }
   }
   let toastTimer = 0;
-  function toast(msg) { $('toast').textContent = msg; $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('toast').hidden = true; }, 2000); }
+  function toast(msg, action) {
+    $('toastMsg').textContent = msg; $('toastGo').hidden = !action; $('toast').hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('toast').hidden = true; }, action ? 3200 : 2000);
+  }
+  $('toastGo').addEventListener('click', () => { $('toast').hidden = true; openBag(); });
+
+  /* ---------- 찜 ---------- */
+  function syncWish() {
+    $('wishCount').hidden = !wish.size; $('wishCount').textContent = wish.size;
+    document.querySelectorAll('[data-heart]').forEach(b => b.setAttribute('aria-pressed', String(wish.has(b.dataset.heart))));
+    if (cur) $('pHeart').setAttribute('aria-pressed', String(wish.has(cur.id)));
+  }
+  function toggleWish(id, btn) {
+    if (wish.has(id)) wish.delete(id); else { wish.add(id); buzz(); }
+    store('dorothy-wish', [...wish]); syncWish();
+    if (btn) { btn.classList.remove('pop'); void btn.offsetWidth; btn.classList.add('pop'); }
+    if (!$('wSheet').hidden) drawWish();
+    toast(wish.has(id) ? '찜했어요. 아래 찜 탭에서 모아볼 수 있어요' : '찜을 해제했어요');
+  }
+  document.addEventListener('click', e => { const h = e.target.closest('[data-heart]'); if (h) toggleWish(h.dataset.heart, h); });
+  function drawWish() {
+    const list = [...wish].map(byId).filter(Boolean);
+    $('wishList').innerHTML = list.length ? list.map(p => card(p)).join('')
+      : '<p class="empty">마음에 드는 옷의 ♡를 눌러 모아보세요.<br><a href="#shop" data-close>신상 보러 가기</a></p>';
+  }
+  $('tabWish').addEventListener('click', () => { drawWish(); show('wSheet'); });
+
+  /* ---------- 최근 본 옷 ---------- */
+  function drawRecent() {
+    const list = recent.map(byId).filter(Boolean);
+    $('recent').hidden = list.length < 2;
+    $('recentList').innerHTML = list.map(p => `<button type="button" class="mini" data-open="${esc(p.id)}"><img src="${src(p.img)}" alt="" width="96" height="120" loading="lazy"><span>${esc(p.name)}</span></button>`).join('');
+  }
 
   /* ---------- 상품 상세 ---------- */
   let cur = null, selC = null, selS = null;
@@ -164,10 +203,13 @@
     $('pPairBox').hidden = !pairs.length;
     $('pPair').innerHTML = pairs.map(p => card(p)).join('');
     $('pErr').hidden = true;
-    $('addBtn').textContent = L.hasPrice(cur) ? '쇼핑백에 담기' : '쇼핑백에 담기 · 가격은 확인 후 안내';
+    $('addBtn').textContent = L.hasPrice(cur) ? '쇼핑백에 담기' : '담기 · 가격은 확인 후 안내';
+    $('pHeart').setAttribute('aria-pressed', String(wish.has(cur.id)));
+    recent = [cur.id, ...recent.filter(x => x !== cur.id)].slice(0, 10); store('dorothy-recent', recent); drawRecent();
     show('pSheet');
     $('pSheet').querySelector('.panel').scrollTop = 0;
   }
+  $('pHeart').addEventListener('click', () => toggleWish(cur.id, $('pHeart')));
   $('pGallery').addEventListener('scroll', () => {
     const g = $('pGallery'), i = Math.round(g.scrollLeft / Math.max(1, g.clientWidth));
     $('pDots').querySelectorAll('i').forEach((d, k) => d.classList.toggle('on', k === i));
@@ -178,8 +220,8 @@
       $('pErr').textContent = needC && !selC ? '컬러를 골라주세요.' : '사이즈를 골라주세요.';
       $('pErr').hidden = false; return;
     }
-    cart = L.addLine(cart, cur, needC ? selC : '', selS); save(); bar(true); hide('pSheet');
-    toast(`${cur.name}을(를) 쇼핑백에 담았어요`);
+    cart = L.addLine(cart, cur, needC ? selC : '', selS); save(); bar(true); hide('pSheet'); buzz();
+    toast('쇼핑백에 담았어요', true);
   });
 
   /* ---------- 쇼핑백 · 주문서 ---------- */
@@ -210,9 +252,9 @@
   });
   document.querySelectorAll('input[name="ship"]').forEach(r => r.addEventListener('change', drawCart));
   $('orderForm').addEventListener('input', () => { $('oErr').hidden = true; });
-  const openBag = () => { drawCart(); show('cSheet'); };
-  $('openCart').addEventListener('click', openBag);
+  function openBag() { drawCart(); show('cSheet'); }
   $('bagBtn').addEventListener('click', openBag);
+  $('tabBag').addEventListener('click', openBag);
 
   $('orderForm').addEventListener('submit', async e => {
     e.preventDefault();
@@ -277,5 +319,83 @@
   }));
   document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.sheet:not([hidden])').forEach(s => hide(s.id)); });
 
-  render(); bar();
+  /* ---------- 스토리 ---------- */
+  const groups = [];
+  if (pick) groups.push({ key: 'pick', name: '사장님 픽', cover: pick.img, slides: [{ img: pick.img, title: pick.name, text: pick.tip, open: pick.id }] });
+  const fresh = C.products.filter(p => p.badge === 'NEW' && !p.soldOut);
+  if (fresh.length) groups.push({ key: 'new', name: '이번 주 신상', cover: fresh[0].img, slides: fresh.map(p => ({ img: p.img, title: p.name, text: p.desc, open: p.id })) });
+  looks.forEach((l, i) => groups.push({ key: 'look' + i, name: l.title, cover: l.img, slides: [{ img: l.img, title: l.title, text: l.note, open: l.items[0] }, ...l.items.map(byId).map(p => ({ img: p.img, title: p.name, text: p.tip, open: p.id }))] }));
+  if (st) groups.push({ key: 'shop', name: '매장 이야기', cover: 'store.jpg', slides: [{ img: 'store.jpg', title: '내포 메종도로시', text: `${S.address} · ${S.landmark}` }, { img: st.photo, title: st.quote, text: st.text }] });
+  const seen = new Set(load('dorothy-seen', []));
+  function drawStories() {
+    $('stories').innerHTML = groups.map((g, i) => `<button type="button" class="st${seen.has(g.key) ? ' seen' : ''}" data-story="${i}"><span class="ring"><img src="${src(g.cover)}" alt="" width="60" height="60"></span><span>${esc(g.name)}</span></button>`).join('');
+  }
+  drawStories();
+  let sg = 0, ss = 0, timer = 0, startAt = 0, left = 0, paused = false;
+  const DUR = 5000;
+  function svShow() {
+    const g = groups[sg], sl = g.slides[ss];
+    $('svGroup').textContent = g.name; $('svAv').style.backgroundImage = `url("${src(g.cover)}")`;
+    $('svImg').src = src(sl.img); $('svImg').alt = sl.title;
+    $('svTitle').textContent = sl.title; $('svText').textContent = sl.text || '';
+    $('svGo').hidden = !sl.open;
+    $('svBars').innerHTML = g.slides.map((_, k) => `<i class="${k < ss ? 'done' : ''}"><b></b></i>`).join('');
+    seen.add(g.key); store('dorothy-seen', [...seen]);
+    run(DUR);
+  }
+  function run(ms) {
+    clearTimeout(timer); left = ms; startAt = Date.now(); paused = false;
+    const b = $('svBars').children[ss].firstChild;
+    b.style.transition = 'none'; b.style.width = `${100 - ms / DUR * 100}%`; void b.offsetWidth;
+    b.style.transition = `width ${ms}ms linear`; b.style.width = '100%';
+    timer = setTimeout(svNext, ms);
+  }
+  function pause() {
+    if (paused) return; paused = true; clearTimeout(timer); left -= Date.now() - startAt;
+    const b = $('svBars').children[ss].firstChild; b.style.width = getComputedStyle(b).width; b.style.transition = 'none';
+  }
+  function svNext() { if (ss < groups[sg].slides.length - 1) { ss++; svShow(); } else if (sg < groups.length - 1) { sg++; ss = 0; svShow(); } else svClose(); }
+  function svPrev() { if (ss > 0) ss--; else if (sg > 0) { sg--; ss = 0; } svShow(); }
+  function svOpen(i) { sg = i; ss = 0; $('sv').hidden = false; document.body.style.overflow = 'hidden'; svShow(); $('svClose').focus({ preventScroll: true }); }
+  function svClose() { clearTimeout(timer); $('sv').hidden = true; document.body.style.overflow = ''; drawStories(); }
+  $('stories').addEventListener('click', e => { const b = e.target.closest('[data-story]'); if (b) svOpen(+b.dataset.story); });
+  $('svClose').addEventListener('click', svClose);
+  let downAt = 0, downY = 0;
+  ['svPrev', 'svNext'].forEach(id => {
+    $(id).addEventListener('pointerdown', e => { downAt = Date.now(); downY = e.clientY; pause(); });
+    $(id).addEventListener('pointerup', e => {
+      if (e.clientY - downY > 80) { svClose(); return; }                 // 아래로 쓸어내리면 닫기
+      if (Date.now() - downAt < 250) { id === 'svPrev' ? svPrev() : svNext(); } else run(left);   // 길게 누르면 멈춤
+    });
+  });
+  $('svGo').addEventListener('click', () => { const id = groups[sg].slides[ss].open; svClose(); openProduct(id); });
+  document.addEventListener('keydown', e => {
+    if ($('sv').hidden) return;
+    if (e.key === 'Escape') svClose(); else if (e.key === 'ArrowRight') svNext(); else if (e.key === 'ArrowLeft') svPrev();
+  });
+
+  /* ---------- 하단 탭 현재 위치 ---------- */
+  const tabs = [...document.querySelectorAll('.tabbar [data-tab]')];
+  function tabState() {
+    const y = scrollY + innerHeight * 0.35;
+    const at = $('visit').offsetTop < y ? 'visit' : $('shop').offsetTop < y ? 'shop' : 'home';
+    tabs.forEach(t => t.classList.toggle('on', t.dataset.tab === at));
+  }
+  addEventListener('scroll', tabState, { passive: true });
+
+  /* ---------- 시트를 아래로 쓸어 닫기 ---------- */
+  document.querySelectorAll('.sheet .panel').forEach(panel => {
+    let y0 = null, dy = 0;
+    panel.addEventListener('touchstart', e => { y0 = panel.scrollTop <= 0 && innerWidth < 720 ? e.touches[0].clientY : null; dy = 0; }, { passive: true });
+    panel.addEventListener('touchmove', e => {
+      if (y0 === null) return; dy = e.touches[0].clientY - y0;
+      if (dy > 0) { panel.classList.add('dragging'); panel.style.transform = `translateY(${dy}px)`; }
+    }, { passive: true });
+    panel.addEventListener('touchend', () => {
+      if (y0 === null) return; panel.classList.remove('dragging'); panel.style.transform = '';
+      if (dy > 110) hide(panel.parentElement.id); y0 = null;
+    });
+  });
+
+  render(); bar(); syncWish(); drawRecent(); tabState();
 })();
