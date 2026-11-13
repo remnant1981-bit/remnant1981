@@ -11,6 +11,7 @@ import { headers } from "next/headers";
 import { clientKey, searchLimiter } from "@/server/rate-limit";
 import { TooManyRequests } from "@/components/TooManyRequests";
 import { ResultsMap, type MapItem } from "@/components/ResultsMap";
+import { tileConfig } from "@/lib/map-tiles";
 import { ShareButton } from "@/components/ShareButton";
 import { CompareTray } from "@/components/CompareControls";
 import { RecentSearchRecorder } from "@/components/RecentSearchRecorder";
@@ -132,7 +133,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         </section>
       )}
       {view === "map" && res.items.length > 0 && (
-        <ResultsMap lang={lang} center={{ lat: res.searchCenter.lat, lng: res.searchCenter.lng, label: centerLabel }} radiusMeters={parsed.params.radiusMeters} items={mapItems} />
+        <ResultsMap lang={lang} tile={tileConfig().tile} center={{ lat: res.searchCenter.lat, lng: res.searchCenter.lng, label: centerLabel }} radiusMeters={parsed.params.radiusMeters} items={mapItems} />
       )}
       {res.items.length === 0 ? (
         <div className="mt-6 rounded border border-gray-300 p-4" role="status">

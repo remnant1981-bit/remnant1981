@@ -4,12 +4,11 @@
 import "leaflet/dist/leaflet.css";
 import { useEffect, useRef } from "react";
 import { clusterLabel, clusterPoints } from "@/domain/cluster";
+import type { TileConfig } from "@/lib/map-tiles";
 import type { Lang } from "@/i18n";
 import { dict } from "@/i18n/dict";
 
 
-export const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-export const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
 
 export interface MapItem { id: number; name: string; lat: number; lng: number; feeLabel: string; tone: "free" | "paid" | "unknown"; amount: number | null; distanceLabel: string; href: string }
 
@@ -52,7 +51,7 @@ function popupEl(item: MapItem): HTMLElement {
   return box;
 }
 
-export function ResultsMap({ center, radiusMeters, items, lang = "ko" }: { center: { lat: number; lng: number; label: string }; radiusMeters: number; items: MapItem[]; lang?: Lang }) {
+export function ResultsMap({ center, radiusMeters, items, tile, lang = "ko" }: { center: { lat: number; lng: number; label: string }; radiusMeters: number; items: MapItem[]; tile: TileConfig; lang?: Lang }) {
   const t = dict(lang).map;
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -62,7 +61,7 @@ export function ResultsMap({ center, radiusMeters, items, lang = "ko" }: { cente
       const L = (await import("leaflet")).default;
       if (disposed || !ref.current) return;
       map = L.map(ref.current, { scrollWheelZoom: false, attributionControl: true });
-      L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTRIBUTION }).addTo(map);
+      L.tileLayer(tile.url, { maxZoom: tile.maxZoom, attribution: tile.attribution }).addTo(map);
       L.circle([center.lat, center.lng], { radius: radiusMeters, color: "#1d4ed8", weight: 1, fillOpacity: 0.04 }).addTo(map);
       L.circleMarker([center.lat, center.lng], { radius: 7, color: "#ffffff", weight: 2, fillColor: "#1d4ed8", fillOpacity: 1 })
         .addTo(map).bindTooltip(`${t.center}: ${center.label}`.replace(/[<>&]/g, ""));
@@ -94,7 +93,7 @@ export function ResultsMap({ center, radiusMeters, items, lang = "ko" }: { cente
       map.on("zoomend", draw);
     })();
     return () => { disposed = true; map?.remove(); };
-  }, [center.lat, center.lng, center.label, radiusMeters, items, lang, t.center, t.zoom]);
+  }, [center.lat, center.lng, center.label, radiusMeters, items, lang, t.center, t.zoom, tile.url, tile.maxZoom, tile.attribution]);
 
   return (
     <div className="mt-4">

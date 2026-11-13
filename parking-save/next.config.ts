@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { TILE_HOSTS } from "./src/lib/map-tiles";
 
 const securityHeaders = [
   // HTTPS 강제(운영만). nginx+certbot으로 HTTPS 제공 후 유효 — HTTP로 접속하면 브라우저가 무시함. 하위 도메인·preload는 도메인 확정 후 결정
@@ -12,7 +13,7 @@ const securityHeaders = [
   {
     key: "Content-Security-Policy",
     value:
-      "default-src 'self'; img-src 'self' data: https://tile.openstreetmap.org; style-src 'self' 'unsafe-inline'; " +
+      `default-src 'self'; img-src 'self' data: ${TILE_HOSTS.join(" ")}; style-src` + " 'self' 'unsafe-inline'; " +
       "script-src 'self' 'unsafe-inline'" + (process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'") +
       "; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
   },
