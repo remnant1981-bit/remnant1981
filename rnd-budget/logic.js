@@ -32,6 +32,7 @@
   const LIMITS = {
     allowancePct: 20, // 제26조①: 수정인건비(현물 포함 인건비+학생인건비)의 20% 이내
     outsourcePct: 40, // 제27조①: (직접비 − 위탁 − 국제공동 − 연구개발부담비)의 40% 이하
+    execDeviationPct: 25, // 집행 현황판: 경과율 대비 부진·과속 기준(%p)
     rateMax: 100, // 제65조⑦: 영리기관 참여연구자 총인건비계상률 월 100% 이하
   };
 
@@ -204,7 +205,7 @@
   // project v2: { v:2, title, years, insts:[{ name, role:'lead'|'joint', ruleset, govMaxPct, cashMinPct, indirectPct, allowanceMaxPct, data:[{gov, people, items}] }] }
   const MAX_YEARS = 5, MAX_INSTS = 10;
   const ROLES = { lead: '주관연구개발기관', joint: '공동연구개발기관' };
-  const blankYear = () => ({ gov: '', people: [{ name: '', salary: '', months: 12, rate: '', otherRate: '', kind: 'existing' }], items: {} });
+  const blankYear = () => ({ exec: blankExec(), gov: '', people: [{ name: '', salary: '', months: 12, rate: '', otherRate: '', kind: 'existing' }], items: {} });
   const newInst = (role = 'joint', n = 1) => ({ name: role === 'lead' ? '주관기관' : `공동기관 ${n}`, role, ruleset: 'sme', govMaxPct: '', cashMinPct: '', indirectPct: '', allowanceMaxPct: '', data: [blankYear()] });
 
   /** 이전 버전(단일 기관·단일 연차) 저장값 포함 → v2 로 정리 */
@@ -227,7 +228,7 @@
       inst.name = String(inst.name || '').slice(0, 40) || '기관';
       inst.data = Array.isArray(inst.data) ? inst.data.slice(0, MAX_YEARS) : [];
       while (inst.data.length < p.years) inst.data.push(blankYear());
-      for (const d of inst.data) { d.people = Array.isArray(d.people) ? d.people : []; d.items = d.items && typeof d.items === 'object' ? d.items : {}; }
+      for (const d of inst.data) { d.people = Array.isArray(d.people) ? d.people : []; d.items = d.items && typeof d.items === 'object' ? d.items : {}; d.exec = normalizeExec(d.exec); }
     }
     return p;
   }
@@ -467,7 +468,135 @@
     return workbook(sheets);
   }
 
-  const RB = { MAX_YEARS, MAX_INSTS, ROLES, blankYear, newInst, normalizeProject, sheetState, calcProject, splitCash, EXAMPLES, BASIS_DATE, SOURCES, RULESETS, LIMITS, ITEMS, PERSON_KINDS, DEFAULT_RULES, int, pct, effectiveRules, calcFunding, personCost, calcBudget, buildXlsx, crc32 };
+  // ---------- 집행 현황판(A1) ----------
+  // data[y].exec = { start, end, cashDue, agreed:{key:cash}, monthly:{key:[12]}, paid:[{date, amount}] }
+  const isYmd = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && new Date(s + 'T00:00:00Z').toISOString().slice(0, 10) === s;
+  const dnum = (s) => Date.parse(s + 'T00:00:00Z') / 86400000;
+  const ymdAddMonths = (s, n) => {
+    const d = new Date(s + 'T00:00:00Z'); const day = d.getUTCDate();
+    d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + n);
+    const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+    d.setUTCDate(Math.min(day, last));
+    return d.toISOString().slice(0, 10);
+  };
+  const blankExec = () => ({ start: '', end: '', cashDue: '', agreed: {}, monthly: {}, paid: [] });
+  function normalizeExec(e) {
+    const x = e && typeof e === 'object' ? e : {};
+    return {
+      start: isYmd(x.start) ? x.start : '', end: isYmd(x.end) ? x.end : '', cashDue: isYmd(x.cashDue) ? x.cashDue : '',
+      agreed: x.agreed && typeof x.agreed === 'object' ? x.agreed : {},
+      monthly: x.monthly && typeof x.monthly === 'object' ? x.monthly : {},
+      paid: Array.isArray(x.paid) ? x.paid.slice(0, 100) : [],
+    };
+  }
+  /** 연차 시작월부터 12개월 라벨(예: '2026-04') */
+  function execMonths(start) {
+    if (!isYmd(start)) return [];
+    return Array.from({ length: 12 }, (_, k) => ymdAddMonths(start.slice(0, 8) + '01', k).slice(0, 7));
+  }
+
+  /**
+   * 한 기관·연차의 집행 현황. today: 기준일(YYYY-MM-DD)
+   * 반환: { ready, months, elapsedPct, days, rows:[{key,label,plan,agreed,spent,remain,rate,status}], total, org, schedule, checks }
+   */
+  function calcExecution(raw, i, y, today, endOfProject) {
+    const p = normalizeProject(raw);
+    const plan = calcBudget(sheetState(p, i, y));
+    const ex = normalizeExec(p.insts[i].data[y].exec);
+    const dev = LIMITS.execDeviationPct;
+    const ready = isYmd(ex.start) && isYmd(ex.end) && ex.end >= ex.start;
+    const totalDays = ready ? dnum(ex.end) - dnum(ex.start) + 1 : 0;
+    const passed = ready ? Math.min(totalDays, Math.max(0, dnum(today) - dnum(ex.start) + 1)) : 0;
+    const elapsedPct = ready ? Math.round((passed / totalDays) * 1000) / 10 : 0;
+    const rows = plan.rows.filter((r) => r.cash > 0 || int(ex.agreed[r.key]) || (ex.monthly[r.key] || []).some((v) => int(v))).map((r) => {
+      const agreed = String(ex.agreed[r.key] ?? '') !== '' ? int(ex.agreed[r.key]) : r.cash;
+      const spent = (ex.monthly[r.key] || []).slice(0, 12).reduce((a, v) => a + int(v), 0);
+      const rate = agreed ? Math.round((spent / agreed) * 1000) / 10 : spent ? 999 : 0;
+      let status = 'ok';
+      if (spent > agreed) status = 'over';
+      else if (ready && spent > 0 && rate > elapsedPct + dev && r.key !== 'personnel') status = 'fast';
+      else if (ready && agreed > 0 && rate < elapsedPct - dev) status = 'slow';
+      return { key: r.key, label: r.label, plan: r.cash, agreed, spent, remain: agreed - spent, rate, status };
+    });
+    const sum = (k) => rows.reduce((a, r) => a + r[k], 0);
+    const total = { agreed: sum('agreed'), spent: sum('spent'), remain: sum('remain') };
+    total.rate = total.agreed ? Math.round((total.spent / total.agreed) * 1000) / 10 : 0;
+    const orgPlan = Math.max(0, plan.total.cash - plan.funding.gov);
+    const paid = ex.paid.reduce((a, x) => a + int(x.amount), 0);
+    const cashDue = ex.cashDue || (ready ? ymdAddMonths(ex.end, -3) : '');
+    const org = { plan: orgPlan, min: plan.funding.cashMin, paid, due: cashDue };
+
+    const fmt = (n) => n.toLocaleString('ko-KR');
+    const checks = [], schedule = [];
+    const dd = (d) => dnum(d) - dnum(today);
+    if (!ready) checks.push({ level: 'info', msg: '연차 시작일·종료일(협약 기준)을 입력하면 경과율·기한이 계산됩니다.' });
+    for (const r of rows) {
+      if (r.status === 'over') checks.push({ level: 'error', msg: `${r.label} ${fmt(r.spent)}천원 — 협약액 ${fmt(r.agreed)}천원 초과(${fmt(-r.remain)}천원). 비목 간 변경(전문기관 승인 대상일 수 있음) 여부를 확인하세요.`, basis: r.key === 'allowance' ? '사용 기준 제26조' : '' });
+      else if (r.status === 'slow') checks.push({ level: 'warn', msg: `${r.label} 집행률 ${r.rate}% — 경과율 ${elapsedPct}% 대비 부진(기준 ${dev}%p).` });
+      else if (r.status === 'fast') checks.push({ level: 'warn', msg: `${r.label} 집행률 ${r.rate}% — 경과율 ${elapsedPct}% 대비 과속(기준 ${dev}%p). 일괄 구입·계약이면 정상.` });
+    }
+    if (ready && orgPlan > 0) {
+      const left = orgPlan - paid, d = dd(cashDue);
+      schedule.push({ label: '기관부담 현금 납부 기한', date: cashDue, dday: d, done: left <= 0 });
+      if (left > 0) checks.push({ level: d < 0 ? 'error' : 'warn', msg: `기관부담 현금 ${fmt(left)}천원 미납 — 기한 ${cashDue}${ex.cashDue ? '(협약)' : '(연차 종료 3개월 전)'}${d < 0 ? ' 경과' : `, D-${d}`}.`, basis: '사용 기준 제60조②' });
+    }
+    const equip = rows.find((r) => r.key === 'equipment');
+    const projEnd = isYmd(endOfProject) ? endOfProject : ready ? ex.end : '';
+    if (projEnd && equip && equip.agreed > 0) {
+      const due = ymdAddMonths(projEnd, -2), d = dd(due);
+      schedule.push({ label: '장비 구입 완료 기한(과제 종료 2개월 전)', date: due, dday: d, done: equip.spent >= equip.agreed });
+      if (equip.spent < equip.agreed && d < 0) checks.push({ level: 'error', msg: `장비 구입 기한(${due}) 경과 — 미집행 ${fmt(equip.agreed - equip.spent)}천원.`, basis: '사용 기준 제23조' });
+    }
+    if (ready) {
+      const d = dd(ex.end);
+      schedule.push({ label: `${y + 1}차년도 종료`, date: ex.end, dday: d, done: d < 0 });
+      if (d >= 0 && d <= 30 && total.remain > 0) checks.push({ level: 'warn', msg: `연차 종료 D-${d} — 잔액 ${fmt(total.remain)}천원. 이월·반납 기준은 사업별 운영요령을 확인하세요.` });
+    }
+    if (ready && rows.length && !checks.some((c) => c.level === 'error' || c.level === 'warn')) checks.push({ level: 'ok', msg: '초과·부진 비목이 없습니다.' });
+    return { ready, start: ex.start, end: ex.end, months: execMonths(ex.start), elapsedPct, days: { passed, total: totalDays }, rows, total, org, schedule, checks, inkind: plan.total.inkind };
+  }
+
+  /** 집행 현황 엑셀: ① 비목별 현황(수식) ② 월별 집행 ③ 기관부담 현금 납부 ④ 점검 */
+  function buildExecXlsx(raw, i, y, today, endOfProject) {
+    const p = normalizeProject(raw);
+    const E = calcExecution(p, i, y, today, endOfProject);
+    const ex = normalizeExec(p.insts[i].data[y].exec);
+    const N = 1, B = 2, T = 3, TN = 4, H = 5;
+    const head = (...v) => v.map((x) => ({ v: x, s: H }));
+    const num = (v) => ({ v, s: TN }), f = (x) => ({ f: x, s: TN }), txt = (v) => ({ v, s: T });
+    const title = `${p.title || 'R&D 과제'} — ${p.insts[i].name} ${y + 1}차년도 집행 현황`;
+    const t1 = [[{ v: title, s: B }], [`단위: 천원(현금) · 기준일 ${today} · 연차 ${E.start || '-'} ~ ${E.end || '-'} · 경과율 ${E.elapsedPct}%`], [],
+      head('비목', '협약(현금)', '집행 누계', '잔액', '집행률(%)', '상태')];
+    const st = { ok: '정상', over: '초과', slow: '부진', fast: '과속' };
+    const s0 = t1.length + 1;
+    E.rows.forEach((r) => { const n = t1.length + 1; t1.push([txt(r.label), num(r.agreed), num(r.spent), f(`B${n}-C${n}`), f(`IF(B${n}=0,0,ROUND(C${n}/B${n}*100,1))`), txt(st[r.status])]); });
+    const e0 = t1.length, tn = e0 + 1;
+    t1.push([{ v: '합계', s: H }, f(`SUM(B${s0}:B${e0})`), f(`SUM(C${s0}:C${e0})`), f(`SUM(D${s0}:D${e0})`), f(`IF(B${tn}=0,0,ROUND(C${tn}/B${tn}*100,1))`), txt('')]);
+    t1.push([], [`현물 ${E.inkind.toLocaleString('ko-KR')}천원은 편성액 기준(집행 관리 대상 아님). 부진·과속 기준: 경과율 ±${LIMITS.execDeviationPct}%p.`]);
+    const t2 = [[{ v: '월별 집행(현금)', s: B }], ['단위: 천원'], [], head('비목', ...E.months, '합계')];
+    const m0 = t2.length + 1;
+    E.rows.forEach((r) => {
+      const n = t2.length + 1, vals = (ex.monthly[r.key] || []);
+      t2.push([txt(r.label), ...Array.from({ length: 12 }, (_, k) => num(int(vals[k]))), f(`SUM(B${n}:M${n})`)]);
+    });
+    if (E.rows.length) { const n = t2.length + 1; t2.push([{ v: '합계', s: H }, ...Array.from({ length: 13 }, (_, k) => { const c = String.fromCharCode(66 + k); return f(`SUM(${c}${m0}:${c}${n - 1})`); })]); }
+    const t3 = [[{ v: '기관부담 현금 납부', s: B }], [`계획 ${E.org.plan.toLocaleString('ko-KR')}천원 · 최소 ${E.org.min.toLocaleString('ko-KR')}천원 · 기한 ${E.org.due || '-'}`], [], head('납부일', '금액(천원)')];
+    const p0 = t3.length + 1;
+    ex.paid.filter((x) => int(x.amount)).forEach((x) => t3.push([txt(x.date || ''), num(int(x.amount))]));
+    if (t3.length >= p0) t3.push([{ v: '합계', s: H }, f(`SUM(B${p0}:B${t3.length})`)]);
+    const t4 = [[{ v: '점검·일정', s: B }], [], head('구분', '내용', '근거')];
+    E.checks.forEach((c) => t4.push([txt({ error: '오류', warn: '주의', ok: '통과', info: '안내' }[c.level]), txt(c.msg), txt(c.basis || '')]));
+    E.schedule.forEach((s) => t4.push([txt('일정'), txt(`${s.label}: ${s.date} (${s.dday >= 0 ? `D-${s.dday}` : `D+${-s.dday}`})`), txt('')]));
+    t4.push([], ['※ 참고용입니다. 집행 기준은 사업별 운영요령·협약이 우선합니다.']);
+    return workbook([
+      { name: '집행 현황', rows: t1, widths: [20, 14, 14, 14, 12, 10] },
+      { name: '월별 집행', rows: t2, widths: [18, ...Array(12).fill(10), 12] },
+      { name: '기관부담 현금', rows: t3, widths: [16, 14] },
+      { name: '점검·일정', rows: t4, widths: [8, 90, 22] },
+    ]);
+  }
+
+  const RB = { isYmd, ymdAddMonths, blankExec, normalizeExec, execMonths, calcExecution, buildExecXlsx, MAX_YEARS, MAX_INSTS, ROLES, blankYear, newInst, normalizeProject, sheetState, calcProject, splitCash, EXAMPLES, BASIS_DATE, SOURCES, RULESETS, LIMITS, ITEMS, PERSON_KINDS, DEFAULT_RULES, int, pct, effectiveRules, calcFunding, personCost, calcBudget, buildXlsx, crc32 };
   if (typeof module !== 'undefined' && module.exports) module.exports = RB;
   else root.RB = RB;
 })(typeof self !== 'undefined' ? self : this);

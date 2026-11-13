@@ -11,6 +11,7 @@ window.RB_CONFIG = {
     faq: false,         // 자주 묻는 질문
     steps: false,       // 상단 단계 메뉴
     legalHeader: false, // 상단 적용 법령 문구(하단 안내에는 항상 표시)
+    execution: false,   // 집행 현황판(편성/집행 전환, 월별 집행·점검·일정·백업) — 3단계 공개 예정
   },
   // 문의 연락처(비우면 표시 안 함)
   contact: '',

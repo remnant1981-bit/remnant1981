@@ -29,6 +29,7 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   // ① 기본 설정(1단계 공개 범위): 꺼진 기능은 숨김
   await p.goto(base);
   check('기본: 과제 구성·안 저장·FAQ·단계 메뉴 숨김', (await p.locator('#s0').isHidden()) && (await p.locator('#saveScenario').isHidden()) && (await p.locator('.faq').isHidden()) && (await p.locator('.steps').isHidden()));
+  check('기본: 집행 전환 숨김', await p.locator('#modeBar').isHidden());
   check('기본: 예시·엑셀·점검 표시', (await p.locator('.demo-bar').isVisible()) && (await p.locator('#xlsx').isVisible()) && (await p.locator('#s4').isVisible()));
   await p.click('[data-example="ok"]'); await p.waitForLoadState();
   check('기본: 예시는 첫 기관·1차년도만', (await p.locator('#summary').isHidden()) && (await p.inputValue('#gov')) === '300,000' && (await p.locator('#checks .error').count()) === 0);
@@ -143,6 +144,56 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   check('다기관 화면 390px 가로 스크롤 없음', sw2 <= 390, String(sw2));
   await p.click('[data-example="ok"]'); await p.waitForLoadState();
   check('정상 예시(2기관·2연차): 총괄 오류 0', (await p.locator('#summary .sumcell.bad').count()) === 0 && (await p.locator('#summary tbody tr').count()) === 2 && (await p.textContent('#projChecks')).includes('통과'));
+
+  // ③ 집행 현황판(execution 켬), 기준일 고정
+  const xc = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+  await xc.clock.setFixedTime(new Date('2026-11-13T12:00:00+09:00'));
+  const x = await xc.newPage();
+  x.on('pageerror', (e) => errors.push(e.message));
+  x.on('dialog', (d) => d.accept());
+  await x.route('**/config.js', (r) => r.fulfill({ contentType: 'text/javascript', body: 'window.RB_CONFIG={features:{examples:true,execution:true}};' }));
+  await x.goto(base);
+  await x.click('[data-example="ok"]'); await x.waitForLoadState();
+  check('집행: 전환 버튼 표시', await x.locator('#modeBar').isVisible());
+  await x.click('#modeBar [data-mode="exec"]');
+  check('집행 화면 전환', (await x.locator('#execView').isVisible()) && (await x.locator('#planView').isHidden()));
+  check('기간 미입력 안내', (await x.textContent('#xChecks')).includes('시작일·종료일'));
+  await x.fill('#xStart', '2026-04-01'); await x.fill('#xEnd', '2027-03-31');
+  check('경과율 62.2%', (await x.textContent('#xKpis')).includes('62.2%'), await x.textContent('#xKpis'));
+  check('월 헤더(26.04~)', (await x.textContent('#xGrid thead')).includes('26.04'));
+  await x.getByLabel('연구수당 2026-09 집행액(천원)').fill('4500');
+  await x.getByLabel('연구수당 2026-11 집행액(천원)').fill('5000');
+  await x.getByLabel('연구재료비 2026-05 집행액(천원)').fill('31200');
+  const xr = await x.textContent('#xRows');
+  check('현황표: 연구수당 초과·재료비 부진', xr.includes('✖ 초과') && xr.includes('⚠ 부진') && xr.includes('-500'), xr);
+  check('점검: 초과 오류 먼저', (await x.locator('#xChecks li').first().getAttribute('class')) === 'error');
+  await x.click('#xAddPaid');
+  await x.getByLabel('납부 1 금액(천원)').fill('5000');
+  check('기관부담 현금 납부 누계', (await x.textContent('#xPaidSum')).startsWith('5,000 / 13,900'));
+  check('일정 D-48', (await x.textContent('#xSched')).includes('D-48'));
+  await x.getByLabel('연구수당 협약 금액(천원, 비우면 편성액)').fill('10000');
+  check('협약 금액 조정 → 초과 해소', !(await x.textContent('#xRows')).includes('✖ 초과'));
+  const [xd] = await Promise.all([x.waitForEvent('download'), x.click('#xXlsx')]);
+  check('집행 현황 엑셀', xd.suggestedFilename().endsWith('.xlsx') && fs.readFileSync(await xd.path()).readUInt32LE(0) === 0x04034b50, xd.suggestedFilename());
+  const [bd] = await Promise.all([x.waitForEvent('download'), x.click('#backupSave')]);
+  const backupPath = await bd.path();
+  const bj = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
+  check('백업 파일(JSON)', bj.app === 'rnd-budget' && bj.project.insts[0].data[0].exec.start === '2026-04-01');
+  await x.reload();
+  check('새로고침 후 집행 화면·입력 유지', (await x.locator('#execView').isVisible()) && (await x.inputValue('#xStart')) === '2026-04-01');
+  await x.evaluate(() => localStorage.clear()); await x.reload();
+  check('초기화 후 빈 상태', (await x.locator('#planView').isVisible()) && (await x.inputValue('#gov')) === '');
+  await x.click('#modeBar [data-mode="exec"]');
+  const fp = path.join(require('os').tmpdir(), 'rb-backup.json'); fs.copyFileSync(backupPath, fp);
+  await x.setInputFiles('#backupLoad', fp); await x.waitForLoadState(); await x.waitForTimeout(300);
+  check('백업 불러오기 → 복원', (await x.inputValue('#xStart')) === '2026-04-01' && (await x.textContent('#xRows')).includes('9,500'));
+  await x.setInputFiles('#backupLoad', { name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{"x":1}') });
+  check('잘못된 백업 거부(기존 유지)', (await x.inputValue('#xStart')) === '2026-04-01');
+  const sw3 = await x.evaluate(() => document.documentElement.scrollWidth);
+  check('집행 화면 PC 가로 스크롤 없음', sw3 <= 1440, String(sw3));
+  await x.click('#modeBar [data-mode="plan"]');
+  check('편성으로 복귀', await x.locator('#planView').isVisible());
+  await xc.close();
 
   check('콘솔·스크립트 오류 없음', errors.length === 0, errors.join(' | '));
   await browser.close(); server.close();

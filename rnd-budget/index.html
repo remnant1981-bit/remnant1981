@@ -53,12 +53,17 @@
     </details>
   </section>
 
+  <div class="modebar" id="modeBar" role="tablist" aria-label="화면 전환" data-feature="execution">
+    <button type="button" class="chip on" role="tab" data-mode="plan" aria-selected="true">편성</button>
+    <button type="button" class="chip" role="tab" data-mode="exec" aria-selected="false">집행</button>
+  </div>
+
   <nav class="edit-bar" id="editBar" aria-label="편집할 기관·연차">
     <div class="eb-row"><span class="eb-label">편집 중</span><div class="chips" id="instTabs"></div></div>
     <div class="eb-row"><span class="eb-label"></span><div class="chips" id="yearTabs"></div><button type="button" class="btn ghost sm" id="copyPrev">이전 연차 복사</button></div>
   </nav>
 
-  <div class="layout">
+  <div class="layout" id="planView">
     <div class="col-main">
   <section class="card" id="s1" aria-labelledby="h-fund">
     <h2 id="h-fund"><span class="no">1</span>기관 유형과 정부출연금 <span class="cur" id="curLabel"></span></h2>
@@ -157,6 +162,54 @@
     <p class="hint">엑셀: 총괄표 · 기관별 사용계획 · 인건비 명세 · 적용 기준(합계는 수식). 입력값은 이 브라우저에 자동 저장됩니다.</p>
     <ul id="scenarios" class="scenarios" data-feature="scenarios"></ul>
   </section>
+    </aside>
+  </div>
+
+  <div class="layout" id="execView" hidden>
+    <div class="col-main">
+      <section class="card" id="x1" aria-labelledby="h-x1">
+        <h2 id="h-x1"><span class="no">1</span>연차 기간 <span class="cur" id="xCur"></span></h2>
+        <div class="grid3">
+          <label>시작일(협약)<input type="date" id="xStart"></label>
+          <label>종료일(협약)<input type="date" id="xEnd"></label>
+          <label>기관부담 현금 납부 기한(협약, 선택)<input type="date" id="xDue"></label>
+        </div>
+        <dl class="kpis" id="xKpis" aria-live="polite"></dl>
+      </section>
+      <section class="card" id="x2" aria-labelledby="h-x2">
+        <h2 id="h-x2"><span class="no">2</span>비목별 집행 현황 <span class="cur">현금 · 천원</span></h2>
+        <div class="tbl-wrap"><table class="tbl" id="xRows"></table></div>
+        <p class="hint" id="xHint"></p>
+      </section>
+      <section class="card" id="x3" aria-labelledby="h-x3">
+        <h2 id="h-x3"><span class="no">3</span>월별 집행 입력</h2>
+        <div class="tbl-wrap"><table class="tbl" id="xGrid"></table></div>
+        <p class="hint">연구비 관리 시스템의 월별 집행액(현금)을 비목별로 입력합니다. 현물은 편성액 기준이며 입력하지 않습니다.</p>
+      </section>
+      <section class="card" id="x4" aria-labelledby="h-x4">
+        <h2 id="h-x4"><span class="no">4</span>기관부담 현금 납부</h2>
+        <div class="tbl-wrap"><table class="tbl" id="xPaid"></table></div>
+        <button type="button" class="btn ghost" id="xAddPaid">＋ 납부 추가</button>
+      </section>
+    </div>
+    <aside class="col-side" aria-label="집행 요약·점검·일정">
+      <section class="card live" aria-labelledby="h-xl">
+        <h2 id="h-xl">집행 요약</h2>
+        <dl class="live-grid" id="xLive" aria-live="polite"></dl>
+        <div class="meter" aria-hidden="true"><span id="xMeter"></span></div>
+        <p class="meter-legend" id="xLegend"></p>
+      </section>
+      <section class="card" aria-labelledby="h-xc"><h2 id="h-xc">점검</h2><ul id="xChecks" class="checks" aria-live="polite"></ul></section>
+      <section class="card" aria-labelledby="h-xs">
+        <h2 id="h-xs">다가오는 일정</h2>
+        <ul class="dday" id="xSched"></ul>
+        <div class="actions">
+          <button type="button" class="btn" id="xXlsx">집행 현황 엑셀</button>
+          <button type="button" class="btn ghost" id="backupSave">백업 저장</button>
+          <label class="btn ghost" id="backupLoadBtn">백업 불러오기<input type="file" id="backupLoad" accept=".json,application/json" hidden></label>
+        </div>
+        <p class="hint">집행 기록은 이 브라우저에만 저장됩니다. 브라우저 정리·PC 교체 전에 <strong>백업 저장</strong>하세요.</p>
+      </section>
     </aside>
   </div>
 
