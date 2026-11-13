@@ -101,7 +101,7 @@ describe("robots·sitemap", () => {
     } finally {
       env.PARKING_MOCK_DATA = saved.m; env.SITE_URL = saved.s;
       if (saved.m === undefined) delete env.PARKING_MOCK_DATA; if (saved.s === undefined) delete env.SITE_URL;
-      setDb(undefined); resetAppDbForTest(); resetAreaCacheForTest();
+      setDb(undefined); resetAppDbForTest(); resetAreaCacheForTest(); (await import("@/app/sitemap")).resetSitemapCacheForTest();
     }
   });
 });
