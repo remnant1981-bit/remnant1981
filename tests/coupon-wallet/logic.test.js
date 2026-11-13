@@ -159,3 +159,65 @@ test('uid: 충돌 없음', () => {
   const s = new Set(Array.from({ length: 5000 }, () => CW.uid()));
   assert.equal(s.size, 5000);
 });
+
+/* ---------- 기프티콘 자동 인식 ---------- */
+const scanJson = o => JSON.stringify({ is_coupon: true, brand: '', title: '', value: 0, expires: '', code: '', memo: '', confidence: 'high', ...o });
+
+test('SCAN_SCHEMA: 모든 속성이 필수이고 추가 속성 금지(구조화 출력 요건)', () => {
+  const props = Object.keys(CW.SCAN_SCHEMA.properties).sort();
+  assert.deepEqual([...CW.SCAN_SCHEMA.required].sort(), props);
+  assert.equal(CW.SCAN_SCHEMA.additionalProperties, false);
+  assert.equal(CW.DEFAULT_SCAN_MODEL, 'claude-opus-5-5');
+  assert.ok(CW.SCAN_MODELS.some(m => m.id === 'claude-haiku-5-5' && m.fallback === false));
+});
+
+test('parseScan: 정상 응답과 날짜 표기 보정', () => {
+  const r = CW.parseScan(scanJson({ brand: ' 스타벅스 ', title: '아메리카노 T', value: 4700, expires: '2026.12.31', code: '1234 5678 9012' }));
+  assert.equal(r.brand, '스타벅스');
+  assert.equal(r.expires, '2026-12-31');
+  assert.equal(r.code, '123456789012');
+  assert.equal(r.value, 4700);
+  assert.equal(CW.parseScan(scanJson({ expires: '2027/1/5' })).expires, '2027-01-05');
+  assert.equal(CW.parseScan(scanJson({ expires: '2026-02-30' })).expires, '');   // 없는 날짜
+  assert.equal(CW.parseScan(scanJson({ expires: '1999-12-31' })).expires, '');   // 범위 밖
+  assert.equal(CW.parseScan(scanJson({ expires: '2026년 12월' })).expires, '');
+});
+
+test('parseScan: 비정상 입력 방어', () => {
+  assert.equal(CW.parseScan('죄송하지만 읽을 수 없음'), null);
+  assert.equal(CW.parseScan('[]'), null);
+  assert.equal(CW.parseScan(''), null);
+  assert.equal(CW.parseScan(null), null);
+  // 코드펜스로 감싼 JSON
+  assert.equal(CW.parseScan('```json\n' + scanJson({ brand: 'CU' }) + '\n```').brand, 'CU');
+  const r = CW.parseScan(scanJson({ value: '3000.4', code: '12<script>34', confidence: 'maybe', is_coupon: false }));
+  assert.equal(r.value, 3000);
+  assert.equal(r.code, '12script34');   // 특수문자 제거
+  assert.equal(r.confidence, 'low');    // 허용 값이 아니면 낮음
+  assert.equal(r.isCoupon, false);
+  assert.equal(CW.parseScan(scanJson({ value: -5 })).value, 0);
+  assert.equal(CW.parseScan(scanJson({ brand: 'x'.repeat(500) })).brand.length, 60);
+});
+
+test('mergeScan: 바코드 판독값 우선, 불일치 표시, URL형 QR 무시', () => {
+  const ai = CW.parseScan(scanJson({ brand: 'A', title: 'b', code: '1234 5678 9012' }));
+  let m = CW.mergeScan(ai, [{ format: 'code_128', value: '123456789012' }]);
+  assert.equal(m.code, '123456789012'); assert.equal(m.codeSource, 'barcode'); assert.equal(m.mismatch, false);
+
+  m = CW.mergeScan(ai, [{ format: 'code_128', value: '999999999999' }]);          // AI가 잘못 읽었을 때
+  assert.equal(m.code, '999999999999'); assert.equal(m.mismatch, true);
+
+  m = CW.mergeScan(ai, [{ format: 'qr_code', value: 'https://example.com/x' }]);  // URL은 번호가 아님
+  assert.equal(m.code, '123456789012'); assert.equal(m.codeSource, 'ai');
+
+  m = CW.mergeScan(ai, [{ format: 'qr_code', value: 'https://e.com' }, { format: 'code_128', value: '1234567890123' }, { format: 'ean_8', value: '12345678' }]);
+  assert.equal(m.code, '1234567890123');                                           // 가장 긴 숫자열
+
+  m = CW.mergeScan(null, [{ format: 'ean_13', value: '8801234567890' }]);          // 키 없음 → 바코드만
+  assert.equal(m.code, '8801234567890'); assert.equal(m.brand, ''); assert.equal(m.mismatch, false);
+
+  m = CW.mergeScan(ai, null);                                                      // 기기가 바코드 미지원
+  assert.equal(m.code, '123456789012'); assert.equal(m.codeSource, 'ai');
+  m = CW.mergeScan(null, []);
+  assert.equal(m.code, ''); assert.equal(m.codeSource, '');
+});

@@ -232,6 +232,7 @@ function showPreview(src) {
 function openCoupon(c) {
   const f = $('#form-coupon');
   f.reset(); formError('coupon-error');
+  cancelScan(); $('#btn-scan').disabled = false; scanStatus('');
   pendingImage = undefined;
   $('#coupon-form-title').textContent = c ? '쿠폰 수정' : '쿠폰 추가';
   field(f, 'id').value = c ? c.id : '';
@@ -354,6 +355,75 @@ async function importData(file) {
   if (ok) toast('불러오기 완료');
 }
 
+/* ========== 기프티콘 자동 인식 ========== */
+let scanSeq = 0, scanAbort = null;
+const cancelScan = () => { scanSeq++; if (scanAbort) scanAbort.abort(); scanAbort = null; };
+
+function scanStatus(msg, cls) {
+  const el = $('#scan-status');
+  el.hidden = !msg; el.className = 'scan-status' + (cls ? ' ' + cls : ''); el.textContent = msg || '';
+}
+
+function applyScan(f, r) {
+  const m = r.merged;
+  const setIf = (name, v) => { if (v) field(f, name).value = v; };
+  if (r.aiOk && m.isCoupon === false) return scanStatus('쿠폰·기프티콘 이미지가 아닌 것 같음. 사진만 첨부했으니 직접 입력해 주세요', 'warn');
+  setIf('brand', m.brand); setIf('title', m.title); setIf('expires', m.expires); setIf('code', m.code);
+  if (m.value) field(f, 'value').value = m.value;
+  if (m.memo && !field(f, 'memo').value.trim()) field(f, 'memo').value = m.memo;
+  const bcNote = m.codeSource === 'barcode' ? (m.mismatch ? ' 바코드 판독 번호와 AI가 읽은 번호가 달라 바코드 값을 넣었음.' : '') : '';
+  if (r.aiOk) {
+    return m.confidence === 'high'
+      ? scanStatus('✅ 인식 완료. 내용을 확인한 뒤 저장해 주세요.' + bcNote, m.mismatch ? 'warn' : 'ok')
+      : scanStatus('⚠ 일부가 불확실함. 번호와 날짜를 꼭 확인해 주세요.' + bcNote, 'warn');
+  }
+  const got = m.codeSource === 'barcode' ? '바코드 번호만 입력함. ' : '';
+  if (r.usedAi) return scanStatus(`${got}${r.aiError || 'AI 인식에 실패함'}. 나머지는 직접 입력해 주세요.`, 'bad');
+  if (m.codeSource === 'barcode') return scanStatus('바코드 번호만 입력함. 설정에서 API 키를 등록하면 브랜드·유효기간도 자동으로 입력됨.', 'warn');
+  scanStatus(r.barcodes === null
+    ? '사진만 첨부함. 설정에서 API 키를 등록하면 자동 입력됨 (이 기기는 바코드 판독 미지원).'
+    : '바코드를 찾지 못해 사진만 첨부함. 설정에서 API 키를 등록하면 자동 입력됨.', 'warn');
+}
+
+async function runScan(file) {
+  cancelScan();
+  const seq = scanSeq;
+  scanAbort = new AbortController();
+  const f = $('#form-coupon'), btn = $('#btn-scan');
+  btn.disabled = true; scanStatus('이미지를 분석하는 중…');
+  try {
+    const dataUrl = await readImage(file);
+    if (seq !== scanSeq) return;
+    pendingImage = dataUrl; showPreview(dataUrl);
+    const [apiKey, model] = await Promise.all([CWStore.getMeta('apiKey'), CWStore.getMeta('model')]);
+    const r = await CWScan.run({ file, dataUrl, apiKey: apiKey || '', model: model || CW.DEFAULT_SCAN_MODEL, signal: scanAbort.signal });
+    if (seq !== scanSeq) return; // 팝업이 닫혔거나 새 인식이 시작됨
+    applyScan(f, r);
+  } catch (e) {
+    console.error(e);
+    if (seq === scanSeq) scanStatus('이미지를 읽지 못함. 다른 사진으로 시도해 주세요', 'bad');
+  } finally { if (seq === scanSeq) btn.disabled = false; }
+}
+
+// 인식 설정(모델·키 끝 4자리)은 메모리에 보관하고 화면은 동기적으로만 그림.
+// 비동기 읽기 결과가 사용자가 입력 중인 값을 덮어쓰는 경합을 원천 차단함
+const scanCfg = { model: CW.DEFAULT_SCAN_MODEL, tail: '' };
+async function loadScanCfg() {
+  const [key, model] = await Promise.all([CWStore.getMeta('apiKey'), CWStore.getMeta('model')]);
+  scanCfg.model = CW.SCAN_MODELS.some(m => m.id === model) ? model : CW.DEFAULT_SCAN_MODEL;
+  scanCfg.tail = key ? String(key).slice(-4) : '';
+}
+function renderKeyState() {
+  const sel = $('#api-model');
+  if (!sel.options.length) CW.SCAN_MODELS.forEach(m => sel.add(new Option(m.label, m.id)));
+  sel.value = scanCfg.model;
+  $('#api-key').value = '';
+  $('#api-key').placeholder = scanCfg.tail ? '등록됨 (바꾸려면 새 키 입력)' : 'sk-ant-...';
+  $('#scan-state').textContent = scanCfg.tail
+    ? `API 키 등록됨 (…${scanCfg.tail}) · 모델 ${scanCfg.model}`
+    : 'API 키 미등록 · 바코드 번호만 읽음(지원 기기)';
+}
+
 /* ========== 알림 / 설정 정보 ========== */
 async function maybeNotify() {
   if (!('serviceWorker' in navigator)) return;
@@ -396,7 +466,7 @@ document.addEventListener('click', async e => {
     case 'add': ui.tab === 'loyalty' ? openLoyalty() : openCoupon(); break;
     case 'add-coupon': openCoupon(); break;
     case 'close-dialog': el.closest('dialog').close(); break;
-    case 'open-settings': openDlg($('#dlg-settings')); refreshSettings(); break;
+    case 'open-settings': openDlg($('#dlg-settings')); renderKeyState(); refreshSettings(); break;
     case 'detail': openDetail(id); break;
     case 'edit-coupon': { const c = state.coupons.find(x => x.id === id); closeAll(); openCoupon(c); break; }
     case 'edit-loyalty': openLoyalty(state.loyalty.find(x => x.id === id)); break;
@@ -447,6 +517,21 @@ document.addEventListener('click', async e => {
       await Notification.requestPermission();
       await registerPeriodic(); await maybeNotify(); refreshSettings();
       break;
+    case 'scan': $('#scan-file').click(); break;
+    case 'save-key': {
+      const raw = $('#api-key').value.trim(), model = $('#api-model').value;
+      if (!CW.SCAN_MODELS.some(m => m.id === model)) break;
+      if (raw && !/^sk-ant-[\w-]{10,}$/.test(raw)) { toast('API 키 형식이 올바르지 않음 (sk-ant-...)'); break; }
+      const ok = await save(async () => { if (raw) await CWStore.setMeta('apiKey', raw); await CWStore.setMeta('model', model); });
+      if (ok) {
+        scanCfg.model = model; if (raw) scanCfg.tail = raw.slice(-4);
+        toast(raw ? 'API 키와 모델을 저장함' : '모델을 저장함'); renderKeyState();
+      }
+      break;
+    }
+    case 'clear-key':
+      if (await askConfirm('저장된 API 키를 이 기기에서 삭제?', '삭제') && await save(() => CWStore.setMeta('apiKey', ''))) { scanCfg.tail = ''; toast('API 키를 삭제함'); renderKeyState(); }
+      break;
     case 'export': exportData(); break;
     case 'sample': await addSamples(); break;
     case 'wipe':
@@ -468,6 +553,9 @@ document.addEventListener('input', e => {
   ui.q = e.target.value;
   $('#clist').innerHTML = couponListHTML(CW.today());
 });
+
+$('#scan-file').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) runScan(f); });
+$('#dlg-coupon').addEventListener('close', cancelScan);
 
 field($('#form-coupon'), 'image').addEventListener('change', async e => {
   const file = e.target.files[0];
@@ -558,6 +646,7 @@ async function init() {
     await CWStore.open();
     await migrateLegacy();
     await reload();
+    await loadScanCfg();
   } catch (e) {
     console.error(e);
     toast('이 브라우저에서는 데이터를 저장할 수 없음 (사생활 보호 모드인지 확인)');

@@ -158,3 +158,14 @@ button.danger, .ghost.danger { color: var(--bad); }
 .toast[hidden] { display: none; }
 .toast button { background: none; border: 0; color: var(--accent); font-weight: 700; cursor: pointer; padding: 4px 2px; font-size: 14px; }
 @media (prefers-color-scheme: light) { .toast button { color: #6fe3bf; } }
+
+.scan-btn { text-align: center !important; font-weight: 700; border-color: var(--accent) !important; color: var(--accent) !important; }
+.scan-btn[disabled] { opacity: .6; }
+.scan-status { font-size: 13px; margin: -2px 0 10px; padding: 8px 10px; border-radius: 8px; background: var(--chip); color: var(--text); overflow-wrap: anywhere; }
+.scan-status[hidden] { display: none; }
+.scan-status.ok { color: var(--ok); }
+.scan-status.warn { color: var(--warn); }
+.scan-status.bad { color: var(--bad); }
+h3.sect { font-size: 14px; margin: 16px 0 8px; color: var(--text); }
+label select { display: block; width: 100%; margin-top: 4px; padding: 10px; font-size: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); }
+.row.inline { margin: -4px 0 8px; }
