@@ -52,7 +52,7 @@ export async function listSubscriptions(db: Db) {
      ORDER BY s.updated_at DESC NULLS LAST, c.company_name LIMIT 500`);
   const today = seoulToday();
   // 현재 실제 적용 상태(만료 시 무료)를 함께 내려 관리자가 저장 결과를 바로 확인
-  return rows.map((r) => { const e = resolvePlan(r, today); return { ...r, effective: { plan: e.plan, label: e.label, status: e.status, endsAt: e.endsAt } }; });
+  return rows.map((r) => { const e = resolvePlan(r.plan ? { ...r, plan: r.plan as PlanId } : null, today); return { ...r, effective: { plan: e.plan, label: e.label, status: e.status, endsAt: e.endsAt } }; });
 }
 
 export async function setSubscription(db: Db, adminId: string, input: Record<string, unknown>) {
