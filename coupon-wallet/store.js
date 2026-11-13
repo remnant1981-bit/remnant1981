@@ -59,6 +59,7 @@
       putCoupons.forEach(o => c.put(o)); putLoyalty.forEach(o => l.put(o));
     });
   const setMeta = (k, v) => run(['meta'], 'readwrite', t => { t.objectStore('meta').put(v, k); });
+  const getMeta = k => run(['meta'], 'readonly', (t, out) => { const r = t.objectStore('meta').get(k); r.onsuccess = () => out(r.result); });
 
   // 하루 1회, 임박 항목이 있을 때만 알림. 화면과 백그라운드(periodicsync)가 같이 호출해도 tag로 합쳐짐
   async function checkAndNotify(reg) {
@@ -74,5 +75,5 @@
     return true;
   }
 
-  root.CWStore = { open, loadAll, put, remove, batch, clearAll, setMeta, checkAndNotify };
+  root.CWStore = { open, loadAll, put, remove, batch, clearAll, setMeta, getMeta, checkAndNotify };
 })(typeof self !== 'undefined' ? self : this);

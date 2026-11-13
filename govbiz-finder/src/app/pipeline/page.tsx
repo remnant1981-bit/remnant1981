@@ -44,7 +44,8 @@ export default async function Page() {
               <h2 id={`st-${s.id}`} className="mb-2 font-bold">{s.label} <span className="text-sm font-normal text-[var(--muted)]">{rows.length}건</span></h2>
               <ul className="grid gap-2">
                 {rows.map((i) => {
-                  const d = !s.done && i.application_status === "open" ? deadlineDays(i.application_end, today) : null;
+                  // 신청 완료 이후 단계는 마감 강조 불필요
+                  const d = !s.done && s.id !== "applied" && i.application_status === "open" ? deadlineDays(i.application_end, today) : null;
                   const hot = d !== null && d >= 0 && d <= 7;
                   const closed = !s.done && s.id !== "applied" && i.application_status === "closed";
                   return (
