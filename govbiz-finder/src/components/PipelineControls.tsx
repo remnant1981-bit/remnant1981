@@ -13,10 +13,10 @@ export function StageSelect({ announcementId, stage, compact }: { announcementId
   const [err, setErr] = useState("");
   async function change(v: string) {
     setBusy(true); setErr("");
-    const r = v === "" ? await api("DELETE", "/api/pipeline", { announcementId })
-      : await api("POST", "/api/pipeline", { announcementId, stage: v });
+    const r = v === "" ? await api<any>("DELETE", "/api/pipeline", { announcementId })
+      : await api<any>("POST", "/api/pipeline", { announcementId, stage: v });
     setBusy(false);
-    if (r.ok) router.refresh(); else setErr("저장하지 못했습니다.");
+    if (r.ok) router.refresh(); else setErr(r.data?.message ?? "저장하지 못했습니다.");
   }
   return (
     <span className="no-print inline-flex items-center gap-1">

@@ -8,6 +8,7 @@ import { deadlineDays } from "@/domain/status";
 import { seoulToday } from "@/lib/time";
 import { DeadlineChip, Empty, Notice, PageTitle } from "@/components/ui";
 import { StageSelect } from "@/components/PipelineControls";
+import { companyPlan } from "@/server/plans";
 
 export const metadata: Metadata = { title: "신청 진행 관리", robots: { index: false, follow: false } };
 
@@ -25,9 +26,14 @@ export default async function Page() {
   const { items, members } = await listPipeline(db, v.session.user.id);
   const today = seoulToday();
   const active = items.filter((i) => !STAGES.find((s) => s.id === i.stage)?.done);
+  const plan = await companyPlan(db, v.company.id);
+  const cap = plan.limits.pipelineActive;
   return (
     <>
       <PageTitle sub={`${v.company.company_name ?? "우리 기업"} · 진행 중 ${active.length}건 · 전체 ${items.length}건${members.length > 1 ? ` · 구성원 ${members.length}명 공유` : ""}`}>신청 진행 관리</PageTitle>
+      {Number.isFinite(cap) && (
+        <div className="mb-3"><Notice tone={active.length >= cap ? "warn" : "info"}>{plan.label} 요금제 · 진행 중 <strong>{active.length}/{cap}건</strong>{active.length >= cap ? " — 한도에 도달해 새 공고를 진행 중으로 추가할 수 없습니다. 끝난 건을 선정·탈락·포기로 바꾸거나 " : " · 더 많이 관리하려면 "}<Link className="underline" href="/pricing">요금 안내</Link></Notice></div>
+      )}
       {items.length === 0 && <Empty title="진행 관리 중인 공고가 없습니다.">공고 카드나 상세 화면의 <strong>‘＋ 진행 관리에 추가’</strong>에서 단계를 고르면 여기에 모입니다. <Link className="underline" href="/recommend">우리 기업 공고 보기</Link></Empty>}
       <div className="grid gap-6">
         {STAGES.map((s) => {

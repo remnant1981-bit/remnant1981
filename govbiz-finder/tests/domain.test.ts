@@ -544,3 +544,19 @@ describe("판정 규칙 캐시", () => {
     expect(b.some((x) => x.field_key === "tech_field")).toBe(true);
   });
 });
+
+describe("요금제 판정", () => {
+  it("체험·결제·만료 상태와 한도 적용 여부", async () => {
+    const { resolvePlan } = await import("@/server/plans");
+    const today = "2026-11-13";
+    expect(resolvePlan(null, today, true)).toMatchObject({ plan: "free", status: "free", limits: { pipelineActive: 3, exportRows: 50, ads: true } });
+    expect(resolvePlan({ plan: "pro", seats: 1, trial_ends_at: "2026-11-20", paid_until: null }, today, true)).toMatchObject({ plan: "pro", status: "trial", endsAt: "2026-11-20", limits: { ads: false } });
+    expect(resolvePlan({ plan: "team", seats: 5, trial_ends_at: "2026-11-01", paid_until: "2026-11-13" }, today, true)).toMatchObject({ plan: "team", status: "active", limits: { assignees: true } });
+    expect(resolvePlan({ plan: "team", seats: 5, trial_ends_at: null, paid_until: "2026-11-12" }, today, true)).toMatchObject({ plan: "free", status: "expired", endsAt: "2026-11-12" });
+    // 한도 미적용(판매 전): 무료여도 제한 없음, 광고는 요금제 설정 따름
+    const off = resolvePlan(null, today, false);
+    expect(off.limits.pipelineActive).toBe(Number.POSITIVE_INFINITY);
+    expect(off.limits.assignees).toBe(true);
+    expect(off.limits.ads).toBe(true);
+  });
+});
