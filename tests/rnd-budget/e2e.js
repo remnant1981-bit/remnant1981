@@ -5,7 +5,7 @@ const path = require('path');
 const { chromium } = require('playwright');
 
 const ROOT = path.join(__dirname, '..', '..', 'rnd-budget');
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css', '.bcmap': 'application/octet-stream' };
 const server = http.createServer((req, res) => {
   const u = new URL(req.url, 'http://x');
   const file = path.join(ROOT, u.pathname === '/' ? 'index.html' : u.pathname);
@@ -194,6 +194,56 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   await x.click('#modeBar [data-mode="plan"]');
   check('편성으로 복귀', await x.locator('#planView').isVisible());
   await xc.close();
+
+  // ④ 공고문에서 기준 가져오기(noticeImport 켬)
+  const nc = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const n = await nc.newPage();
+  n.on('pageerror', (e) => errors.push(e.message));
+  n.on('dialog', (d) => d.accept());
+  await n.route('**/config.js', (r) => r.fulfill({ contentType: 'text/javascript', body: 'window.RB_CONFIG={features:{examples:true,noticeImport:true}};' }));
+  await n.goto(base);
+  check('공고문 가져오기 영역 표시', await n.locator('#noticeDrop').isVisible());
+  const FX = path.join(__dirname, 'fixtures');
+  await n.selectOption('#ruleset', 'midS');
+  await n.setInputFiles('#noticeFile', path.join(FX, 'notice-rnd.txt'));
+  await n.waitForSelector('.ntbl');
+  const nt = await n.textContent('#noticeResult');
+  check('TXT: 중견기업 기준 70%·13%·연간 300,000', nt.includes('70% 이하') && nt.includes('13% 이상') && nt.includes('300,000천원') && nt.includes('(중견기업)'), nt.slice(0, 300));
+  await n.getByLabel('연구수당 한도 적용').uncheck();
+  await n.click('#noticeResult >> text=선택 항목 적용');
+  check('적용: 공고문 기준·값 반영', (await n.inputValue('#ruleset')) === 'custom' && (await n.inputValue('#govMaxPct')) === '70' && (await n.inputValue('#cashMinPct')) === '13' && (await n.inputValue('#indirectPct')) === '0' && (await n.inputValue('#gov')) === '300,000');
+  check('적용: 위탁 20%·연구수당 유지 20%·출처 표시', (await n.textContent('#outsourceFixed')) === '20' && (await n.inputValue('#allowanceMaxPct')) === '20' && (await n.textContent('#ruleHint')).includes('출처: notice-rnd.txt'));
+  check('적용 후 최소 총사업비(70%)', (await n.textContent('#funding')).includes('428,572천원'));
+  // HWPX
+  const zlib = require('zlib');
+  const hp = (lines) => `<hs:sec xmlns:hp="x" xmlns:hs="y">${lines.map((l) => `<hp:p><hp:run><hp:t>${l}</hp:t></hp:run></hp:p>`).join('')}</hs:sec>`;
+  const files = [['mimetype', 'application/hwp+zip', 0], ['Contents/section0.xml', hp(['□ 지원규모 : 정부지원연구개발비 연간 2억원 이내', '- 정부지원연구개발비 : 중소기업 75% 이하', '- 기관부담연구개발비 중 현금 : 중소기업 10% 이상']), 8]];
+  const loc = [], cen = []; let off = 0;
+  for (const [nm0, text, method] of files) { const raw = Buffer.from(text); const data = method ? zlib.deflateRawSync(raw) : raw; const nm = Buffer.from(nm0); const h = Buffer.alloc(30); h.writeUInt32LE(0x04034b50, 0); h.writeUInt16LE(method, 8); h.writeUInt32LE(data.length, 18); h.writeUInt32LE(raw.length, 22); h.writeUInt16LE(nm.length, 26); loc.push(h, nm, data); const c = Buffer.alloc(46); c.writeUInt32LE(0x02014b50, 0); c.writeUInt16LE(method, 10); c.writeUInt32LE(data.length, 20); c.writeUInt32LE(raw.length, 24); c.writeUInt16LE(nm.length, 28); c.writeUInt32LE(off, 42); cen.push(c, nm); off += 30 + nm.length + data.length; }
+  const cd = Buffer.concat(cen), eo = Buffer.alloc(22); eo.writeUInt32LE(0x06054b50, 0); eo.writeUInt16LE(files.length, 8); eo.writeUInt16LE(files.length, 10); eo.writeUInt32LE(cd.length, 12); eo.writeUInt32LE(off, 16);
+  await n.selectOption('#ruleset', 'sme');
+  await n.setInputFiles('#noticeFile', { name: '공고.hwpx', mimeType: 'application/octet-stream', buffer: Buffer.concat([...loc, cd, eo]) });
+  await n.waitForSelector('.ntbl');
+  check('HWPX: 연간 200,000·75%·10%', (await n.textContent('#noticeResult')).includes('200,000천원') && (await n.textContent('#noticeResult')).includes('75% 이하'));
+  // PDF(pdf.js, 필요 시 로드)
+  await n.setInputFiles('#noticeFile', path.join(FX, 'notice-rnd.pdf'));
+  await n.waitForFunction(() => /찾은 기준|읽지 못|찾지 못/.test(document.querySelector('#noticeResult').textContent) && !/읽는 중/.test(document.querySelector('#noticeResult').textContent), null, { timeout: 30000 });
+  const np = await n.textContent('#noticeResult');
+  check('PDF: 기준 추출', np.includes('찾은 기준') && np.includes('300,000천원') && np.includes('75% 이하'), np.slice(0, 200));
+  // 비율 조항 없는 문서·지원하지 않는 형식
+  await n.setInputFiles('#noticeFile', { name: 'x.txt', mimeType: 'text/plain', buffer: Buffer.from('□ 지원내용: 컨설팅 지원\n부채비율 500% 이상 기업 제외') });
+  await n.waitForFunction(() => /찾지 못/.test(document.querySelector('#noticeResult').textContent));
+  check('조항 없는 공고 → 직접 입력 안내', (await n.textContent('#noticeResult')).includes('찾지 못했습니다'));
+  await n.setInputFiles('#noticeFile', { name: 'x.docx', mimeType: 'application/octet-stream', buffer: Buffer.from('x') });
+  await n.waitForFunction(() => /지원합니다/.test(document.querySelector('#noticeResult').textContent));
+  check('지원하지 않는 형식 안내', true);
+  if (process.env.RB_SAMPLE_HWP) {
+    await n.setInputFiles('#noticeFile', process.env.RB_SAMPLE_HWP);
+    await n.waitForFunction(() => !/읽는 중/.test(document.querySelector('#noticeResult').textContent));
+    const nh = await n.textContent('#noticeResult');
+    check('HWP(실제 공고): 읽기 성공·비율 조항 없음 안내', nh.includes('찾지 못했습니다'), nh.slice(0, 200));
+  }
+  await nc.close();
 
   check('콘솔·스크립트 오류 없음', errors.length === 0, errors.join(' | '));
   await browser.close(); server.close();

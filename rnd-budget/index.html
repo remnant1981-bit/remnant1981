@@ -80,11 +80,19 @@
           <tr><th scope="row">기관부담금 중 현금</th><td><input id="cashMinPct" inputmode="decimal" aria-label="기관부담금 중 현금 최소 비율(%)"><span class="unit">% 이상</span></td><td class="basis" data-basis="cash"></td></tr>
           <tr><th scope="row">간접비율</th><td><input id="indirectPct" inputmode="decimal" aria-label="간접비율(%)"><span class="unit">%</span></td><td class="basis" data-basis="indirect"></td></tr>
           <tr><th scope="row">연구수당 한도</th><td><input id="allowanceMaxPct" inputmode="decimal" aria-label="연구수당 한도(인건비의 %)"><span class="unit">% 이내</span></td><td class="basis">사용 기준 제26조①: 수정인건비의 20% 이내</td></tr>
-          <tr><th scope="row">위탁연구개발비</th><td><span class="fixed">40</span><span class="unit">% 이하</span></td><td class="basis">사용 기준 제27조①: (직접비 − 위탁)의 40% 이하</td></tr>
+          <tr><th scope="row">위탁연구개발비</th><td><span class="fixed" id="outsourceFixed">40</span><span class="unit">% 이하</span></td><td class="basis">사용 기준 제27조①: (직접비 − 위탁)의 40% 이하</td></tr>
         </tbody>
       </table>
       <p class="hint" id="ruleHint"></p>
     </details>
+    <div class="import" data-feature="noticeImport">
+      <label class="dropzone" id="noticeDrop">
+        <input type="file" id="noticeFile" accept=".hwp,.hwpx,.pdf,.txt" hidden>
+        <strong>📄 공고문에서 기준 가져오기</strong>
+        <span>HWP·HWPX·PDF 파일을 끌어다 놓거나 눌러서 선택 — 파일은 이 PC 안에서만 읽고 외부로 보내지 않습니다.</span>
+      </label>
+      <div id="noticeResult" class="notice-result" hidden aria-live="polite"></div>
+    </div>
     <dl class="kpis" id="funding" aria-live="polite"></dl>
     <details class="guide"><summary>작성 가이드</summary>
       <ul>
@@ -230,6 +238,7 @@
 </main>
 <script src="config.js"></script>
 <script src="logic.js"></script>
+<script src="notice.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -94,7 +94,7 @@
   function effectiveRules(s) {
     const rs = RULESETS[s.ruleset] || RULESETS.sme;
     if (rs.custom) {
-      return { ...rs, govMaxPct: pct(s.govMaxPct), cashMinPct: pct(s.cashMinPct), indirectPct: s.indirectPct === undefined || s.indirectPct === '' ? rs.indirectPct : pct(s.indirectPct), allowancePct: s.allowanceMaxPct === undefined || s.allowanceMaxPct === '' ? LIMITS.allowancePct : pct(s.allowanceMaxPct), outsourcePct: LIMITS.outsourcePct };
+      return { ...rs, govMaxPct: pct(s.govMaxPct), cashMinPct: pct(s.cashMinPct), indirectPct: s.indirectPct === undefined || s.indirectPct === '' ? rs.indirectPct : pct(s.indirectPct), allowancePct: s.allowanceMaxPct === undefined || s.allowanceMaxPct === '' ? LIMITS.allowancePct : pct(s.allowanceMaxPct), outsourcePct: s.outsourceMaxPct === undefined || s.outsourceMaxPct === '' ? LIMITS.outsourcePct : pct(s.outsourceMaxPct) };
     }
     const ind = s.indirectPct === undefined || s.indirectPct === '' ? rs.indirectPct : Math.min(pct(s.indirectPct), rs.indirectMax);
     return { ...rs, indirectPct: ind, allowancePct: LIMITS.allowancePct, outsourcePct: LIMITS.outsourcePct };
@@ -236,7 +236,7 @@
   /** 한 기관·한 연차의 계산용 상태(calcBudget 입력) */
   function sheetState(p, i, y) {
     const inst = p.insts[i], d = inst.data[y];
-    return { ruleset: inst.ruleset, govMaxPct: inst.govMaxPct, cashMinPct: inst.cashMinPct, indirectPct: inst.indirectPct, allowanceMaxPct: inst.allowanceMaxPct, gov: d.gov, people: d.people, items: d.items };
+    return { ruleset: inst.ruleset, govMaxPct: inst.govMaxPct, cashMinPct: inst.cashMinPct, indirectPct: inst.indirectPct, allowanceMaxPct: inst.allowanceMaxPct, outsourceMaxPct: inst.outsourceMaxPct, gov: d.gov, people: d.people, items: d.items };
   }
 
   const sumT = (list) => list.reduce((a, t) => ({ gov: a.gov + t.gov, orgCash: a.orgCash + t.orgCash, inkind: a.inkind + t.inkind, total: a.total + t.total }), { gov: 0, orgCash: 0, inkind: 0, total: 0 });
