@@ -66,6 +66,12 @@ test('기관 유형별 값 고르기·사업비와 무관한 비율 무시', () 
   assert.deepEqual(N.extractNotice(noise), []);
 });
 
+test('사업비 기준이 아닌 공고(입주·컨설팅형)에서 오추출 없음', () => {
+  const t = ['❍ 임대료(계약면적) : 2,614원/㎡', '❍ 보증금(계약면적) : 30,684원/㎡ *(임대료+관리비)×6개월', '- 국세(법인세) : 3년간 면제, 이후 2년간 50% 감면',
+    '- 컨설팅, 시제품 제작 등 비용 지원을 통한 임대료 간접 지원', '□ 지원규모: 기업별 상이', '총 사업예산 450백만원 차등지급', '부 채 비 율(%)'].join('\n');
+  assert.deepEqual(N.extractNotice(t), []);
+});
+
 test('HWPX 읽기(ZIP·deflate·XML)', async () => {
   const buf = makeHwpx([hpPara(['□ 지원규모 : 정부지원연구개발비 연간 2억원 이내', '□ 연구개발기간 : 21개월']), hpPara(['- 정부지원연구개발비 : 중소기업 75% 이하', '- 간접비 계상 불가', 'A&B <표>'])]);
   const t = await N.readHwpx(new Uint8Array(buf));
