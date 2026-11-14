@@ -20,6 +20,7 @@ import type { DayBreakdown } from "@/domain/fee";
 import { FeeCurve } from "@/components/FeeCurve";
 import { ParkingTimerPanel } from "@/components/ParkingTimer";
 import { ReportForm } from "@/components/ReportForm";
+import { countUsage } from "@/server/usage";
 
 export const dynamic = "force-dynamic";
 type SP = Record<string, string | string[] | undefined>;
@@ -48,6 +49,7 @@ export default async function LotPage({ params, searchParams }: { params: Promis
   const sp = await searchParams;
   const s = parseOffsetIso(one(sp.startAt)), e = parseOffsetIso(one(sp.endAt));
   const period = s && e && e > s ? { startAt: s, endAt: e } : null;
+  countUsage("lot_view");
   const d = await getLotDetail(await getAppDb(), Number(id), period);
   if (!d) notFound();
   const { lot } = d;

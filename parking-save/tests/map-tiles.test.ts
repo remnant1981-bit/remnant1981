@@ -30,3 +30,41 @@ describe("지도 타일 설정", () => {
     }
   });
 });
+
+import { mapProvider } from "@/lib/map-tiles";
+import { buildCsp } from "@/lib/csp";
+
+describe("네이버 지도 제공자", () => {
+  it("키가 있으면 네이버(대체 지도는 OSM), 없거나 이상하면 OSM + 경고", () => {
+    expect(mapProvider({ MAP_TILE_PROVIDER: "naver", NAVER_MAP_CLIENT_ID: "abc123xyz" })).toEqual({ provider: { kind: "naver", clientId: "abc123xyz", fallback: expect.objectContaining({ id: "osm" }) }, warning: null });
+    for (const id of [undefined, "", "a b", 'x"><script>', "a".repeat(80)]) {
+      const r = mapProvider({ MAP_TILE_PROVIDER: "naver", NAVER_MAP_CLIENT_ID: id });
+      expect(r.provider.kind).toBe("tiles");
+      expect(r.warning).toMatch(/NAVER_MAP_CLIENT_ID/);
+    }
+    expect(mapProvider({}).provider).toMatchObject({ kind: "tiles", tile: { id: "osm" } });
+    expect(mapProvider({ MAP_TILE_PROVIDER: "vworld", VWORLD_API_KEY: "ABCD1234EF56" }).provider).toMatchObject({ kind: "tiles", tile: { id: "vworld" } });
+  });
+  it("네이버 모드에서만 CSP에 네이버 SDK 도메인 추가", () => {
+    const c = buildCsp("naver", false);
+    expect(c).toMatch(/script-src [^;]*https:\/\/oapi\.map\.naver\.com/);
+    expect(c).toMatch(/connect-src 'self' https:\/\/\*\.naver\.com/);
+    expect(buildCsp("tiles", false)).not.toContain("naver");
+  });
+});
+
+describe("proxy", () => {
+  it("모든 응답에 실행 시점 CSP를 붙임(환경변수 반영)", async () => {
+    const env = process.env as Record<string, string | undefined>;
+    const saved = { p: env.MAP_TILE_PROVIDER, k: env.NAVER_MAP_CLIENT_ID };
+    try {
+      const { proxy } = await import("@/proxy");
+      delete env.MAP_TILE_PROVIDER;
+      expect(proxy().headers.get("content-security-policy")).not.toContain("naver");
+      env.MAP_TILE_PROVIDER = "naver"; env.NAVER_MAP_CLIENT_ID = "abc123xyz";
+      expect(proxy().headers.get("content-security-policy")).toContain("https://oapi.map.naver.com");
+    } finally {
+      for (const [k, v] of [["MAP_TILE_PROVIDER", saved.p], ["NAVER_MAP_CLIENT_ID", saved.k]] as const) { if (v === undefined) delete env[k]; else env[k] = v; }
+    }
+  });
+});

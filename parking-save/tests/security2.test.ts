@@ -49,7 +49,7 @@ describe("언어 전환 요청 제한", () => {
 });
 
 describe("보안 헤더", () => {
-  it("운영에서만 HSTS, CSP는 외부 스크립트·연결 없음", async () => {
+  it("운영에서만 HSTS, 다른 보안 헤더 유지", async () => {
     const env = process.env as Record<string, string | undefined>;
     const saved = env.NODE_ENV;
     try {
@@ -59,9 +59,17 @@ describe("보안 헤더", () => {
       const all = (await cfg.headers!())[0].headers;
       const h = Object.fromEntries(all.map((x: { key: string; value: string }) => [x.key, x.value]));
       expect(h["Strict-Transport-Security"]).toBe("max-age=31536000");
-      expect(h["Content-Security-Policy"]).toMatch(/script-src 'self' 'unsafe-inline';/);
-      expect(h["Content-Security-Policy"]).toMatch(/connect-src 'self'/);
       expect(h["X-Frame-Options"]).toBe("DENY");
+      expect(h["Content-Security-Policy"]).toBeUndefined(); // CSP는 proxy가 실행 시점에 붙임
     } finally { env.NODE_ENV = saved; }
+  });
+  it("CSP(운영 기본): 외부 스크립트·연결 없음, 지도 이미지는 OSM·브이월드만", async () => {
+    const { buildCsp } = await import("@/lib/csp");
+    const c = buildCsp("tiles", false);
+    expect(c).toContain("script-src 'self' 'unsafe-inline';");
+    expect(c).toContain("connect-src 'self';");
+    expect(c).toContain("img-src 'self' data: https://tile.openstreetmap.org https://api.vworld.kr;");
+    expect(c).not.toMatch(/naver|unsafe-eval/);
+    expect(c).toContain("frame-ancestors 'none'");
   });
 });

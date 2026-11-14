@@ -31,3 +31,29 @@ export function tileConfig(env: Record<string, string | undefined> = process.env
   }
   return { tile: OSM, warning: `알 수 없는 MAP_TILE_PROVIDER(${want.slice(0, 20)}) — OSM 타일을 사용합니다.` };
 }
+
+// ── 네이버 지도(JS SDK) ──────────────────────────────────────────────
+// MAP_TILE_PROVIDER=naver + NAVER_MAP_CLIENT_ID(네이버클라우드 Maps 애플리케이션의 Client ID — 도메인 등록형 브라우저 키라 화면에 노출돼도 되는 값).
+// SDK 주소·인증 파라미터는 공식 문서(navermaps.github.io/maps.js.ncp, 2026-11-14 확인): oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=...
+// ⚠ 실제 키로 미검증. SDK가 내부에서 쓰는 이미지·통신 도메인은 공식 문서에 없어 넓게 허용(NAVER_CSP) — 실제 키로 확인 후 좁힐 것.
+export type MapProvider = { kind: "tiles"; tile: TileConfig } | { kind: "naver"; clientId: string; fallback: TileConfig };
+export const NAVER_SDK_URL = "https://oapi.map.naver.com/openapi/v3/maps.js";
+export const NAVER_CSP = {
+  script: ["https://oapi.map.naver.com", "https://*.pstatic.net", "https://*.map.naver.net"],
+  img: ["https://*.pstatic.net", "https://*.map.naver.net", "https://*.naver.net", "https://*.naver.com"],
+  connect: ["https://*.naver.com", "https://*.naver.net", "https://*.pstatic.net", "https://*.navercorp.com"],
+  style: ["https://*.pstatic.net"],
+} as const;
+
+/** 지도 제공자. 네이버로 설정했는데 키가 없거나 이상하면 타일 지도로 되돌리고 경고 */
+export function mapProvider(env: Record<string, string | undefined> = process.env): { provider: MapProvider; warning: string | null } {
+  const want = (env.MAP_TILE_PROVIDER ?? "").trim().toLowerCase();
+  if (want === "naver") {
+    const id = (env.NAVER_MAP_CLIENT_ID ?? "").trim();
+    const osm = tileConfig({}).tile;
+    if (!/^[A-Za-z0-9_-]{6,64}$/.test(id)) return { provider: { kind: "tiles", tile: osm }, warning: "MAP_TILE_PROVIDER=naver인데 NAVER_MAP_CLIENT_ID가 없거나 형식이 올바르지 않아 OSM 타일을 사용합니다." };
+    return { provider: { kind: "naver", clientId: id, fallback: osm }, warning: null };
+  }
+  const t = tileConfig(env);
+  return { provider: { kind: "tiles", tile: t.tile }, warning: t.warning };
+}
