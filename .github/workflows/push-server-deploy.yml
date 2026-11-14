@@ -1,0 +1,68 @@
+name: Deploy 쿠폰 지갑 푸시 서버 (Cloudflare Workers)
+
+# 수동 실행 전용. 사용법은 push-server/README.md 참고
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: push-server-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 사전 점검 (필요한 Secrets 확인 + 서버 테스트)
+        env:
+          PUSH_REGISTER_CODE: ${{ secrets.PUSH_REGISTER_CODE }}
+        run: |
+          missing=""
+          for v in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID PUSH_REGISTER_CODE; do
+            if [ -z "${!v}" ]; then missing="$missing $v"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::저장소 Secrets에 다음 값이 없음:$missing  (설정 방법: push-server/README.md)"
+            exit 1
+          fi
+          if [ "${#PUSH_REGISTER_CODE}" -lt 8 ]; then
+            echo "::error::PUSH_REGISTER_CODE는 8자 이상으로 정해 주세요 (아무나 기기를 등록하지 못하게 하는 암호 역할)"
+            exit 1
+          fi
+          node --test "tests/push-server/*.test.mjs"
+
+      - name: 배포
+        working-directory: push-server
+        run: npx --yes wrangler@4.162.0 deploy 2>&1 | tee "$RUNNER_TEMP/deploy.log"
+
+      - name: 등록 코드 설정 (Worker 비밀값, 로그에 출력되지 않음)
+        working-directory: push-server
+        env:
+          REGISTER_CODE: ${{ secrets.PUSH_REGISTER_CODE }}
+        run: printf '%s' "$REGISTER_CODE" | npx --yes wrangler@4.162.0 secret put REGISTER_CODE
+
+      - name: 결과 요약
+        run: |
+          url=$(grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' "$RUNNER_TEMP/deploy.log" | head -1)
+          {
+            echo "## 푸시 서버 배포 완료"
+            if [ -n "$url" ]; then
+              echo ""
+              echo "서버 주소: \`$url\`"
+              echo ""
+              echo "앱 → 설정 → **서버 푸시 알림**에 이 주소와 등록 코드를 입력하고 **켜기** → **테스트**"
+            else
+              echo ""
+              echo "배포 로그에서 주소를 찾지 못함. Cloudflare 대시보드 → Workers & Pages → coupon-wallet-push 에서 확인"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
