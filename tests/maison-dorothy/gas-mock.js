@@ -30,6 +30,20 @@ class Range {
     for (let i = 0; i < this.nr; i++) { const row = []; for (let j = 0; j < this.nc; j++) row.push(fn((this.sh.d[this.r - 1 + i] || [])[this.c - 1 + j])); out.push(row); }
     return out;
   }
+  // 병합: 실제 시트처럼, 기존 병합에 일부만 걸치게 합치거나 풀면 오류
+  _hits() { return this.sh.merges.filter(g => g.r < this.r + this.nr && this.r < g.r + g.nr && g.c < this.c + this.nc && this.c < g.c + g.nc); }
+  _inside(g) { return g.r >= this.r && g.c >= this.c && g.r + g.nr <= this.r + this.nr && g.c + g.nc <= this.c + this.nc; }
+  merge() {
+    this._hits().forEach(g => { if (!this._inside(g)) throw new Error('셀을 병합하거나 병합을 취소하려면 해당 범위의 모든 셀을 선택해야 합니다'); });
+    this.sh.merges = this.sh.merges.filter(g => !this._inside(g));
+    if (this.nr * this.nc > 1) this.sh.merges.push({ r: this.r, c: this.c, nr: this.nr, nc: this.nc });
+    return this;
+  }
+  breakApart() {
+    this._hits().forEach(g => { if (!this._inside(g)) throw new Error('셀을 병합하거나 병합을 취소하려면 해당 범위의 모든 셀을 선택해야 합니다'); });
+    this.sh.merges = this.sh.merges.filter(g => !this._inside(g));
+    return this;
+  }
   getValues() { return this._grid(v => (v == null ? '' : v)); }
   getDisplayValues() { return this._grid(display); }
   setValues(vals) {
@@ -44,7 +58,8 @@ class Range {
   applyRowBanding() { this.sh.bandings.push(1); return chain({}, 'Banding'); }
 }
 class Sheet {
-  constructor(name) { this.name = name; this.d = []; this.bandings = []; this.rules = []; return chain(this, 'Sheet'); }
+  constructor(name) { this.name = name; this.d = []; this.bandings = []; this.rules = []; this.merges = []; return chain(this, 'Sheet'); }
+  getMaxColumns() { return 26; }
   getMaxRows() { return Math.max(1000, this.d.length); }
   getBandings() { const n = this.bandings.length; this.bandings = []; return Array.from({ length: n }, () => ({ remove() {} })); }
   setConditionalFormatRules(r) { this.rules = r; return this; }

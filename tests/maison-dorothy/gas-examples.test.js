@@ -81,3 +81,8 @@ test('현황 대시보드: 카드·추세·TOP5·준비도·손님 구역이 모
     assert.ok(all.includes(t), `없음: ${t}`);
   assert.ok((all.match(/SPARKLINE/g) || []).length >= 4);                                          // 추세 1 + 준비도 막대 3
 });
+
+test('보기 좋게 꾸미기: 여러 번 실행해도 병합 오류 없음 (실제 시트의 병합 규칙 흉내)', () => {
+  const { pub } = setup();                 // setupSheets 안에서 1번
+  assert.doesNotThrow(() => { pub.styleSheets(); pub.styleSheets(); });
+});

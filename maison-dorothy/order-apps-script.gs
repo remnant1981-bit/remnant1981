@@ -394,7 +394,7 @@ function styleDashboard_(ss) {
 
   // ④ 인기 옷 TOP 5 · 다시 들여올 옷 (각 칸을 따로 꺼냄 → 이름은 옆 빈칸으로 이어져 보임)
   sec(19, '  최근 30일 인기 옷 TOP 5');
-  d.getRange('G19:I19').breakApart();
+  d.getRange('B19:I19').breakApart();     // sec() 가 B19:I19 를 통째로 합침 → 병합 전체를 풀어야 함(일부만 풀면 오류)
   d.getRange('B19:E19').merge(); d.getRange('G19:I19').merge().setValue('  다시 들여올 옷 · 재고 2벌 이하')
     .setFontSize(12).setFontWeight('bold').setFontColor(PLUM).setBorder(null, null, true, null, null, null, PLUM, SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
   d.getRange('F19').setBorder(null, null, false, null, null, null);
