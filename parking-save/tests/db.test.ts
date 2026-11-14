@@ -4,7 +4,7 @@ import { createSqliteDb, migrate } from "@/server/db";
 describe("migration", () => {
   it("스키마 적용 및 NULL 보존 (요금 미확인 ≠ 0)", async () => {
     const db = await createSqliteDb(":memory:");
-    expect((await migrate(db)).length).toBe(9);
+    expect((await migrate(db)).length).toBe(10);
     const now = "2026-11-09T00:00:00Z";
     await db.run("INSERT INTO parking_lots(source_name, source_record_id, name, collected_at, created_at, updated_at) VALUES ('t','1','테스트',?,?,?)", [now, now, now]);
     await db.run("INSERT INTO fee_rules(parking_lot_id, rule_type) VALUES (1,'BASE')");

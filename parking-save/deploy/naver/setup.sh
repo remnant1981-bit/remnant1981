@@ -42,9 +42,10 @@ DATA_GO_KR_SERVICE_KEY=
 SEOUL_OPENAPI_KEY=
 # 운영 알림 웹훅(Slack/Discord 등, 선택). 비워 두면 /var/log/parking-save-alert.log 에만 기록
 ALERT_WEBHOOK_URL=
-# 지도 배경: osm(기본) 또는 vworld(브이월드 무료 키 필요, 트래픽 증가 시 권장)
+# 지도 배경: osm(기본) | vworld(브이월드 무료 키) | naver(네이버 지도 Client ID, 실키 미검증)
 MAP_TILE_PROVIDER=osm
 VWORLD_API_KEY=
+NAVER_MAP_CLIENT_ID=
 EOT
   echo "   생성: $ENV_FILE (관리자 토큰은 무작위로 채움)"
 fi

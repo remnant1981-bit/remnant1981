@@ -3,7 +3,7 @@ import { getAppDb } from "@/server/app-db";
 import { schemaState, SYNC_STALE_HOURS } from "@/server/db-check";
 import { logError, recentErrorCount } from "@/server/log";
 import { STANDARD_SOURCE } from "@/collector/standard-api";
-import { tileConfig } from "@/lib/map-tiles";
+import { mapProvider } from "@/lib/map-tiles";
 
 export const dynamic = "force-dynamic";
 const startedAt = Date.now();
@@ -29,7 +29,7 @@ export async function GET() {
     if (schema.missing.length) issues.push("MIGRATIONS_PENDING");
     if (stdAgeH == null || stdAgeH > SYNC_STALE_HOURS) issues.push("STANDARD_SYNC_STALE");
     if (errors5m >= 20) issues.push("ERROR_BURST");
-    if (tileConfig().warning) issues.push("MAP_TILE_FALLBACK"); // 브이월드로 설정했는데 키 문제로 OSM 사용 중 — 설정 확인 필요
+    if (mapProvider().warning) issues.push("MAP_TILE_FALLBACK"); // 브이월드·네이버로 설정했는데 키 문제로 OSM 사용 중 — 설정 확인 필요
     return NextResponse.json({
       status: issues.length ? "degraded" : "ok", issues,
       uptimeSec: Math.round((now - startedAt) / 1000), version: process.env.APP_VERSION ?? null,

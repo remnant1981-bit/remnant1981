@@ -10,8 +10,10 @@ describe("보안 헤더(CSP)", () => {
     vi.resetModules(); vi.stubEnv("NODE_ENV", env);
     const cfg = (await import("../next.config")).default;
     const rules = await cfg.headers!();
+    const { buildCsp } = await import("@/lib/csp");
     vi.unstubAllEnvs();
-    return Object.fromEntries(rules[0].headers.map((h: { key: string; value: string }) => [h.key, h.value]));
+    // CSP는 요청마다 src/proxy.ts가 붙임(buildCsp). 나머지 보안 헤더는 next.config
+    return <Record<string, string>>{ ...Object.fromEntries(rules[0].headers.map((h: { key: string; value: string }) => [h.key, h.value])), "Content-Security-Policy": buildCsp("tiles", env !== "production") };
   };
   it("운영: eval 금지, 프레임·객체·base·form 제한", async () => {
     const h = await cspFor("production");

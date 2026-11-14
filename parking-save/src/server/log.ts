@@ -1,3 +1,4 @@
+import { countUsage } from "./usage";
 // 구조화 로그(한 줄 JSON → docker logs/journald에서 그대로 수집·검색). 개인정보·비밀값을 남기지 않는다.
 // - 좌표·검색어·토큰·인증키는 기록하지 않는다(SECURITY_PRIVACY.md). 오류 메시지 안의 serviceKey 등도 가린다.
 // - 최근 오류 수를 메모리에 집계해 헬스체크에서 보여준다(서버 1대 전제, 재시작 시 초기화).
@@ -48,7 +49,7 @@ export function log(level: Level, event: string, fields: Fields = {}, now = Date
     if (BLOCKED_FIELDS.has(k)) { safe[k] = "[REDACTED]"; continue; }
     safe[k] = typeof v === "string" ? redact(v) : v;
   }
-  if (level === "error") noteError(now);
+  if (level === "error") { noteError(now); countUsage("error", now); }
   sink(JSON.stringify({ ts: new Date(now).toISOString(), level, event, ...safe }), level);
 }
 export const logInfo = (event: string, f?: Fields) => log("info", event, f);
