@@ -21,7 +21,9 @@
 <link rel="preload" as="image" href="images/store-800.jpg" imagesrcset="images/store-800.jpg 800w, images/store.jpg 1200w" imagesizes="(min-width:720px) 100vw, 100vw">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,500;1,600&family=Hahmlet:wght@500&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,500;1,600&family=Hahmlet:wght@500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,500;1,600&family=Hahmlet:wght@500&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,500;1,600&family=Hahmlet:wght@500&display=swap"></noscript>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -205,9 +207,9 @@
         <label><input type="radio" name="ship" id="shipPick" value="매장 픽업"><span><b>매장 픽업</b><small>입어보고 결정</small></span></label>
       </div>
     </fieldset>
-    <div class="f"><label for="oName">받는 분 성함</label><input id="oName" autocomplete="name" maxlength="30"></div>
-    <div class="f"><label for="oPhone">연락처</label><input id="oPhone" type="tel" autocomplete="tel" inputmode="tel" placeholder="010-1234-5678" maxlength="15"></div>
-    <div class="f" id="addrBox"><label for="oAddr">배송 주소</label><div class="addr-row"><input id="oAddr" autocomplete="street-address" placeholder="도로명 주소" maxlength="120"><button type="button" class="btn line" id="findAddr">주소 찾기</button></div><div class="postlayer" id="postLayer" hidden></div><input id="oAddr2" autocomplete="address-line2" placeholder="상세 주소 (동·호수)" maxlength="60" aria-label="상세 주소"></div>
+    <div class="f"><label for="oName">받는 분 성함</label><input id="oName" enterkeyhint="next" autocomplete="name" maxlength="30"></div>
+    <div class="f"><label for="oPhone">연락처</label><input id="oPhone" enterkeyhint="next" type="tel" autocomplete="tel" inputmode="tel" placeholder="010-1234-5678" maxlength="15"></div>
+    <div class="f" id="addrBox"><label for="oAddr">배송 주소</label><div class="addr-row"><input id="oAddr" enterkeyhint="next" autocomplete="street-address" placeholder="도로명 주소" maxlength="120"><button type="button" class="btn line" id="findAddr">주소 찾기</button></div><div class="postlayer" id="postLayer" hidden></div><input id="oAddr2" enterkeyhint="next" autocomplete="address-line2" placeholder="상세 주소 (동·호수)" maxlength="60" aria-label="상세 주소"></div>
     <div class="f"><label for="oMemo">키·체형 고민·요청사항 <small>(선택)</small></label><textarea id="oMemo" placeholder="예) 키 160, 뱃살 커버되는 핏이면 좋겠어요" maxlength="300"></textarea></div>
     <input type="text" id="oWeb" name="website" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true">
     <label class="agree"><input type="checkbox" id="oAgree"><span>주문 처리(연락·배송)를 위해 성함·연락처·주소를 수집하며, 거래 완료 후 관련 법령에 따른 기간이 지나면 파기합니다. 동의합니다. <a href="policy.html#privacy" target="_blank" rel="noopener">전문 보기</a></span></label>
