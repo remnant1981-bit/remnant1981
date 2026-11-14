@@ -22,7 +22,7 @@
   const yl = (y) => `${y + 1}차년도`;
 
   // 기능 스위치(config.js features). 꺼진 기능은 숨김만 하고 저장 데이터는 유지
-  const FEAT = Object.assign({ examples: true, project: false, scenarios: false, faq: false, steps: false, legalHeader: false, execution: false }, CFG.features || {});
+  const FEAT = Object.assign({ examples: true, project: false, scenarios: false, faq: false, steps: false, legalHeader: false, execution: false, noticeImport: false }, CFG.features || {});
   document.querySelectorAll('[data-feature]').forEach((e) => { if (!FEAT[e.dataset.feature]) e.hidden = true; });
   // 연차·공동기관 기능이 꺼져 있으면 첫 기관·1차년도만 편집·계산·내보내기
   const single = (p) => (FEAT.project ? p : { ...p, years: 1, insts: p.insts.slice(0, 1) });
@@ -125,6 +125,7 @@
     const prevKey = inst.ruleset;
     inst.ruleset = value;
     if (RB.RULESETS[value].custom) { // 직접 입력 시작값 = 직전 법령 기준
+      if (!RB.RULESETS[prevKey].custom) inst.lastLegal = prevKey;
       const eff = RB.effectiveRules({ ...inst, ruleset: prevKey });
       inst.govMaxPct = eff.govMaxPct; inst.cashMinPct = eff.cashMinPct; inst.indirectPct = eff.indirectPct; inst.allowanceMaxPct = eff.allowancePct;
     } else inst.indirectPct = '';
@@ -152,8 +153,9 @@
     if (custom) $('ruleBox').open = true;
     $('ruleMode').textContent = custom ? '공고문 기준 직접 입력' : '법령 기준 고정';
     $('ruleMode').classList.toggle('warn', custom);
+    $('outsourceFixed').textContent = eff.outsourcePct;
     $('ruleHint').textContent = custom
-      ? '공고문·운영요령에 적힌 비율을 입력하세요. 법령 기준과 다를 수 있으므로 공고문 해당 조항을 확인하세요.'
+      ? (I().noticeSource ? `출처: ${I().noticeSource} — ` : '') + '공고문·운영요령에 적힌 비율을 입력하세요. 법령 기준과 다를 수 있으므로 공고문 해당 조항을 확인하세요.'
       : rs.profit
         ? `🔒 표시 값은 법령 기준으로 고정됩니다. 간접비율은 기관 간접비 고시비율 범위(최대 ${rs.indirectMax}%) 안에서 낮출 수 있습니다. 기관 유형은 모든 연차에 같이 적용됩니다.`
         : '🔒 비영리기관은 기관부담 의무가 없습니다. 간접비율은 기관 고시비율이 있으면 그 값으로 바꾸세요.';
@@ -457,6 +459,62 @@
       S = p; C = { i: 0, y: 0, mode: 'exec' }; save(); location.reload();
     } catch { alert('백업 파일을 읽지 못했습니다. 이 도구에서 저장한 .json 파일인지 확인하세요.'); }
   });
+
+  // ---------- 공고문에서 기준 가져오기(features.noticeImport) ----------
+  const NERR = { hwp: 'HWP 파일을 읽지 못했습니다. 한글에서 PDF 또는 HWPX로 저장해 올려 주세요.', 'hwp-locked': '암호가 설정된 HWP 문서입니다. 암호를 해제하거나 PDF로 저장해 올려 주세요.', 'hwp-dist': '배포용(복사 방지) HWP 문서라 읽을 수 없습니다. PDF로 저장해 올려 주세요.', type: 'HWP·HWPX·PDF·TXT 파일만 지원합니다.', size: '30MB 이하 파일만 올릴 수 있습니다.', empty: '글자를 찾지 못했습니다. 스캔 이미지 PDF는 읽을 수 없습니다.' };
+  const RATE_FIELDS = { govMaxPct: 'govMaxPct', cashMinPct: 'cashMinPct', indirectPct: 'indirectPct', allowanceMaxPct: 'allowanceMaxPct', outsourceMaxPct: 'outsourceMaxPct' };
+  const nBox = $('noticeResult');
+  async function importNotice(file) {
+    if (!file || !window.RBN) return;
+    nBox.hidden = false;
+    nBox.replaceChildren(el('p', { class: 'hint', text: `‘${file.name}’ 읽는 중…` }));
+    let items;
+    try { items = window.RBN.extractNotice(await window.RBN.readNoticeFile(file, document.baseURI)); }
+    catch (e) { nBox.replaceChildren(el('p', { class: 'nerr', text: NERR[e && e.message] || '파일을 읽지 못했습니다. 다른 형식(PDF·HWPX)으로 저장해 올려 주세요.' })); return; }
+    const picked = window.RBN.pickForType(items, I().ruleset === 'custom' ? I().lastLegal || 'sme' : I().ruleset);
+    const order = ['govAnnual', 'govMaxPct', 'cashMinPct', 'indirectPct', 'outsourceMaxPct', 'allowanceMaxPct', 'govTotal', 'periodMonths'];
+    const rows = order.map((f) => picked[f]).filter(Boolean);
+    const others = items.filter((it) => it.typeKey && !rows.includes(it));
+    const head = el('div', { class: 'nhead' }, el('strong', { text: `찾은 기준 ${rows.length}건` }), el('span', { class: 'hint', text: ` — ${file.name} · 근거 문장을 확인하고 적용할 항목을 고르세요.` }));
+    if (!rows.length) {
+      nBox.replaceChildren(head, el('p', { class: 'hint', text: '사업비 비율·금액 조항을 찾지 못했습니다. 비율 조항이 없는 공고(바우처·컨설팅형 등)이거나 표 안에 있을 수 있습니다. 적용 기준을 직접 확인해 입력하세요.' }));
+      return;
+    }
+    const applicable = (f) => f === 'govAnnual' || RATE_FIELDS[f];
+    const tbl = el('table', { class: 'tbl ntbl' },
+      el('thead', {}, el('tr', {}, el('th', { text: '적용' }), el('th', { text: '항목' }), el('th', { text: '찾은 값' }), el('th', { text: '공고문 근거' }))),
+      el('tbody', {}, ...rows.map((it) => el('tr', {},
+        el('td', {}, applicable(it.field) ? el('input', { type: 'checkbox', checked: true, 'data-field': it.field, 'aria-label': `${it.label} 적용` }) : el('span', { class: 'hint', text: '참고' })),
+        el('td', { text: it.label + (it.type ? ` (${it.type})` : '') }),
+        el('td', {}, el('strong', { text: it.display })),
+        el('td', { class: 'ev', text: `…${it.evidence}…` })))));
+    const note = others.length ? el('p', { class: 'hint', text: `다른 기관 유형 기준도 찾음: ${others.map((o) => `${o.type} ${o.label} ${o.display}`).join(', ')}` }) : '';
+    const apply = el('button', { type: 'button', class: 'btn', text: '선택 항목 적용', onclick: () => {
+      const on = [...tbl.querySelectorAll('input[data-field]:checked')].map((c) => c.dataset.field);
+      if (!on.length) return;
+      const inst = I();
+      if (on.some((f) => RATE_FIELDS[f])) {
+        const base = RB.effectiveRules(inst);
+        inst.govMaxPct = base.govMaxPct; inst.cashMinPct = base.cashMinPct; inst.indirectPct = base.indirectPct; inst.allowanceMaxPct = base.allowancePct; inst.outsourceMaxPct = base.outsourcePct;
+        if (inst.ruleset !== 'custom') inst.lastLegal = inst.ruleset;
+        inst.ruleset = 'custom';
+        for (const f of on) if (RATE_FIELDS[f]) inst[RATE_FIELDS[f]] = picked[f].value;
+        inst.noticeSource = file.name;
+      }
+      if (on.includes('govAnnual')) Y().gov = String(picked.govAnnual.value);
+      renderAll();
+      $('ruleBox').open = true;
+      nBox.replaceChildren(el('p', { class: 'nok', text: `적용했습니다(${on.length}건). 적용 기준이 ‘공고문 기준 직접 입력’으로 바뀌었고, 출처가 표시됩니다.` }));
+    } });
+    const close = el('button', { type: 'button', class: 'btn ghost', text: '닫기', onclick: () => { nBox.hidden = true; } });
+    nBox.replaceChildren(head, el('div', { class: 'tbl-wrap' }, tbl), note, el('div', { class: 'actions' }, apply, close),
+      el('p', { class: 'hint', text: '규칙 기반 자동 추출이라 놓치거나 잘못 읽을 수 있습니다. 반드시 공고문 원문과 대조하세요.' }));
+  }
+  $('noticeFile').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; importNotice(f); });
+  const drop = $('noticeDrop');
+  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); importNotice(e.dataTransfer.files && e.dataTransfer.files[0]); });
 
   // ---------- 광고(설정 시에만) ----------
   const slots = CFG.adsenseSlots || {};
