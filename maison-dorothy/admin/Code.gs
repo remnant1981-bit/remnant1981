@@ -18,7 +18,7 @@ const ORDER = '주문', PRODUCT = '상품', SETTING = '설정';
 const PHOTO_FOLDER = '메종도로시 상품사진';
 const STATUSES = ['입금대기', '입금확인', '발송완료', '픽업완료', '취소'];
 const PKEY = { show: '노출', id: '아이디', cat: '분류', name: '상품명', price: '가격', badge: '배지', img: '사진', gallery: '추가사진',
-  colors: '컬러', sizes: '사이즈', fit: '추천사이즈', desc: '설명', tip: '코디팁', post: '인스타링크', pair: '함께입기', soldOut: '품절' };
+  colors: '컬러', sizes: '사이즈', fit: '추천사이즈', desc: '설명', tip: '코디팁', post: '인스타링크', pair: '함께입기', soldOut: '품절', stock: '재고' };
 const SETTING_KEYS = ['공지', '영업시간안내', '영업요일', '오픈', '마감', '전화', '카톡채널', '밴드', '입금계좌', '입금기한', '자동취소', '보관기간'];
 
 function doGet() {
@@ -110,7 +110,7 @@ function productRow_(head, p, old) {
     let v = p[k];
     if (k === 'show') return v === false || v === 'N' ? 'N' : 'Y';
     if (k === 'soldOut') return v === true || v === 'Y' ? 'Y' : 'N';
-    if (k === 'price') { const d = String(v || '').replace(/[^\d]/g, ''); return d ? Number(d) : ''; }
+    if (k === 'price' || k === 'stock') { const d = String(v == null ? '' : v).replace(/[^\d]/g, ''); return d ? Number(d) : ''; }
     if (Array.isArray(v)) v = v.join(', ');
     return cell_(v, k === 'desc' ? 400 : 300);
   });
@@ -118,7 +118,9 @@ function productRow_(head, p, old) {
 function saveProduct(p) {
   guard_();
   if (!p || !String(p.name || '').trim()) throw new Error('상품명을 입력해 주세요');
-  const sh = sh_(PRODUCT), t = table_(sh), ci = t.head.indexOf('아이디');
+  const sh = sh_(PRODUCT);
+  if (String(p.stock == null ? '' : p.stock).trim() !== '') ensureCol_(sh, '재고');   // 예전 시트에 재고 칸이 없으면 추가
+  const t = table_(sh), ci = t.head.indexOf('아이디');
   if (ci < 0) throw new Error('"아이디" 칸이 없어요');
   let id = String(p.id || '').trim();
   if (!id) {   // 새 상품: 겹치지 않는 아이디 만들기

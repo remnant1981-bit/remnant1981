@@ -56,6 +56,7 @@ window.DorothyApp = function (opt) {
   /* ---------- 상품 카드 ---------- */
   const img = (file, alt, lazy = true, cls = '') => !file ? '' : `<img${cls ? ` class="${cls}"` : ''} src="${src(file)}" alt="${esc(alt)}" width="720" height="900"${lazy ? ' loading="lazy" decoding="async"' : ''}>`;
   const tag = p => p.soldOut ? '<span class="tag out">Sold out</span>'
+    : p.stock > 0 && p.stock <= 2 ? `<span class="tag last">마지막 ${p.stock}벌</span>`
     : p.badge === 'NEW' ? '<span class="tag">New</span>'
     : p.badge ? `<span class="tag rec">${esc(p.badge)}</span>` : '';
   const card = (p, i = 9) => `
@@ -291,7 +292,7 @@ window.DorothyApp = function (opt) {
 
   $('orderForm').addEventListener('submit', async e => {
     e.preventDefault();
-    const o = { name: $('oName').value, phone: $('oPhone').value, pickup: pickup(), address: [$('oAddr').value.trim(), $('oAddr2').value.trim()].filter(Boolean).join(' '), memo: $('oMemo').value, agree: $('oAgree').checked };
+    const o = { ad: $('oAd').checked, name: $('oName').value, phone: $('oPhone').value, pickup: pickup(), address: [$('oAddr').value.trim(), $('oAddr2').value.trim()].filter(Boolean).join(' '), memo: $('oMemo').value, agree: $('oAgree').checked };
     const miss = L.validate(o);
     if (miss.length) { $('oErr').textContent = `확인해 주세요: ${miss.join(', ')}`; $('oErr').hidden = false; return; }
     $('oErr').hidden = true;

@@ -170,9 +170,10 @@ textarea.txt{min-height:76px;resize:vertical}
       <label class="f"><span>가격 <small>비우면 "가격 문의"</small></span><input class="txt" id="fPrice" inputmode="numeric" placeholder="39000"></label>
       <label class="f"><span>분류</span><input class="txt" id="fCat" list="catList" maxlength="10" placeholder="아우터"></label>
     </div>
+    <label class="f"><span>재고 <small>남은 수량 · 비우면 재고 관리 안 함 · 0 이 되면 다음 날 아침 자동 품절</small></span><input class="txt" id="fStock" type="number" inputmode="numeric" min="0" max="999" placeholder="예) 5"></label>
     <datalist id="catList"></datalist>
     <label class="f"><span>배지</span>
-      <select class="txt" id="fBadge"><option value="">없음</option><option value="NEW">NEW (신상)</option><option value="사장님 추천">사장님 추천</option><option value="재입고">재입고</option></select></label>
+      <select class="txt" id="fBadge"><option value="">없음</option><option value="NEW">NEW (신상)</option><option value="사장님 추천">사장님 추천</option><option value="재입고">재입고</option><option value="BEST">BEST</option></select></label>
     <label class="f"><span>컬러 <small>쉼표로 구분 · 예) 아이보리, 그레이</small></span><input class="txt" id="fColors" maxlength="100"></label>
     <label class="f"><span>사이즈 <small>정해진 사이즈만 · 예) S, M, L (비우면 손님이 평소 사이즈 66~99 선택)</small></span><input class="txt" id="fSizes" maxlength="60"></label>
     <div class="f"><span>추천 사이즈</span>
@@ -384,7 +385,7 @@ textarea.txt{min-height:76px;resize:vertical}
       return `<article class="card p-item${p.show === 'N' ? ' off' : ''}" data-id="${esc(p.id)}">
         ${u ? `<img src="${esc(u)}" alt="" loading="lazy">` : '<span class="noimg"></span>'}
         <div style="display:grid;gap:8px;min-width:0">
-          <div><p class="nm">${esc(p.name)}</p><p class="muted">${esc([p.cat, p.price ? won(p.price) : '가격 문의', p.badge].filter(Boolean).join(' · '))}</p></div>
+          <div><p class="nm">${esc(p.name)}</p><p class="muted">${esc([p.cat, p.price ? won(p.price) : '가격 문의', p.stock !== '' && p.stock != null ? `재고 ${digits(p.stock)}` : '', p.badge].filter(Boolean).join(' · '))}</p></div>
           <div class="toggles"><label class="sw"><input type="checkbox" data-flag="show" ${p.show !== 'N' ? 'checked' : ''}>보이기</label><label class="sw"><input type="checkbox" class="so" data-flag="soldOut" ${p.soldOut === 'Y' ? 'checked' : ''}>품절</label></div>
           <div class="row"><button type="button" class="btn sm grow" data-edit>수정</button><button type="button" class="btn sm" data-move="up" aria-label="위로">▲</button><button type="button" class="btn sm" data-move="down" aria-label="아래로">▼</button><button type="button" class="btn sm" data-move="top">맨 위로</button></div>
         </div></article>`;
@@ -419,7 +420,7 @@ textarea.txt{min-height:76px;resize:vertical}
     editing = p ? { ...p } : null;
     photos = p ? [p.img, ...list(p.gallery).filter(x => /^https|\.(jpe?g|png|webp)$/i.test(x))].filter(Boolean) : [];
     $('pTitle').textContent = p ? '상품 수정' : '새 상품';
-    $('fName').value = p ? p.name : ''; $('fPrice').value = p ? digits(p.price) : ''; $('fCat').value = p ? p.cat : '';
+    $('fName').value = p ? p.name : ''; $('fPrice').value = p ? digits(p.price) : ''; $('fStock').value = p && p.stock !== '' && p.stock != null ? digits(p.stock) : ''; $('fCat').value = p ? p.cat : '';
     const badge = p ? p.badge : 'NEW';
     if (badge && ![...$('fBadge').options].some(o => o.value === badge)) $('fBadge').insertAdjacentHTML('beforeend', `<option value="${esc(badge)}">${esc(badge)}</option>`);
     $('fBadge').value = badge || '';
@@ -429,7 +430,7 @@ textarea.txt{min-height:76px;resize:vertical}
     $('fShow').checked = !p || p.show !== 'N'; $('fSold').checked = !!p && p.soldOut === 'Y';
     const pairs = list(p ? p.pair : '');
     $('fPair').innerHTML = D.products.filter(x => !p || x.id !== p.id).map(x => `<label><input type="checkbox" value="${esc(x.id)}" ${pairs.includes(x.id) ? 'checked' : ''}>${esc(x.name)}</label>`).join('') || '<span class="muted">다른 상품이 없어요</span>';
-    $('catList').innerHTML = [...new Set(D.products.map(x => x.cat).filter(Boolean))].map(c => `<option value="${esc(c)}">`).join('');
+    $('catList').innerHTML = [...new Set(['아우터', '조끼', '원피스', '상의', '니트', '하의', '스커트', '잡화', ...D.products.map(x => x.cat).filter(Boolean)])].map(c => `<option value="${esc(c)}">`).join('');
     $('delBox').innerHTML = p ? '<button type="button" class="btn danger" id="pDel">이 상품 삭제</button>' : '';
     $('fId').textContent = p ? `아이디 ${p.id} (찜·공유 링크에 쓰여서 바뀌지 않아요)` : '';
     drawPhotos(); $('pSheet').hidden = false; $('pSheet').scrollTop = 0; document.body.style.overflow = 'hidden';
@@ -492,7 +493,7 @@ textarea.txt{min-height:76px;resize:vertical}
     const post = $('fPost').value.trim();
     if (post && !/^https:\/\/(www\.)?instagram\.com\//.test(post)) { toast('인스타 게시물 주소를 확인해 주세요', true); return; }
     const p = {
-      id: editing ? editing.id : '', name, price: digits($('fPrice').value), cat: $('fCat').value.trim() || '기타', badge: $('fBadge').value,
+      id: editing ? editing.id : '', name, price: digits($('fPrice').value), stock: $('fStock').value.trim() === '' ? '' : digits($('fStock').value), cat: $('fCat').value.trim() || '기타', badge: $('fBadge').value,
       img: photos[0] || '', gallery: photos.slice(1).join(', '), colors: list($('fColors').value).join(', '), sizes: list($('fSizes').value).join(', '),
       fit: lo && hi ? `${lo}~${hi}` : '', desc: $('fDesc').value.trim(), tip: $('fTip').value.trim(), post,
       pair: [...$('fPair').querySelectorAll('input:checked')].map(x => x.value).join(', '), show: $('fShow').checked, soldOut: $('fSold').checked

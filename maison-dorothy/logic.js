@@ -114,7 +114,7 @@
   const yes = v => /^(y|yes|o|예|네|true|품절|1)$/i.test(String(v || '').trim());
   const no = v => /^(n|no|x|아니오|아니요|숨김|false|0)$/i.test(String(v || '').trim());
   const HEAD = { 노출: 'show', 아이디: 'id', id: 'id', 분류: 'cat', 상품명: 'name', 가격: 'price', 배지: 'badge', 사진: 'img', 추가사진: 'gallery',
-    컬러: 'colors', 사이즈: 'sizes', 추천사이즈: 'fit', 설명: 'desc', 코디팁: 'tip', 인스타링크: 'post', 함께입기: 'pair', 품절: 'soldOut' };
+    컬러: 'colors', 사이즈: 'sizes', 추천사이즈: 'fit', 설명: 'desc', 코디팁: 'tip', 인스타링크: 'post', 함께입기: 'pair', 품절: 'soldOut', 재고: 'stock' };
   function parseSheet(rows) {
     if (!Array.isArray(rows)) return null;
     const hi = rows.findIndex(r => Array.isArray(r) && r.some(c => String(c).trim() === '상품명'));
@@ -135,7 +135,9 @@
         id, cat: (o.cat || '기타').slice(0, 10), name: o.name.slice(0, 40), price: price > 0 ? price : null,
         badge: badge || undefined, img: normalizeImg(o.img), gallery: String(o.gallery || '').split(/[\s,]+/).map(normalizeImg).filter(Boolean).slice(0, 6),
         colors: list(o.colors), sizes: list(o.sizes).length ? list(o.sizes) : undefined, fit: fm ? [Number(fm[1]), Number(fm[2])] : undefined,
-        desc: (o.desc || '').slice(0, 400), tip: (o.tip || '').slice(0, 200), post, pair: list(o.pair), soldOut: yes(o.soldOut)
+        desc: (o.desc || '').slice(0, 400), tip: (o.tip || '').slice(0, 200), post, pair: list(o.pair),
+        stock: /^\d+$/.test(String(o.stock || '').replace(/[,\s벌개]/g, '')) ? Number(String(o.stock).replace(/[,\s벌개]/g, '')) : null,
+        soldOut: yes(o.soldOut) || /^0+$/.test(String(o.stock || '').replace(/[,\s벌개]/g, ''))   // 재고 0 이면 바로 품절
       });
     });
     out.forEach(p => { p.pair = p.pair.filter(id => seen.has(id) && id !== p.id); });

@@ -191,3 +191,10 @@ test('parseSettings: 올바른 값만 반영', () => {
   assert.deepEqual(L.parseSettings([['공지', '']]), { notice: '' });
   assert.equal(L.parseSettings('x'), null);
 });
+
+test('parseSheet 재고: 숫자·빈칸·0(바로 품절)', () => {
+  const H = ['노출', '아이디', '분류', '상품명', '가격', '품절', '재고'];
+  const p = L.parseSheet([H, ['Y', 'a', '상의', 'A', '1000', 'N', '2'], ['Y', 'b', '상의', 'B', '1000', 'N', ''], ['Y', 'c', '상의', 'C', '1000', 'N', '0'], ['Y', 'd', '상의', 'D', '1000', 'N', '5벌']]);
+  assert.deepEqual(p.map(x => x.stock), [2, null, 0, 5]);
+  assert.deepEqual(p.map(x => x.soldOut), [false, false, true, false]);
+});

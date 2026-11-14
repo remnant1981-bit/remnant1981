@@ -444,3 +444,7 @@ details p a{display:inline-block;padding:10px 0}
 .st.sk .sk-line{width:52px;height:10px;margin:0}
 .st.sk .sk-line.short{width:34px}
 @media (prefers-reduced-motion:no-preference){.sk .ph,.sk-box,.st.sk .ring,.sk-line{animation:shimmer 1.4s linear infinite}@keyframes shimmer{to{background-position:-200% 0}}}
+
+.tag.last{background:#a2512f;color:#fff}
+.tag.last::before{background:#fff}
+.agree.ad b{color:var(--ink-2);font-weight:600}

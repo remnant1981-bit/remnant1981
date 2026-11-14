@@ -17,7 +17,7 @@ const ORDER = { no: 'D1114-1000-01', name: '김도로시', phone: '010-5555-1212
 
 test('공개: 시트 준비하기 → 현황·주문·상품·설정 탭', () => {
   const { env } = setup();
-  assert.deepEqual([...env.sheets.keys()].sort(), ['상품', '설정', '주문', '현황']);
+  assert.deepEqual([...env.sheets.keys()].sort(), ['고객', '상품', '설정', '인기상품', '주문', '현황']);
   assert.equal(env.sheets.get('설정').getRange(1, 1).getDisplayValues()[0][0], '항목');
 });
 
@@ -178,9 +178,9 @@ test('공개: 시트 준비하기 → 빈 기본 탭(시트1·Sheet2)만 정리,
   env.ss.insertSheet('메모');                                    // 기본 이름 아님 → 유지
   const pub = env.load('order-apps-script.gs');
   pub.setupSheets();
-  assert.deepEqual([...env.sheets.keys()].sort(), ['메모', '상품', '설정', '시트3', '주문', '현황']);
+  assert.deepEqual([...env.sheets.keys()].sort(), ['고객', '메모', '상품', '설정', '시트3', '인기상품', '주문', '현황']);
   pub.setupSheets();                                             // 다시 눌러도 같음
-  assert.equal(env.sheets.size, 6);
+  assert.equal(env.sheets.size, 8);
 });
 
 /* ---------- 자동화 ---------- */
