@@ -20,9 +20,31 @@
   };
   const groupDigits = (v) => { const n = RB.int(v); return n ? fmt(n) : String(v ?? '').replace(/[^\d]/g, ''); };
   const yl = (y) => `${y + 1}차년도`;
+  // 페이지 안 확인창(브라우저 기본 confirm·alert·prompt는 미리보기·임베드 환경에서 막힐 수 있음)
+  const askDlg = $('askDlg');
+  function ask(msg, opts = {}) {
+    if (window.__rbAutoConfirm) return Promise.resolve(opts.input !== undefined ? (window.__rbAutoInput ?? opts.input) : true); // 자동 테스트용
+    return new Promise((resolve) => {
+      $('askMsg').textContent = msg;
+      const inp = $('askInput');
+      inp.hidden = opts.input === undefined; inp.value = opts.input ?? '';
+      $('askCancel').hidden = !!opts.alert;
+      $('askOk').textContent = opts.okText || '확인';
+      const done = (v) => { askDlg.close ? askDlg.close() : askDlg.removeAttribute('open'); cleanup(); resolve(v); };
+      const ok = () => done(opts.input !== undefined ? inp.value : true);
+      const no = () => done(opts.input !== undefined ? null : false);
+      const key = (e) => { if (e.key === 'Enter' && !inp.hidden) { e.preventDefault(); ok(); } };
+      const cancelEv = (e) => { e.preventDefault(); no(); };
+      const cleanup = () => { $('askOk').removeEventListener('click', ok); $('askCancel').removeEventListener('click', no); inp.removeEventListener('keydown', key); askDlg.removeEventListener('cancel', cancelEv); };
+      $('askOk').addEventListener('click', ok); $('askCancel').addEventListener('click', no); inp.addEventListener('keydown', key); askDlg.addEventListener('cancel', cancelEv);
+      if (askDlg.showModal) askDlg.showModal(); else askDlg.setAttribute('open', '');
+      (inp.hidden ? $('askOk') : inp).focus();
+    });
+  }
+  const notify = (msg) => ask(msg, { alert: true });
 
   // 기능 스위치(config.js features). 꺼진 기능은 숨김만 하고 저장 데이터는 유지
-  const FEAT = Object.assign({ examples: true, project: false, scenarios: false, faq: false, steps: false, legalHeader: false, execution: false, noticeImport: false }, CFG.features || {});
+  const FEAT = Object.assign({ examples: true, project: false, scenarios: false, faq: false, steps: false, legalHeader: false, execution: false, noticeImport: false, helper: false }, CFG.features || {});
   document.querySelectorAll('[data-feature]').forEach((e) => { if (!FEAT[e.dataset.feature]) e.hidden = true; });
   // 연차·공동기관 기능이 꺼져 있으면 첫 기관·1차년도만 편집·계산·내보내기
   const single = (p) => (FEAT.project ? p : { ...p, years: 1, insts: p.insts.slice(0, 1) });
@@ -34,7 +56,20 @@
   const I = () => S.insts[C.i];
   const Y = () => I().data[C.y];
   const save = () => { store.set('rb.current', S); store.set('rb.cur', C); };
-  const replaceProject = (p) => { S = RB.normalizeProject(p); C = { i: 0, y: 0 }; save(); location.reload(); };
+  // 새로고침 없이 교체(저장소를 못 쓰는 환경에서도 내용 유지)
+  const replaceProject = (p, mode) => {
+    const prevS = S, prevC = C;
+    try {
+      S = RB.normalizeProject(p); C = { i: 0, y: 0, mode: mode || C.mode || 'plan' };
+      titleIn.value = S.title; xKeys = ''; nameEdited = false;
+      updateDemoNote(); renderAll(); setMode(C.mode);
+    } catch (e) {
+      S = prevS; C = prevC; titleIn.value = S.title; xKeys = ''; updateDemoNote(); renderAll(); setMode(C.mode);
+      throw e;
+    }
+    save();
+    window.scrollTo(0, 0);
+  };
 
   $('basisLine').textContent = `적용 법령: ${RB.SOURCES.decreeT1} · ${RB.SOURCES.std} — 기준일 ${RB.BASIS_DATE}`;
   $('foot').textContent = `참고용 계산입니다. 공고문·운영요령이 우선합니다. 근거: ${RB.SOURCES.decreeT1}, ${RB.SOURCES.std}(기준일 ${RB.BASIS_DATE}).${CFG.contact ? ` 문의: ${CFG.contact}` : ''}`;
@@ -43,21 +78,22 @@
   // ---------- 예시(데모) ----------
   const hasInput = () => S.insts.some((inst) => inst.data.some((d) => RB.int(d.gov) || d.people.some((p) => p.name || p.salary) || Object.values(d.items).some((v) => v && (v.cash || v.inkind))));
   const isExample = () => String(S.title || '').startsWith('[예시]');
-  document.querySelectorAll('[data-example]').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-example]').forEach((b) => b.addEventListener('click', async () => {
     const ex = RB.EXAMPLES[b.dataset.example];
-    if (hasInput() && !isExample() && !confirm(`'${ex.label}'으로 바꿀까요? 지금 입력한 내용은 지워집니다. (필요하면 먼저 '현재 안 저장')`)) return;
+    if (hasInput() && !isExample() && !(await ask(`'${ex.label}'으로 바꿀까요? 지금 입력한 내용은 지워집니다. (필요하면 먼저 '현재 안 저장')`))) return;
     replaceProject(FEAT.project ? ex.state : single(RB.normalizeProject(ex.state)));
   }));
-  if (isExample()) {
+  function updateDemoNote() {
     const n = $('demoNote');
-    n.hidden = false;
-    n.append('예시 데이터로 체험 중입니다. 값을 바꿔 보며 점검 결과를 확인하고, 실제 작성은 ', el('button', { type: 'button', class: 'linkbtn', text: '새로 작성', onclick: () => replaceProject({}) }), '을 누르세요.');
+    n.hidden = !isExample();
+    n.replaceChildren(...(isExample() ? ['예시 데이터로 체험 중입니다. 값을 바꿔 보며 점검 결과를 확인하고, 실제 작성은 ', el('button', { type: 'button', class: 'linkbtn', text: '새로 작성', onclick: () => replaceProject({}) }), '을 누르세요.'] : []));
   }
+  updateDemoNote();
 
   // ---------- 0. 과제 구성 ----------
   const titleIn = $('title');
   titleIn.value = S.title;
-  titleIn.addEventListener('input', () => { S.title = titleIn.value; save(); });
+  titleIn.addEventListener('input', () => { S.title = titleIn.value; save(); updateDemoNote(); });
   const yearsSel = $('years');
   for (let n = 1; n <= RB.MAX_YEARS; n++) yearsSel.append(el('option', { value: n, text: `${n}년(${n}개 연차)` }));
   yearsSel.value = S.years;
@@ -76,9 +112,9 @@
         el('td', { 'data-label': '역할' }, el('select', { 'aria-label': `기관 ${i + 1} 역할`, onchange: (e) => { inst.role = e.target.value; renderTabs(); updateSummary(); save(); } },
           ...Object.entries(RB.ROLES).map(([k, v]) => el('option', { value: k, text: v.replace('연구개발', ''), selected: inst.role === k })))),
         el('td', { 'data-label': '기관 유형' }, el('select', { 'aria-label': `기관 ${i + 1} 유형`, onchange: (e) => setRuleset(i, e.target.value) }, ...rulesetOptions(inst.ruleset))),
-        el('td', { class: 'del' }, S.insts.length > 1 ? el('button', { type: 'button', class: 'icon', 'aria-label': `${inst.name} 삭제`, text: '✕', onclick: () => {
-          if (!confirm(`'${inst.name}'과 이 기관의 모든 연차 편성을 삭제할까요?`)) return;
-          S.insts.splice(i, 1); clampCur(); renderAll();
+        el('td', { class: 'del' }, S.insts.length > 1 ? el('button', { type: 'button', class: 'icon', 'aria-label': `${inst.name} 삭제`, text: '✕', onclick: async () => {
+          if (!(await ask(`'${inst.name}'과 이 기관의 모든 연차 편성을 삭제할까요?`))) return;
+          S.insts.splice(i, 1); if (i < C.i) C.i--; clampCur(); renderAll();
         } }) : ''),
       ));
     });
@@ -101,7 +137,7 @@
       const errs = it.years.reduce((a, r) => a + r.errors, 0);
       return chip(`${it.role === 'lead' ? '주관 · ' : ''}${it.name}`, i === C.i, errs, () => go(i, C.y), `${it.name} 편집${errs ? `, 오류 ${errs}건` : ''}`);
     }));
-    $('yearTabs').replaceChildren(...Array.from({ length: S.years }, (_, y) => {
+    $('yearTabs').replaceChildren(...Array.from({ length: P.project.years }, (_, y) => {
       const errs = P.insts[C.i].years[y].errors;
       return chip(yl(y), y === C.y, errs, () => go(C.i, y), `${yl(y)} 편집${errs ? `, 오류 ${errs}건` : ''}`);
     }));
@@ -110,10 +146,11 @@
     $('curLabel').textContent = !FEAT.project || (S.insts.length === 1 && S.years === 1) ? '' : `— ${I().name} · ${yl(C.y)}`;
   }
   function go(i, y) { C.i = i; C.y = y; clampCur(); renderAll(); }
-  $('copyPrev').addEventListener('click', () => {
+  $('copyPrev').addEventListener('click', async () => {
     if (C.y === 0) return;
-    if (!confirm(`${yl(C.y - 1)}의 정부출연금·인건비·비목을 ${yl(C.y)}에 복사할까요? 현재 ${yl(C.y)} 입력은 바뀝니다.`)) return;
-    I().data[C.y] = JSON.parse(JSON.stringify(I().data[C.y - 1]));
+    if (!(await ask(`${yl(C.y - 1)}의 정부출연금·인건비·비목을 ${yl(C.y)}에 복사할까요? 현재 ${yl(C.y)} 입력은 바뀝니다.`))) return;
+    const src = JSON.parse(JSON.stringify(I().data[C.y - 1])), cur = I().data[C.y];
+    cur.gov = src.gov; cur.people = src.people; cur.items = src.items; // 집행 기록(exec)은 유지
     renderAll();
   });
 
@@ -214,8 +251,14 @@
           oninput: (e) => { v[side] = e.target.value; e.target.value = groupDigits(e.target.value); update(); } }));
       };
       const label = el('td', {}, it.label);
+      if (FEAT.helper && RB.ITEM_HELP[it.key]) {
+        const helpRow = el('tr', { class: 'help-row', hidden: true }, el('td', { colspan: '5', text: RB.ITEM_HELP[it.key] }));
+        label.append(' ', el('button', { type: 'button', class: 'info', 'aria-label': `${it.label} 설명`, 'aria-expanded': 'false', text: 'ⓘ', onclick: (e) => { helpRow.hidden = !helpRow.hidden; e.currentTarget.setAttribute('aria-expanded', String(!helpRow.hidden)); } }));
+        label._help = helpRow;
+      }
       if (auto) label.append(' ', el('span', { class: 'computed', text: it.key === 'personnel' ? '(2단계에서 계산)' : '(자동 계산)' }));
       iBody.append(el('tr', {}, label, num('cash'), num('inkind'), el('td', { 'data-cell': `${it.key}.total` }), el('td', { 'data-cell': `${it.key}.share` })));
+      if (label._help) iBody.append(label._help);
     }
     iBody.querySelectorAll('[data-cell]').forEach((c) => { cells[c.dataset.cell] = c; });
   }
@@ -242,7 +285,17 @@
       remain.className = 'remain ' + (lack > 0 ? 'todo' : 'done');
     } else remain.textContent = '';
     // 오류·주의만 기본 표시, 통과·계산 내역은 접어 둠
-    const li = (c) => el('li', { class: c.level }, el('span', { text: c.msg }), c.basis ? el('small', { class: 'cite', text: c.basis }) : '');
+    const fixes = FEAT.helper ? RB.suggestFixes(RB.sheetState(S, C.i, C.y)) : [];
+    const fixFor = (c) => fixes.filter((x) => x.code === c.code && (x.ref === undefined || x.ref === c.ref));
+    const fixBtn = (x) => el('button', { type: 'button', class: 'btn sm fix', text: `🛠 ${x.label}`, onclick: () => {
+      const d = Y(); const n = RB.applyFix({ people: d.people, items: d.items }, x);
+      d.people = n.people; d.items = n.items; renderPeople(); renderItems(); update();
+      toast($('dlToast'), `고쳤습니다: ${x.label}`);
+    } });
+    const nErr = r.checks.filter((c) => c.level === 'error').length;
+    $('fixAll').hidden = !(FEAT.helper && nErr && fixes.length);
+    $('fixAll').textContent = `🛠 오류 ${nErr}건 한 번에 고치기`;
+    const li = (c) => el('li', { class: c.level }, el('span', { text: c.msg }), c.basis ? el('small', { class: 'cite', text: c.basis }) : '', ...(c.code ? fixFor(c).map(fixBtn) : []));
     const issues = r.checks.filter((c) => c.level === 'error' || c.level === 'warn');
     const passed = r.checks.filter((c) => c.level === 'ok' || c.level === 'info');
     const ready = !!f.gov && !!r.total.total;
@@ -264,6 +317,7 @@
     $('meterGov').style.width = w(Math.min(f.gov, t.cash)); $('meterCash').style.width = w(orgCash); $('meterInk').style.width = w(t.inkind);
     $('liveCur').textContent = $('curLabel').textContent.replace(/^— /, '');
     updateSummary();
+    updateDownload(r);
     save();
     return r;
   }
@@ -272,8 +326,8 @@
   function updateSummary() {
     const P = RB.calcProject(single(S));
     renderTabs(P);
-    const multi = S.years > 1;
-    const head = el('tr', {}, el('th', { text: '기관' }), ...Array.from({ length: S.years }, (_, y) => el('th', { text: yl(y) })), ...(multi ? [el('th', { text: '합계' })] : []));
+    const multi = P.project.years > 1;
+    const head = el('tr', {}, el('th', { text: '기관' }), ...Array.from({ length: P.project.years }, (_, y) => el('th', { text: yl(y) })), ...(multi ? [el('th', { text: '합계' })] : []));
     const cell = (s, errs, onclick, label) => el('td', {}, el('button', { type: 'button', class: `sumcell${errs ? ' bad' : ''}`, onclick, 'aria-label': label },
       el('strong', { text: fmt(s.total) }), el('small', { text: `정부 ${fmt(s.gov)} · 현금 ${fmt(s.orgCash)} · 현물 ${fmt(s.inkind)}` }), errs ? el('span', { class: 'cnt', text: `✖ 오류 ${errs}` }) : ''));
     const plain = (s, strong) => el('td', {}, el(strong ? 'strong' : 'span', { text: fmt(s.total) }), el('small', { text: `정부 ${fmt(s.gov)}${s.total ? ` (${((s.gov / s.total) * 100).toFixed(1)}%)` : ''}` }));
@@ -298,16 +352,50 @@
 
   // ---------- 엑셀·저장 ----------
   $('print').addEventListener('click', () => window.print());
-  $('reset').addEventListener('click', () => {
-    if (!confirm('입력한 내용을 모두 지우고 새로 작성할까요? (저장한 안은 유지)')) return;
+  $('reset').addEventListener('click', async () => {
+    if (!(await ask('입력한 내용을 모두 지우고 새로 작성할까요? (저장한 안은 유지)'))) return;
     replaceProject({});
   });
+  $('fixAll').addEventListener('click', () => {
+    const d = Y();
+    const res = RB.autoFix({ ...RB.sheetState(S, C.i, C.y) });
+    d.people = res.sheet.people; d.items = res.sheet.items;
+    renderPeople(); renderItems(); update();
+    toast($('dlToast'), res.remaining ? `${res.applied.length}건 고쳤고 ${res.remaining}건은 직접 확인이 필요합니다.` : `오류를 모두 고쳤습니다(${res.applied.length}단계). 바뀐 금액을 확인하세요.`);
+    $('s3').scrollIntoView({ behavior: 'smooth' });
+  });
+  // ---------- 엑셀 다운로드 카드 ----------
+  const safeName = (v) => String(v || '').replace(/[\\/:*?"<>|]/g, '_').replace(/\.xlsx$/i, '').trim().slice(0, 80);
+  const defaultName = () => `${safeName(S.title) || '사업비편성표'}_${today()}`;
+  let nameEdited = false;
+  $('xlsxName').addEventListener('input', () => { nameEdited = true; });
+  function toast(box, msg) {
+    box.textContent = msg; box.hidden = false;
+    clearTimeout(box._t); box._t = setTimeout(() => { box.hidden = true; }, 6000);
+  }
+  function updateDownload(r) {
+    if (!nameEdited) $('xlsxName').value = defaultName();
+    const P = single(S);
+    const sheets = ['총괄표', ...P.insts.map((x, i) => `${i + 1}.${x.name} 사용계획`), '인건비 명세', '적용 기준'];
+    $('dlSheets').replaceChildren(...sheets.map((n) => el('li', { text: n })));
+    const ready = !!RB.int(Y().gov);
+    const P2 = RB.calcProject(P);
+    const errs = P2.insts.reduce((a, it) => a + it.years.reduce((b, y) => b + y.errors, 0), 0);
+    const st = $('dlStatus');
+    st.className = 'dl-status ' + (!ready ? 'wait' : errs ? 'warn' : 'ok');
+    st.replaceChildren(!ready ? '정부출연금을 입력하면 다운로드할 수 있습니다.'
+      : errs ? el('span', {}, `⚠ 점검 오류 ${errs}건 — 다운로드는 되지만 먼저 고치는 것을 권장합니다. `, el('a', { href: '#s4', text: '오류 보기' }))
+        : '✔ 점검 통과 — 합계·비율은 엑셀 수식으로 들어가 계획서에 맞춰 바로 고칠 수 있습니다.');
+    $('xlsx').disabled = !ready;
+  }
   $('xlsx').addEventListener('click', () => {
+    const name = `${safeName($('xlsxName').value) || defaultName()}.xlsx`;
     const bytes = RB.buildXlsx(single(S));
     const url = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-    const a = el('a', { href: url, download: `${(S.title || '사업비편성표').replace(/[\\/:*?"<>|]/g, '_')}_${today()}.xlsx` });
+    const a = el('a', { href: url, download: name });
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast($('dlToast'), `✔ ‘${name}’ 다운로드됨 — 엑셀에서 열면 합계가 자동 계산됩니다.`);
   });
   const MAX_SCEN = 20;
   function renderScenarios() {
@@ -317,22 +405,22 @@
       return el('li', {},
         el('span', {}, el('strong', { text: sc.name }), ' ', el('span', { class: 'meta', text: `기관 ${P.insts.length} · ${P.project.years}개 연차 · 정부 ${fmt(P.total.gov)} · 총 ${fmt(P.total.total)}천원 · ${sc.savedAt}` })),
         el('span', {},
-          el('button', { type: 'button', class: 'btn ghost', text: '불러오기', onclick: () => { if (confirm(`'${sc.name}'을 불러올까요? 현재 입력은 바뀝니다.`)) replaceProject(sc.state); } }), ' ',
+          el('button', { type: 'button', class: 'btn ghost', text: '불러오기', onclick: async () => { if (await ask(`'${sc.name}'을 불러올까요? 현재 입력은 바뀝니다.`)) replaceProject(sc.state); } }), ' ',
           el('button', { type: 'button', class: 'icon', 'aria-label': `${sc.name} 삭제`, text: '✕', onclick: () => { list.splice(i, 1); store.set('rb.scenarios', list); renderScenarios(); } })));
     }));
   }
-  $('saveScenario').addEventListener('click', () => {
+  $('saveScenario').addEventListener('click', async () => {
     const list = store.get('rb.scenarios', []);
-    if (list.length >= MAX_SCEN) { alert(`최대 ${MAX_SCEN}개까지 저장할 수 있습니다. 기존 안을 삭제하세요.`); return; }
-    const name = (prompt('저장할 이름', S.title || `안 ${list.length + 1}`) || '').trim().slice(0, 40);
+    if (list.length >= MAX_SCEN) { await notify(`최대 ${MAX_SCEN}개까지 저장할 수 있습니다. 기존 안을 삭제하세요.`); return; }
+    const name = ((await ask('저장할 이름을 입력하세요.', { input: S.title || `안 ${list.length + 1}` })) || '').trim().slice(0, 40);
     if (!name) return;
     list.unshift({ name, savedAt: today(), state: JSON.parse(JSON.stringify(S)) });
-    if (!store.set('rb.scenarios', list)) alert('브라우저 저장 공간에 저장하지 못했습니다.');
+    if (!store.set('rb.scenarios', list)) await notify('브라우저 저장 공간에 저장하지 못했습니다.');
     renderScenarios();
   });
 
   // ---------- 집행 현황판(features.execution) ----------
-  const X = () => { const d = Y(); d.exec = RB.normalizeExec(d.exec); return d.exec; };
+  const X = () => { const d = Y(); if (!d.exec || !Array.isArray(d.exec.paid) || !d.exec.monthly || !d.exec.agreed) d.exec = RB.normalizeExec(d.exec); return d.exec; };
   const projEnd = () => I().data.slice(0, S.years).map((d) => d.exec && d.exec.end).filter(RB.isYmd).sort().pop() || '';
   const ST = { ok: ['ok', '정상'], over: ['bad', '✖ 초과'], slow: ['warn', '⚠ 부진'], fast: ['warn', '⚠ 과속'] };
   let xKeys = '';
@@ -374,7 +462,7 @@
     const rows = ex.paid.map((x, k) => el('tr', {},
       el('td', {}, el('input', { type: 'date', value: x.date || '', 'aria-label': `납부 ${k + 1} 날짜`, onchange: (e) => { x.date = e.target.value; updateExec(); } })),
       el('td', {}, el('input', { value: groupDigits(x.amount ?? ''), inputmode: 'numeric', maxlength: 12, 'aria-label': `납부 ${k + 1} 금액(천원)`, oninput: (e) => { x.amount = e.target.value; e.target.value = groupDigits(e.target.value); updateExec(); } })),
-      el('td', { class: 'del' }, el('button', { type: 'button', class: 'icon', 'aria-label': `납부 ${k + 1} 삭제`, text: '✕', onclick: () => { ex.paid.splice(k, 1); renderExecPaid(); updateExec(); } }))));
+      el('td', { class: 'del' }, el('button', { type: 'button', class: 'icon', 'aria-label': `납부 ${k + 1} 삭제`, text: '✕', onclick: () => { X().paid.splice(k, 1); renderExecPaid(); updateExec(); } }))));
     $('xPaid').replaceChildren(el('thead', {}, el('tr', {}, el('th', { text: '납부일' }), el('th', { text: '금액(천원)' }), el('th', {}, el('span', { class: 'sr', text: '삭제' })))), el('tbody', {}, ...rows), el('tfoot', {}, el('tr', {}, el('td', { text: '납부 누계 / 계획' }), el('td', { id: 'xPaidSum' }), el('td'))));
   }
   $('xAddPaid').addEventListener('click', () => { const ex = X(); if (ex.paid.length >= 100) return; ex.paid.push({ date: today(), amount: '' }); renderExecPaid(); updateExec(); $('xPaid').querySelector('tbody tr:last-child input:not([type=date])').focus(); });
@@ -434,9 +522,11 @@
   $('xXlsx').addEventListener('click', () => {
     const bytes = RB.buildExecXlsx(S, C.i, C.y, today(), projEnd());
     const url = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-    const a = el('a', { href: url, download: `${(S.title || '집행현황').replace(/[\\/:*?"<>|]/g, '_')}_${yl(C.y)}_집행현황_${today()}.xlsx` });
+    const fname = `${(S.title || '집행현황').replace(/[\\/:*?"<>|]/g, '_')}_${yl(C.y)}_집행현황_${today()}.xlsx`;
+    const a = el('a', { href: url, download: fname });
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast($('xToast'), `✔ ‘${fname}’ 다운로드됨`);
   });
   // 백업: 과제 전체(편성+집행)를 JSON 파일로 저장·복원
   $('backupSave').addEventListener('click', () => {
@@ -455,13 +545,13 @@
       const obj = JSON.parse(await file.text());
       if (!obj || obj.app !== 'rnd-budget' || !obj.project) throw new Error('format');
       const p = RB.normalizeProject(obj.project);
-      if (!confirm(`백업(${String(obj.savedAt || '').slice(0, 10)}, ${p.title || '제목 없음'})을 불러올까요? 현재 입력은 바뀝니다.`)) return;
-      S = p; C = { i: 0, y: 0, mode: 'exec' }; save(); location.reload();
-    } catch { alert('백업 파일을 읽지 못했습니다. 이 도구에서 저장한 .json 파일인지 확인하세요.'); }
+      if (!(await ask(`백업(${String(obj.savedAt || '').slice(0, 10)}, ${p.title || '제목 없음'})을 불러올까요? 현재 입력은 바뀝니다.`))) return;
+      replaceProject(p, 'exec');
+    } catch { await notify('백업 파일을 읽지 못했습니다. 이 도구에서 저장한 .json 파일인지 확인하세요.'); }
   });
 
   // ---------- 공고문에서 기준 가져오기(features.noticeImport) ----------
-  const NERR = { hwp: 'HWP 파일을 읽지 못했습니다. 한글에서 PDF 또는 HWPX로 저장해 올려 주세요.', 'hwp-locked': '암호가 설정된 HWP 문서입니다. 암호를 해제하거나 PDF로 저장해 올려 주세요.', 'hwp-dist': '배포용(복사 방지) HWP 문서라 읽을 수 없습니다. PDF로 저장해 올려 주세요.', type: 'HWP·HWPX·PDF·TXT 파일만 지원합니다.', size: '30MB 이하 파일만 올릴 수 있습니다.', empty: '글자를 찾지 못했습니다. 스캔 이미지 PDF는 읽을 수 없습니다.' };
+  const NERR = { hwp: 'HWP 파일을 읽지 못했습니다. 한글에서 PDF 또는 HWPX로 저장해 올려 주세요.', 'hwp-locked': '암호가 설정된 HWP 문서입니다. 암호를 해제하거나 PDF로 저장해 올려 주세요.', 'hwp-dist': '배포용(복사 방지) HWP 문서라 읽을 수 없습니다. PDF로 저장해 올려 주세요.', type: 'HWP·HWPX·PDF·TXT 파일만 지원합니다.', size: '파일이 너무 크거나(30MB 초과) 압축이 비정상입니다.', empty: '글자를 찾지 못했습니다. 스캔 이미지 PDF는 읽을 수 없습니다.' };
   const RATE_FIELDS = { govMaxPct: 'govMaxPct', cashMinPct: 'cashMinPct', indirectPct: 'indirectPct', allowanceMaxPct: 'allowanceMaxPct', outsourceMaxPct: 'outsourceMaxPct' };
   const nBox = $('noticeResult');
   async function importNotice(file) {
@@ -515,6 +605,64 @@
   drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
   drop.addEventListener('dragleave', () => drop.classList.remove('over'));
   drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); importNotice(e.dataTransfer.files && e.dataTransfer.files[0]); });
+
+  // ---------- 처음 편성 도우미(features.helper) ----------
+  const dlg = $('helperDlg');
+  let draft = null;
+  $('hdRuleset').replaceChildren(...[['기업(영리기관)', ['sme', 'midS', 'midL', 'large']], ['비영리기관', ['univ', 'nonprofit']]]
+    .map(([g, keys]) => el('optgroup', { label: g }, ...keys.map((k) => el('option', { value: k, text: RB.RULESETS[k].label })))));
+  ['hdGov', 'hdExSal', 'hdHiSal', 'hdEq', 'hdEqIn', 'hdOut'].forEach((id) => $(id).addEventListener('input', (e) => { e.target.value = groupDigits(e.target.value); }));
+  $('helperOpen').addEventListener('click', () => {
+    $('hdRuleset').value = RB.RULESETS[I().ruleset] && !RB.RULESETS[I().ruleset].custom ? I().ruleset : 'sme';
+    if (RB.int(Y().gov)) $('hdGov').value = groupDigits(Y().gov);
+    $('hdPreview').replaceChildren(); $('hdApply').hidden = true; draft = null;
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  });
+  const closeHelper = () => { dlg.close ? dlg.close() : dlg.removeAttribute('open'); };
+  $('hdClose').addEventListener('click', closeHelper);
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) closeHelper(); }); // 바깥(배경) 클릭 시 닫기
+  $('hdMake').addEventListener('click', () => {
+    const v = (id) => $(id).value;
+    if (!RB.int(v('hdGov'))) { $('hdPreview').replaceChildren(el('p', { class: 'nerr', text: '연간 정부출연금을 입력하세요.' })); $('hdGov').focus(); return; }
+    draft = RB.draftBudget({ ruleset: v('hdRuleset'), gov: v('hdGov'), existing: { count: v('hdExN'), salary: v('hdExSal'), rate: v('hdExRate') }, hires: { count: v('hdHiN'), salary: v('hdHiSal'), months: v('hdHiM') }, equipCash: v('hdEq'), equipInkind: v('hdEqIn'), outsource: v('hdOut') });
+    const r = draft.result, errs = r.checks.filter((c) => c.level === 'error');
+    const kv = (k, val) => el('div', {}, el('dt', { text: k }), el('dd', { text: val }));
+    $('hdPreview').replaceChildren(
+      el('dl', { class: 'live-grid' }, kv('총사업비', `${fmt(r.total.total)}천원`), kv('정부출연금', `${fmt(r.funding.gov)}천원`), kv('기관 현금', `${fmt(Math.max(0, r.total.cash - r.funding.gov))}천원`), kv('기관 현물', `${fmt(r.total.inkind)}천원`)),
+      el('ul', { class: 'checks' }, ...(errs.length ? errs.map((c) => el('li', { class: 'error', text: c.msg })) : [el('li', { class: 'ok', text: '초안이 법령 기준을 충족합니다.' })])),
+      el('ul', { class: 'hd-notes' }, ...draft.notes.map((n) => el('li', { text: n }))));
+    $('hdApply').hidden = false;
+  });
+  $('hdApply').addEventListener('click', async () => {
+    if (!draft) return;
+    if (hasInput() && !isExample() && !(await ask(`${I().name} · ${yl(C.y)}의 현재 입력을 초안으로 바꿀까요?`))) return;
+    I().ruleset = $('hdRuleset').value; I().indirectPct = '';
+    const d = Y(); d.gov = draft.sheet.gov; d.people = draft.sheet.people; d.items = draft.sheet.items;
+    if (isExample()) { S.title = ''; titleIn.value = ''; }
+    closeHelper();
+    updateDemoNote(); renderAll();
+    toast($('dlToast'), '초안을 채웠습니다. 연구재료비 등은 실제 필요 금액에 맞춰 조정하세요.');
+    $('s1').scrollIntoView({ behavior: 'smooth' });
+  });
+
+  // ---------- 자주 묻는 질문: 검색·분류 ----------
+  let faqCat = '';
+  function filterFaq() {
+    const q = $('faqSearch').value.trim().toLowerCase();
+    let shown = 0;
+    document.querySelectorAll('#faq details').forEach((d) => {
+      const ok = (!faqCat || d.dataset.cat === faqCat) && (!q || d.textContent.toLowerCase().includes(q));
+      d.hidden = !ok; if (ok) shown++;
+      if (q && ok) d.open = true;
+    });
+    $('faqEmpty').hidden = shown > 0;
+  }
+  $('faqSearch').addEventListener('input', filterFaq);
+  document.querySelectorAll('#faqCats [data-qcat]').forEach((b) => b.addEventListener('click', () => {
+    faqCat = b.dataset.qcat;
+    document.querySelectorAll('#faqCats [data-qcat]').forEach((x) => x.classList.toggle('on', x === b));
+    filterFaq();
+  }));
 
   // ---------- 광고(설정 시에만) ----------
   const slots = CFG.adsenseSlots || {};

@@ -19,7 +19,9 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
 (async () => {
   await new Promise((r) => server.listen(0, r));
   const base = `http://localhost:${server.address().port}/`;
-  const browser = await chromium.launch();
+  const browser0 = await chromium.launch();
+  // 확인창 자동 승인(페이지 안 확인창). 확인창 자체는 ⑥에서 별도 검증
+  const browser = { newContext: async (o) => { const c = await browser0.newContext(o); await c.addInitScript(() => { window.__rbAutoConfirm = true; window.__rbAutoInput = '1안'; }); return c; }, close: () => browser0.close() };
   const errors = [];
   const ctx = await browser.newContext({ viewport: { width: 390, height: 800 }, acceptDownloads: true });
   const p = await ctx.newPage();
@@ -28,7 +30,17 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   p.on('dialog', (d) => d.accept(d.type() === 'prompt' ? '1안' : undefined));
   // ① 기본 설정(1단계 공개 범위): 꺼진 기능은 숨김
   await p.goto(base);
-  check('기본: 과제 구성·안 저장·FAQ·단계 메뉴 숨김', (await p.locator('#s0').isHidden()) && (await p.locator('#saveScenario').isHidden()) && (await p.locator('.faq').isHidden()) && (await p.locator('.steps').isHidden()));
+  check('기본: 과제 구성·안 저장·단계 메뉴 숨김, Q&A 표시', (await p.locator('#s0').isHidden()) && (await p.locator('#saveScenario').isHidden()) && (await p.locator('.faq').isVisible()) && (await p.locator('.steps').isHidden()));
+  check('Q&A 21개', (await p.locator('#faq details').count()) === 21);
+  await p.fill('#faqSearch', '현물');
+  const shownQ = await p.locator('#faq details:not([hidden])').count();
+  check('Q&A 검색(현물)', shownQ >= 3 && shownQ < 21 && (await p.locator('#faq details:not([hidden])').first().getAttribute('open')) !== null, String(shownQ));
+  await p.fill('#faqSearch', 'zzzz');
+  check('Q&A 검색 결과 없음 안내', await p.locator('#faqEmpty').isVisible());
+  await p.fill('#faqSearch', '');
+  await p.click('#faqCats [data-qcat="비목"]');
+  check('Q&A 분류(비목 5개)', (await p.locator('#faq details:not([hidden])').count()) === 5);
+  await p.click('#faqCats [data-qcat=""]');
   check('기본: 집행 전환 표시(공개)', await p.locator('#modeBar').isVisible());
   check('기본: 공고문 가져오기 표시(베타)', (await p.locator('#noticeDrop').isVisible()) && (await p.textContent('#noticeDrop')).includes('베타'));
   check('기본: 예시·엑셀·점검 표시', (await p.locator('.demo-bar').isVisible()) && (await p.locator('#xlsx').isVisible()) && (await p.locator('#s4').isVisible()));
@@ -245,6 +257,103 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
     check('HWP(실제 공고): 읽기 성공·비율 조항 없음 안내', nh.includes('찾지 못했습니다'), nh.slice(0, 200));
   }
   await nc.close();
+
+  // ⑤ 편성 도우미(helper 켬) + 다운로드 카드
+  const hc = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+  const h = await hc.newPage();
+  h.on('pageerror', (e) => errors.push(e.message));
+  h.on('dialog', (d) => d.accept());
+  await h.route('**/config.js', (r) => r.fulfill({ contentType: 'text/javascript', body: 'window.RB_CONFIG={features:{examples:true,helper:true}};' }));
+  await h.goto(base);
+  check('다운로드: 입력 전 비활성·안내', (await h.isDisabled('#xlsx')) && (await h.textContent('#dlStatus')).includes('정부출연금을 입력'));
+  await h.click('#helperOpen');
+  check('도우미 열림', await h.locator('#helperDlg').isVisible());
+  await h.fill('#hdGov', '300000'); await h.fill('#hdExN', '3'); await h.fill('#hdExSal', '60000'); await h.fill('#hdExRate', '40');
+  await h.fill('#hdHiN', '1'); await h.fill('#hdHiSal', '42000'); await h.fill('#hdHiM', '10'); await h.fill('#hdEq', '50000');
+  await h.click('#hdMake');
+  check('도우미: 초안 미리보기 기준 충족', (await h.textContent('#hdPreview')).includes('초안이 법령 기준을 충족') && (await h.textContent('#hdPreview')).includes('400,000천원'));
+  await h.click('#hdApply');
+  check('도우미: 초안 반영(오류 0·인원 4명)', (await h.locator('#helperDlg').isHidden()) && (await h.inputValue('#gov')) === '300,000' && (await h.locator('#people tbody tr').count()) === 4 && (await h.locator('#checks .error').count()) === 0);
+  check('다운로드: 점검 통과 표시·시트 목록', (await h.textContent('#dlStatus')).includes('점검 통과') && (await h.locator('#dlSheets li').count()) === 4 && !(await h.isDisabled('#xlsx')));
+  await h.fill('#xlsxName', '우리과제_초안');
+  const [hd] = await Promise.all([h.waitForEvent('download'), h.click('#xlsx')]);
+  check('다운로드: 파일 이름 반영·완료 안내', hd.suggestedFilename() === '우리과제_초안.xlsx' && (await h.textContent('#dlToast')).includes('다운로드됨'), hd.suggestedFilename());
+  await h.getByLabel('연구재료비 설명').click();
+  check('ⓘ 비목 설명 펼침', (await h.locator('.help-row:not([hidden])').count()) === 1);
+  await h.click('[data-example="error"]'); await h.waitForLoadState();
+  check('오류 예시: 고치기 버튼 표시', (await h.locator('#checks .fix').count()) >= 4 && (await h.textContent('#fixAll')).includes('한 번에'));
+  await h.click('#fixAll');
+  check('한 번에 고치기 → 오류 0', (await h.locator('#checks .error').count()) === 0 && (await h.locator('#fixAll').isHidden()) && (await h.textContent('#dlToast')).includes('모두 고쳤'));
+  await h.click('[data-example="error"]'); await h.waitForLoadState();
+  check('다운로드: 오류 경고', (await h.textContent('#dlStatus')).includes('점검 오류'));
+  let clicks = 0; for (let k = 0; k < 15 && (await h.locator('#checks .fix').count()); k++, clicks++) await h.locator('#checks .fix').first().click();
+  check('고치기 반복 → 오류 0', (await h.locator('#checks .error').count()) === 0, await h.textContent('#checks'));
+  console.log('   (고치기 클릭 ' + clicks + '회)');
+  await hc.close();
+
+  // ⑥ 보안 제한 화면(sandbox iframe, 우측 패널 미리보기와 동일 조건): 페이지 안 확인창·닫기
+  const sc = await browser0.newContext({ viewport: { width: 1440, height: 900 } });
+  const sp = await sc.newPage();
+  sp.on('pageerror', (e) => errors.push('[sandbox] ' + e.message));
+  await sp.route('**/__host.html', (r) => r.fulfill({ contentType: 'text/html; charset=utf-8', body: `<!doctype html><iframe id="f" src="${base}" sandbox="allow-scripts" style="width:1400px;height:880px;border:0"></iframe>` }));
+  await sp.route('**/config.js', (r) => r.fulfill({ contentType: 'text/javascript', body: 'window.RB_CONFIG={features:{examples:true,helper:true}};' }));
+  await sp.goto(base + '__host.html');
+  const fr = sp.frameLocator('#f');
+  await fr.locator('#helperOpen').click();
+  check('[제한 화면] 도우미 열림', await fr.locator('#helperDlg').isVisible());
+  await fr.locator('#hdClose').click();
+  check('[제한 화면] 닫기 버튼으로 닫힘', await fr.locator('#helperDlg').isHidden());
+  await fr.locator('#helperOpen').click(); await sp.keyboard.press('Escape');
+  check('[제한 화면] Esc로 닫힘', await fr.locator('#helperDlg').isHidden());
+  await fr.locator('#helperOpen').click(); await fr.locator('#helperDlg').click({ position: { x: 3, y: 3 } }).catch(() => {});
+  await sp.mouse.click(10, 10);
+  check('[제한 화면] 바깥 클릭으로 닫힘', await fr.locator('#helperDlg').isHidden());
+  await fr.locator('#gov').fill('100000');
+  await fr.locator('[data-example="ok"]').click();
+  check('[제한 화면] 입력 있을 때 예시 → 페이지 안 확인창', (await fr.locator('#askDlg').isVisible()) && (await fr.locator('#askMsg').textContent()).includes('바꿀까요'));
+  await fr.locator('#askCancel').click();
+  check('[제한 화면] 취소 → 입력 유지', (await fr.locator('#askDlg').isHidden()) && (await fr.locator('#gov').inputValue()) === '100,000');
+  await fr.locator('[data-example="ok"]').click(); await fr.locator('#askOk').click();
+  await sp.waitForTimeout(500);
+  check('[제한 화면] 확인 → 예시 적용', (await fr.locator('#gov').inputValue()) === '300,000');
+  await fr.locator('#reset').click();
+  check('[제한 화면] 새로 작성 확인창', await fr.locator('#askDlg').isVisible());
+  await fr.locator('#askOk').click(); await sp.waitForTimeout(500);
+  check('[제한 화면] 새로 작성 → 빈 화면', (await fr.locator('#gov').inputValue()) === '');
+  await sc.close();
+
+  // ⑦ 코드 검토 회귀
+  const rc = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await rc.addInitScript(() => { if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', '1'); localStorage.setItem('rb.current', JSON.stringify({ v: 2, title: 'T', years: 2, insts: [{ name: 'A', role: 'lead', ruleset: 'sme', data: [{ gov: '100000', people: [], items: {} }, { gov: '200000', people: [], items: {} }] }] })); } });
+  const r = await rc.newPage(); const rerr = [];
+  r.on('pageerror', (e) => rerr.push(e.message));
+  await r.goto(base); // 운영 설정(project 끔) + 2개 연차 저장값
+  check('[회귀] 운영 설정에서 2개 연차 저장값 → 오류 없이 표시', rerr.length === 0 && (await r.inputValue('#gov')) === '100,000', rerr.join('|'));
+  await r.route('**/config.js', (rt) => rt.fulfill({ contentType: 'text/javascript', body: 'window.RB_CONFIG={features:{examples:true,project:true,execution:true}};' }));
+  await r.reload();
+  // 집행 납부 행 삭제
+  await r.click('#modeBar [data-mode="exec"]');
+  await r.click('#xAddPaid'); await r.click('#xAddPaid');
+  await r.getByLabel('납부 1 삭제').click();
+  check('[회귀] 기관부담 납부 행 삭제', (await r.locator('#xPaid tbody tr').count()) === 1);
+  await r.fill('#xStart', '2026-04-01');
+  // 이전 연차 복사가 집행 기록을 지우지 않음
+  await r.click('#yearTabs .chip >> nth=1'); await r.fill('#xStart', '2027-04-01');
+  await r.click('#modeBar [data-mode="plan"]'); await r.click('#copyPrev');
+  await r.click('#modeBar [data-mode="exec"]');
+  check('[회귀] 이전 연차 복사 후 2차년도 집행 기간 유지', (await r.inputValue('#xStart')) === '2027-04-01');
+  await r.click('#modeBar [data-mode="plan"]');
+  // 기관 삭제 후 편집 대상 유지
+  await r.click('#addInst'); await r.click('#addInst'); // 기관 3개, 편집 = 3번째
+  await r.getByLabel('공동기관 1 삭제').click();
+  check('[회귀] 앞 기관 삭제 후 편집 대상 유지', (await r.textContent('#curLabel')).includes('공동기관 2'), await r.textContent('#curLabel'));
+  // 손상 백업 불러오기 → 기존 유지, 새로고침 후에도 정상
+  await r.click('#modeBar [data-mode="exec"]');
+  const badBackup = JSON.stringify({ app: 'rnd-budget', v: 3, project: { v: 2, years: 1, insts: [{ name: 'X', role: 'lead', ruleset: 'sme', data: [{ gov: '1', people: [null, 'x'], items: { material: 5 }, exec: { monthly: { material: 5 }, paid: [null] } }] }] } });
+  await r.setInputFiles('#backupLoad', { name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from(badBackup) });
+  await r.waitForTimeout(400); await r.reload(); await r.waitForTimeout(300);
+  check('[회귀] 손상 백업 후에도 앱 정상(새로고침)', rerr.length === 0 && ((await r.locator('#planView').isVisible()) || (await r.locator('#execView').isVisible())), rerr.join('|'));
+  await rc.close();
 
   check('콘솔·스크립트 오류 없음', errors.length === 0, errors.join(' | '));
   await browser.close(); server.close();

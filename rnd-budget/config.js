@@ -8,9 +8,10 @@ window.RB_CONFIG = {
     examples: true,     // 예시로 체험하기
     project: false,     // 연차별·공동기관별 편성(과제 구성·편집 탭·총괄표) — 2단계 공개 예정
     scenarios: false,   // 여러 안 저장·불러오기
-    faq: false,         // 자주 묻는 질문
+    faq: true,          // 자주 묻는 질문(Q&A, 검색·분류) — 2026-11-14 공개
     steps: false,       // 상단 단계 메뉴
     legalHeader: false, // 상단 적용 법령 문구(하단 안내에는 항상 표시)
+    helper: false,       // 처음 편성 도우미(질문→초안, 오류 '고치기' 버튼, 비목 ⓘ 설명) — 검토 후 공개
     noticeImport: true,  // 공고문(HWP·HWPX·PDF)에서 적용 기준 가져오기 — 2026-11-14 베타 공개
     execution: true,    // 집행 현황판(편성/집행 전환, 월별 집행·점검·일정·백업) — 2026-11-14 공개
   },

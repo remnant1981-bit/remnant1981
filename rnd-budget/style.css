@@ -196,3 +196,43 @@ details.rulebox[open]>summary{margin-bottom:8px}
 .ntbl .ev{font-size:.8rem;color:var(--muted);max-width:520px}
 .nerr{color:var(--err);font-weight:600;margin:0}.nok{color:var(--ok);font-weight:600;margin:0}
 @media print{.import{display:none!important}}
+/* 엑셀 다운로드 카드 */
+.dl-card{display:grid;gap:12px;border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--bg)}
+.dl-name{font-size:.82rem}
+.dl-file{display:flex;align-items:center;gap:6px}.dl-file input{flex:1;font-size:.92rem}.dl-file span{color:var(--muted);font-size:.9rem}
+.dl-sheets{display:flex;flex-wrap:wrap;gap:6px;list-style:none;margin:0;padding:0}
+.dl-sheets li{font-size:.75rem;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:2px 8px}
+.dl-sheets li::before{content:"▦ ";color:#10b981}
+.dl-status{margin:0;font-size:.85rem;border-radius:8px;padding:8px 10px}
+.dl-status.ok{background:var(--ok-bg);color:var(--ok)}.dl-status.warn{background:var(--warn-bg);color:var(--warn)}.dl-status.wait{background:var(--card);color:var(--muted)}
+.dl-status a{color:inherit;font-weight:700}
+.dl-btn{width:100%;padding:12px 16px;font-size:1.02rem;background:#107c41;border-color:#107c41;color:#fff}
+.dl-btn:hover:not(:disabled){filter:brightness(1.08)}
+.dl-btn:disabled{background:var(--line);border-color:var(--line);color:var(--muted);cursor:not-allowed;opacity:1}
+.dl-toast{margin:10px 0 0;background:var(--ok-bg);color:var(--ok);border-radius:8px;padding:8px 10px;font-size:.85rem;font-weight:600}
+.sub-actions{margin-top:10px}
+/* 편성 도우미 */
+.info{border:0;background:none;color:var(--brand);cursor:pointer;font-size:.9rem;padding:0 2px}
+.help-row td{background:var(--brand-soft);color:var(--ink);font-size:.82rem;text-align:left;white-space:normal;padding:8px 10px}
+.btn.fix{display:block;margin-top:6px;font-size:.8rem;padding:4px 10px;background:var(--card);color:var(--brand);border-color:var(--brand)}
+dialog.helper{border:0;border-radius:14px;padding:0;max-width:720px;width:calc(100% - 32px);background:var(--card);color:var(--ink);box-shadow:0 20px 60px rgba(0,0,0,.25)}
+dialog.helper::backdrop{background:rgba(15,23,42,.45)}
+dialog.helper form{padding:20px 22px;display:grid;gap:12px;max-height:85vh;overflow:auto}
+dialog.helper h2{margin:0}
+dialog.helper fieldset{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0}
+dialog.helper legend{font-weight:700;font-size:.9rem;padding:0 4px}
+.grid2{display:grid;gap:10px}@media (min-width:640px){.grid2{grid-template-columns:1fr 1fr}dialog.helper .grid3{grid-template-columns:1fr 1fr 1fr}}
+.hd-preview .live-grid{grid-template-columns:repeat(2,1fr)}@media (min-width:640px){.hd-preview .live-grid{grid-template-columns:repeat(4,1fr)}}
+.hd-notes{font-size:.82rem;color:var(--muted);margin:6px 0 0;padding-left:18px}
+.btn.fixall{width:100%;margin-bottom:10px;background:var(--err);border-color:var(--err);color:#fff}
+/* 페이지 안 확인창 */
+dialog.ask{border:0;border-radius:12px;padding:0;max-width:440px;width:calc(100% - 32px);background:var(--card);color:var(--ink);box-shadow:0 20px 60px rgba(0,0,0,.3)}
+dialog.ask::backdrop{background:rgba(15,23,42,.45)}
+.ask-body{padding:18px 20px;display:grid;gap:12px}.ask-body p{margin:0;line-height:1.6}
+/* 큰 금액 줄바꿈(화면 넘침 방지) */
+.kpis div,.live-grid div{min-width:0}
+.kpis dd,.live-grid dd,.tbl td{overflow-wrap:anywhere}
+/* Q&A */
+.faq-tools{display:grid;gap:8px;margin-bottom:6px}
+.faq-tools input{max-width:520px}
+.faq p .cite{display:block;margin-top:4px;font-size:.78rem;color:var(--muted)}
