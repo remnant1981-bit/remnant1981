@@ -2,7 +2,7 @@
 // 공개 스크립트(order-apps-script.gs)와 관리자 스크립트(admin/Code.gs)를 가짜 시트 위에서 시험
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { makeEnv } = require('./gas-mock.js');
+const { makeEnv, styleLog } = require('./gas-mock.js');
 const L = require('../../maison-dorothy/logic.js');
 
 function setup(opts) {
@@ -15,9 +15,9 @@ function setup(opts) {
 const post = (pub, body) => JSON.parse(pub.doPost({ postData: { contents: JSON.stringify(body) } }).text);
 const ORDER = { no: 'D1114-1000-01', name: '김도로시', phone: '010-5555-1212', pickup: false, address: '홍성군 청사로 1', memo: '키 160', items: [{ name: '조끼', color: '블랙', size: '평소 88', q: 1, price: null }], sub: 0, ship: null, all: null, text: '주문 내용' };
 
-test('공개: 시트 준비하기 → 주문·상품·설정 탭', () => {
+test('공개: 시트 준비하기 → 현황·주문·상품·설정 탭', () => {
   const { env } = setup();
-  assert.deepEqual([...env.sheets.keys()].sort(), ['상품', '설정', '주문']);
+  assert.deepEqual([...env.sheets.keys()].sort(), ['상품', '설정', '주문', '현황']);
   assert.equal(env.sheets.get('설정').getRange(1, 1).getDisplayValues()[0][0], '항목');
 });
 
@@ -140,4 +140,32 @@ test('관리자: 매장 설정 저장 → 공개 페이지가 읽는 값으로 �
   assert.deepEqual(ps.map(p => p.name), ['니트']);            // 예시 상품(노출 N)은 숨김
   assert.equal(ps[0].price, 39000);
   assert.equal(ps[0].img, 'https://drive.google.com/thumbnail?id=ABCDEFGHIJK&sz=w1000');
+});
+
+test('공개: 보기 좋게 꾸미기 — 값은 그대로, 현황 탭 추가, 여러 번 실행해도 같음', () => {
+  const { env, pub, adm } = setup();
+  post(pub, ORDER);
+  adm.saveProduct({ name: '니트', price: '39000', cat: '상의', show: true, soldOut: false });
+  const snap = n => JSON.stringify(env.sheets.get(n).getDataRange().getDisplayValues());
+  const before = { 주문: snap('주문'), 상품: snap('상품'), 설정: snap('설정'), get: pub.doGet({}).text, load: JSON.stringify(adm.loadAll()) };
+  styleLog.length = 0;
+  pub.styleSheets(); pub.styleSheets();
+  assert.equal(snap('주문'), before.주문);
+  assert.equal(snap('상품'), before.상품);
+  assert.equal(snap('설정'), before.설정);
+  assert.equal(pub.doGet({}).text, before.get);                 // 손님 페이지가 읽는 값 그대로
+  assert.equal(JSON.stringify(adm.loadAll()), before.load);     // 관리자 앱이 읽는 값 그대로
+  assert.ok(env.sheets.has('현황'));
+  const dash = env.sheets.get('현황').getDataRange().getValues().flat().join('|');
+  assert.match(dash, /입금 확인할 주문/);
+  assert.match(dash, /=COUNTIF\('주문'!C2:C,"입금대기"\)/);     // 칸 이름으로 찾은 열(상태=C)
+  assert.match(dash, /'상품'!E2:E,""/);                         // 가격=E
+  assert.equal(env.sheets.get('상품').bandings.length, 1);      // 줄무늬 중복 없이 1개
+  assert.ok(env.sheets.get('주문').rules.length >= 4);          // 상태별 색
+  assert.ok(styleLog.some(x => /setDataValidation/.test(x)));
+  assert.doesNotMatch(pub.doGet({}).text, /현황|입금 확인할/);  // 현황 탭은 공개 안 됨
+  // 꾸민 뒤에도 주문 접수·상품 수정 정상
+  assert.equal(post(pub, { ...ORDER, no: 'D9' }).ok, true);
+  adm.updateOrder('D9', { status: '입금확인' });
+  assert.equal(adm.loadAll().orders[0].status, '입금확인');
 });

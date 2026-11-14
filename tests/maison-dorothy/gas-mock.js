@@ -11,11 +11,20 @@ function display(v) {
   if (typeof v === 'string' && v.startsWith('=')) return '#수식실행됨';        // 수식 주입이 일어나면 드러나게
   return String(v);
 }
+// 서식 관련 함수(색·폭·테두리 등)는 기록만 하고 자기 자신을 돌려줌 → 체이닝 가능
+const styleLog = [];
+const chain = (target, label) => new Proxy(target, {
+  get(t, k) {
+    if (k in t) return t[k];
+    if (typeof k === 'symbol') return undefined;
+    return (...args) => { styleLog.push(`${label}.${String(k)}`); return chain(t, label); };
+  }
+});
 // 시트에 숫자처럼 보이는 글자를 넣으면 숫자로 바뀜 (실제 시트와 같게)
 const store = v => (typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : v);
 
 class Range {
-  constructor(sh, r, c, nr, nc) { Object.assign(this, { sh, r, c, nr, nc }); }
+  constructor(sh, r, c, nr, nc) { Object.assign(this, { sh, r, c, nr, nc }); return chain(this, 'Range'); }
   _grid(fn) {
     const out = [];
     for (let i = 0; i < this.nr; i++) { const row = []; for (let j = 0; j < this.nc; j++) row.push(fn((this.sh.d[this.r - 1 + i] || [])[this.c - 1 + j])); out.push(row); }
@@ -31,16 +40,27 @@ class Range {
     return this;
   }
   setValue(v) { return this.setValues([[v]]); }
-  setFontWeight() { return this; }
-  setBackground() { return this; }
+  setFormula(f) { return this.setValues([['=' + String(f).replace(/^=/, '')]]); }
+  applyRowBanding() { this.sh.bandings.push(1); return chain({}, 'Banding'); }
 }
 class Sheet {
-  constructor(name) { this.name = name; this.d = []; }
+  constructor(name) { this.name = name; this.d = []; this.bandings = []; this.rules = []; return chain(this, 'Sheet'); }
+  getMaxRows() { return Math.max(1000, this.d.length); }
+  getBandings() { const n = this.bandings.length; this.bandings = []; return Array.from({ length: n }, () => ({ remove() {} })); }
+  setConditionalFormatRules(r) { this.rules = r; return this; }
+  clear() { this.d = []; return this; }
   getName() { return this.name; }
   getLastRow() { return this.d.length; }
   getLastColumn() { return this.d.reduce((m, r) => Math.max(m, r.length), 0); }
   appendRow(r) { this.d.push(r.map(store)); }
-  getRange(r, c, nr = 1, nc = 1) { return new Range(this, r, c, nr, nc); }
+  getRange(r, c, nr = 1, nc = 1) {
+    if (typeof r === 'string') {   // 'B2' 같은 A1 표기
+      const m = r.match(/^([A-Z]+)(\d+)$/); let col = 0;
+      for (const ch of m[1]) col = col * 26 + ch.charCodeAt(0) - 64;
+      return new Range(this, Number(m[2]), col, 1, 1);
+    }
+    return new Range(this, r, c, nr, nc);
+  }
   getDataRange() { return this.getRange(1, 1, Math.max(1, this.getLastRow()), Math.max(1, this.getLastColumn())); }
   insertRowAfter(n) { this.d.splice(n, 0, []); }
   deleteRow(n) { this.d.splice(n - 1, 1); }
@@ -50,12 +70,13 @@ function makeEnv(opts = {}) {
   const sheets = new Map();
   const ss = {
     getSheetByName: n => sheets.get(n) || null,
-    insertSheet: n => { const s = new Sheet(n); sheets.set(n, s); return s; }
+    insertSheet: n => { const s = new Sheet(n); sheets.set(n, s); return s; },
+    toast: () => {}
   };
   const user = { active: opts.active === undefined ? 'owner@example.com' : opts.active, owner: 'owner@example.com' };
   const mails = [], files = [], folders = [];
   const base = () => ({
-    SpreadsheetApp: { getActiveSpreadsheet: () => ss, openById: () => ss, getUi: () => ({ createMenu: () => ({ addItem() { return this; }, addToUi() {} }) }) },
+    SpreadsheetApp: { BandingTheme: { LIGHT_GREY: 'lg' }, BorderStyle: { SOLID: 'solid' }, newConditionalFormatRule: () => chain({ build: () => ({ rule: 1 }) }, 'Rule'), newDataValidation: () => chain({ build: () => ({ dv: 1 }) }, 'DV'), getActiveSpreadsheet: () => ss, openById: () => ss, getUi: () => ({ createMenu: () => ({ addItem() { return this; }, addToUi() {} }) }) },
     Session: { getActiveUser: () => ({ getEmail: () => user.active }), getEffectiveUser: () => ({ getEmail: () => user.owner }) },
     MailApp: { sendEmail: (to, subject, body) => mails.push({ to, subject, body }) },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: s => ({ text: s, setMimeType() { return this; } }) },
@@ -80,4 +101,4 @@ function makeEnv(opts = {}) {
   };
   return { ss, sheets, user, mails, files, load };
 }
-module.exports = { makeEnv, Sheet };
+module.exports = { makeEnv, Sheet, styleLog };

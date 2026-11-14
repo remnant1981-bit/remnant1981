@@ -6,7 +6,8 @@
  * 1. 구글 시트 새로 만들기 → 이름 "메종도로시 운영"
  * 2. 메뉴 확장 프로그램 → Apps Script → 이 파일 내용 전체 붙여넣기 → 저장
  * 3. 아래 NOTIFY_EMAIL 에 주문 알림 받을 메일 주소 입력 (비우면 시트 주인에게 보냄)
- * 4. 시트를 새로고침 → 위쪽 메뉴 "메종도로시 → 시트 준비하기" (주문·상품·설정 탭 생성)
+ * 4. 시트를 새로고침 → 위쪽 메뉴 "메종도로시 → 시트 준비하기" (현황·주문·상품·설정 탭 생성, 서식 적용)
+ *    상품을 가져오거나 칸을 손본 뒤에는 "메종도로시 → 보기 좋게 꾸미기"를 다시 누르면 서식이 맞춰짐
  *    지금 상품 11개를 넣으려면 products-sheet.csv 를 "상품" 탭에 가져오기(현재 시트 바꾸기)
  * 5. 배포 → 새 배포 → 유형 "웹 앱" / 실행 사용자: 나 / 액세스 권한: 모든 사용자 → 배포 → 권한 허용
  * 6. 나온 웹 앱 URL(https://script.google.com/macros/s/.../exec)을 config.js 의 orderEndpoint 와 productsUrl 에 넣기
@@ -45,7 +46,10 @@ function doGet(e) {
 }
 
 function onOpen() {
-  SpreadsheetApp.getUi().createMenu('메종도로시').addItem('시트 준비하기', 'setupSheets').addToUi();
+  SpreadsheetApp.getUi().createMenu('메종도로시')
+    .addItem('시트 준비하기', 'setupSheets')
+    .addItem('보기 좋게 꾸미기', 'styleSheets')
+    .addToUi();
 }
 
 // 주문·상품·설정 탭을 만들고 머리줄을 맞춤 (이미 있는 내용은 지우지 않음)
@@ -65,6 +69,7 @@ function setupSheets() {
   if (s.getLastRow() === 0) s.getRange(1, 1, SETTING_ROWS.length, 3).setValues(SETTING_ROWS);
   s.setFrozenRows(1);
   s.getRange(1, 1, 1, 3).setFontWeight('bold').setBackground('#efe9e4');
+  styleSheets();
 }
 // 예전 메뉴 이름 호환
 function setupProducts() { setupSheets(); }
@@ -114,4 +119,163 @@ function sheet() {
 
 function out(o) {
   return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/* ================================================================
+ * 시트 꾸미기 — 메뉴 "메종도로시 → 보기 좋게 꾸미기"
+ * 값은 건드리지 않고 보이는 모양만 바꿈. 여러 번 눌러도 결과가 같음.
+ * (손님 페이지·관리자 앱은 칸 이름으로 읽으므로 칸 순서·서식이 바뀌어도 영향 없음)
+ * ================================================================ */
+const THEME = {
+  ink: '#2b2326', head: '#5b3a46', headInk: '#ffffff', band: '#faf7f5', line: '#e6dfda', muted: '#8a8085',
+  wait: ['#fdecdf', '#a2512f'], paid: ['#e3ecf7', '#2f5d8a'], done: ['#e6f1e2', '#3f6b3a'], cancel: ['#efebe9', '#9a8f94'],
+  sold: '#fbe9e7', hidden: '#f1eeec', tabs: { 현황: '#5b3a46', 주문: '#a2512f', 상품: '#3f6b3a', 설정: '#8a8085' }
+};
+const WIDTHS = {
+  주문: { 접수시각: 128, 주문번호: 118, 상태: 84, 받는분: 84, 연락처: 112, 받는방법: 78, 주소: 240, 상품: 280, 상품금액: 86, 택배비: 82, 입금액: 92, 메모: 200, 송장번호: 120, 관리메모: 160 },
+  상품: { 노출: 52, 아이디: 70, 분류: 70, 상품명: 170, 가격: 86, 배지: 90, 사진: 150, 추가사진: 150, 컬러: 120, 사이즈: 90, 추천사이즈: 84, 설명: 280, 코디팁: 220, 인스타링크: 150, 함께입기: 90, 품절: 52 }
+};
+
+function styleSheets() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const o = ss.getSheetByName(SHEET_NAME), p = ss.getSheetByName(PRODUCT_SHEET), s = ss.getSheetByName(SETTING_SHEET);
+  if (o) styleOrders_(o);
+  if (p) styleProducts_(p);
+  if (s) styleSettings_(s);
+  styleDashboard_(ss);
+  Object.keys(THEME.tabs).forEach(n => { const t = ss.getSheetByName(n); if (t) t.setTabColor(THEME.tabs[n]); });
+  try { ss.toast('보기 좋게 꾸몄어요. 값은 바뀌지 않았어요.', '메종도로시', 4); } catch (e) { /* 메뉴 밖 실행 */ }
+}
+
+// 칸 이름 → 열 번호(1부터). 없으면 0
+function colOf_(sh, name) {
+  const w = sh.getLastColumn(); if (!w) return 0;
+  const head = sh.getRange(1, 1, 1, w).getDisplayValues()[0].map(h => String(h).replace(/\s/g, ''));
+  return head.indexOf(name) + 1;
+}
+function letter_(n) { let s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; }
+
+// 공통: 머리줄·본문 글꼴, 줄무늬, 테두리, 고정
+function base_(sh, widths) {
+  const rows = Math.max(sh.getMaxRows(), 2), cols = Math.max(sh.getLastColumn(), 1);
+  sh.setHiddenGridlines(true);
+  sh.setFrozenRows(1);
+  const all = sh.getRange(1, 1, rows, cols);
+  all.setFontSize(10).setFontColor(THEME.ink).setVerticalAlignment('middle');
+  const head = sh.getRange(1, 1, 1, cols);
+  head.setBackground(THEME.head).setFontColor(THEME.headInk).setFontWeight('bold').setFontSize(10)
+    .setHorizontalAlignment('center').setWrap(true);
+  sh.setRowHeight(1, 36);
+  sh.getBandings().forEach(b => b.remove());
+  sh.getRange(1, 1, rows, cols).applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, true, false)
+    .setHeaderRowColor(THEME.head).setFirstRowColor('#ffffff').setSecondRowColor(THEME.band);
+  sh.getRange(2, 1, rows - 1, cols).setBorder(null, null, true, null, null, true, THEME.line, SpreadsheetApp.BorderStyle.SOLID);
+  if (widths) Object.keys(widths).forEach(n => { const c = colOf_(sh, n); if (c) sh.setColumnWidth(c, widths[n]); });
+  return { rows, cols };
+}
+function fmt_(sh, name, rows, apply) { const c = colOf_(sh, name); if (c) apply(sh.getRange(2, c, rows - 1, 1), c); }
+function cond_(range, formula, bg, fg, extra) {
+  let b = SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied(formula).setRanges([range]);
+  if (bg) b = b.setBackground(bg);
+  if (fg) b = b.setFontColor(fg);
+  if (extra === 'bold') b = b.setBold(true);
+  if (extra === 'strike') b = b.setStrikethrough(true);
+  return b.build();
+}
+
+function styleOrders_(sh) {
+  const { rows, cols } = base_(sh, WIDTHS.주문);
+  sh.setFrozenColumns(Math.min(colOf_(sh, '받는분') || 0, 4));
+  fmt_(sh, '접수시각', rows, r => r.setNumberFormat('yyyy-mm-dd hh:mm').setHorizontalAlignment('center').setFontColor(THEME.muted));
+  fmt_(sh, '주문번호', rows, r => r.setFontFamily('Roboto Mono').setFontSize(9).setHorizontalAlignment('center'));
+  fmt_(sh, '받는분', rows, r => r.setFontWeight('bold'));
+  fmt_(sh, '연락처', rows, r => r.setHorizontalAlignment('center'));
+  fmt_(sh, '받는방법', rows, r => r.setHorizontalAlignment('center'));
+  ['주소', '상품', '메모', '관리메모'].forEach(n => fmt_(sh, n, rows, r => r.setWrap(true).setVerticalAlignment('top')));
+  ['상품금액', '택배비', '입금액'].forEach(n => fmt_(sh, n, rows, r => r.setNumberFormat('#,##0"원"').setHorizontalAlignment('right')));
+  fmt_(sh, '입금액', rows, r => r.setFontWeight('bold'));
+  const sc = colOf_(sh, '상태');
+  const rules = [];
+  if (sc) {
+    const st = sh.getRange(2, sc, rows - 1, 1);
+    st.setHorizontalAlignment('center').setFontWeight('bold')
+      .setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['입금대기', '입금확인', '발송완료', '픽업완료', '취소'], true).setAllowInvalid(false).build());
+    const L = letter_(sc), row = sh.getRange(2, 1, rows - 1, cols);
+    rules.push(
+      cond_(st, `=$${L}2="입금대기"`, THEME.wait[0], THEME.wait[1]),
+      cond_(st, `=$${L}2="입금확인"`, THEME.paid[0], THEME.paid[1]),
+      cond_(st, `=OR($${L}2="발송완료",$${L}2="픽업완료")`, THEME.done[0], THEME.done[1]),
+      cond_(row, `=$${L}2="취소"`, THEME.cancel[0], THEME.cancel[1], 'strike')
+    );
+  }
+  const ac = colOf_(sh, '입금액');
+  if (ac) rules.push(cond_(sh.getRange(2, ac, rows - 1, 1), `=$${letter_(ac)}2="확인 후 안내"`, '#fff4e5', THEME.wait[1], 'bold'));
+  sh.setConditionalFormatRules(rules);
+}
+
+function styleProducts_(sh) {
+  const { rows, cols } = base_(sh, WIDTHS.상품);
+  sh.setFrozenColumns(Math.min(colOf_(sh, '상품명') || 0, 4));
+  ['노출', '품절', '분류', '배지', '아이디', '추천사이즈'].forEach(n => fmt_(sh, n, rows, r => r.setHorizontalAlignment('center')));
+  fmt_(sh, '상품명', rows, r => r.setFontWeight('bold').setWrap(true));
+  fmt_(sh, '가격', rows, r => r.setNumberFormat('#,##0"원"').setHorizontalAlignment('right'));
+  ['설명', '코디팁'].forEach(n => fmt_(sh, n, rows, r => r.setWrap(true).setVerticalAlignment('top')));
+  ['사진', '추가사진', '인스타링크'].forEach(n => fmt_(sh, n, rows, r => r.setWrap(false).setFontColor(THEME.muted).setFontSize(9)));
+  const yn = SpreadsheetApp.newDataValidation().requireValueInList(['Y', 'N'], true).setAllowInvalid(false).build();
+  fmt_(sh, '노출', rows, r => r.setDataValidation(yn));
+  fmt_(sh, '품절', rows, r => r.setDataValidation(yn));
+  const rules = [], row = sh.getRange(2, 1, rows - 1, cols);
+  const nc = colOf_(sh, '노출'), sc = colOf_(sh, '품절'), pc = colOf_(sh, '가격'), nm = colOf_(sh, '상품명');
+  if (nc) rules.push(cond_(row, `=AND($${letter_(nm || 1)}2<>"",$${letter_(nc)}2="N")`, THEME.hidden, THEME.muted));
+  if (sc) rules.push(cond_(row, `=$${letter_(sc)}2="Y"`, THEME.sold, '#a2512f'));
+  if (pc && nm) rules.push(cond_(sh.getRange(2, pc, rows - 1, 1), `=AND($${letter_(nm)}2<>"",$${letter_(pc)}2="")`, '#fff4e5', THEME.wait[1]));
+  sh.setConditionalFormatRules(rules);
+}
+
+function styleSettings_(sh) {
+  const rows = Math.max(sh.getLastRow(), 2);
+  sh.setHiddenGridlines(true).setFrozenRows(1);
+  sh.getRange(1, 1, 1, 3).setBackground(THEME.head).setFontColor(THEME.headInk).setFontWeight('bold').setHorizontalAlignment('center');
+  sh.setRowHeight(1, 36);
+  sh.getRange(2, 1, rows - 1, 1).setFontWeight('bold').setBackground(THEME.band).setVerticalAlignment('middle');
+  sh.getRange(2, 2, rows - 1, 1).setBackground('#fffdf3').setFontSize(11).setWrap(true).setVerticalAlignment('middle');
+  sh.getRange(2, 3, rows - 1, 1).setFontColor(THEME.muted).setFontStyle('italic').setFontSize(9).setWrap(true);
+  sh.getRange(1, 1, rows, 3).setBorder(true, true, true, true, true, true, THEME.line, SpreadsheetApp.BorderStyle.SOLID);
+  sh.setColumnWidth(1, 120).setColumnWidth(2, 320).setColumnWidth(3, 300);
+  for (let r = 2; r <= rows; r++) sh.setRowHeight(r, 34);
+}
+
+// 한눈에 보는 현황 탭 (수식만 있음 — 손님 페이지·관리자 앱은 읽지 않음)
+function styleDashboard_(ss) {
+  const o = ss.getSheetByName(SHEET_NAME), p = ss.getSheetByName(PRODUCT_SHEET);
+  if (!o || !p) return;
+  let d = ss.getSheetByName('현황');
+  if (!d) { d = ss.insertSheet('현황', 0); }
+  d.clear(); d.setHiddenGridlines(true);
+  const c = n => letter_(colOf_(o, n)), q = n => letter_(colOf_(p, n));
+  const O = `'${SHEET_NAME}'!`, P = `'${PRODUCT_SHEET}'!`;
+  const items = [
+    ['오늘 들어온 주문', `=COUNTIFS(${O}${c('접수시각')}2:${c('접수시각')},">="&TODAY())`, '건'],
+    ['입금 확인할 주문', `=COUNTIF(${O}${c('상태')}2:${c('상태')},"입금대기")`, '건'],
+    ['보낼 택배', `=COUNTIFS(${O}${c('상태')}2:${c('상태')},"입금확인",${O}${c('받는방법')}2:${c('받는방법')},"택배")`, '건'],
+    ['픽업 대기', `=COUNTIFS(${O}${c('상태')}2:${c('상태')},"입금확인",${O}${c('받는방법')}2:${c('받는방법')},"매장 픽업")`, '건'],
+    ['이번 달 입금액', `=SUMIFS(${O}${c('입금액')}2:${c('입금액')},${O}${c('상태')}2:${c('상태')},"<>입금대기",${O}${c('상태')}2:${c('상태')},"<>취소",${O}${c('접수시각')}2:${c('접수시각')},">="&EOMONTH(TODAY(),-1)+1)`, '원'],
+    ['판매 중인 옷', `=COUNTIFS(${P}${q('노출')}2:${q('노출')},"Y",${P}${q('품절')}2:${q('품절')},"<>Y")`, '벌'],
+    ['품절 표시', `=COUNTIFS(${P}${q('노출')}2:${q('노출')},"Y",${P}${q('품절')}2:${q('품절')},"Y")`, '벌'],
+    ['가격 미입력', `=COUNTIFS(${P}${q('노출')}2:${q('노출')},"Y",${P}${q('가격')}2:${q('가격')},"")`, '벌']
+  ];
+  d.getRange('B2').setValue('메종도로시 현황').setFontSize(18).setFontWeight('bold').setFontColor(THEME.head);
+  d.getRange('B3').setFormula('="기준 "&TEXT(NOW(),"yyyy-mm-dd hh:mm")&" · 시트를 열 때마다 새로 계산"').setFontColor(THEME.muted).setFontSize(9);
+  items.forEach((it, i) => {
+    const r = 5 + i;
+    d.getRange(r, 2).setValue(it[0]).setFontColor(THEME.ink).setFontSize(11);
+    d.getRange(r, 3).setFormula(it[1]).setNumberFormat(it[2] === '원' ? '#,##0"원"' : '0"' + it[2] + '"')
+      .setFontSize(16).setFontWeight('bold').setHorizontalAlignment('right').setFontColor(i === 1 || i === 7 ? THEME.wait[1] : THEME.head);
+    d.setRowHeight(r, 38);
+  });
+  d.getRange(5, 2, items.length, 2).setBorder(true, true, true, true, null, true, THEME.line, SpreadsheetApp.BorderStyle.SOLID)
+    .setVerticalAlignment('middle');
+  d.getRange(5, 2, items.length, 1).setBackground(THEME.band);
+  d.setColumnWidth(1, 24).setColumnWidth(2, 170).setColumnWidth(3, 150);
+  d.getRange(5 + items.length + 1, 2).setValue('주문 처리·상품 등록은 관리자 앱에서 하면 편해요. 이 탭은 보기 전용이에요.').setFontColor(THEME.muted).setFontSize(9);
 }
