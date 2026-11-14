@@ -399,3 +399,5 @@ button,a,label,summary{touch-action:manipulation}
 .foot-links{display:flex;gap:18px;font-size:12.5px;margin-top:10px}
 .foot-links a{color:inherit;opacity:.85}
 .agree a,details p a{color:var(--plum)}
+
+.notice{margin:0;padding:10px var(--gut-r) 10px var(--gut);background:var(--plum);color:var(--plum-ink);font-size:13.5px;text-align:center;line-height:1.5}

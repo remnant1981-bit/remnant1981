@@ -163,3 +163,31 @@ test('parseSheet: 머리줄 찾기, 숨김·빈 줄 제외, 값 정리', () => {
   assert.equal(L.parseSheet([['아무거나']]), null);
   assert.equal(L.parseSheet(null), null);
 });
+
+test('parseDays: 범위·나열·매일·평일', () => {
+  assert.deepEqual(L.parseDays('월~토'), [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(L.parseDays('월-금'), [1, 2, 3, 4, 5]);
+  assert.deepEqual(L.parseDays('월, 수, 금'), [1, 3, 5]);
+  assert.deepEqual(L.parseDays('토~월'), [0, 1, 6]);
+  assert.deepEqual(L.parseDays('매일').length, 7);
+  assert.deepEqual(L.parseDays('평일'), [1, 2, 3, 4, 5]);
+  assert.equal(L.parseDays('아무때나'), null);
+});
+
+test('parseSettings: 올바른 값만 반영', () => {
+  const s = L.parseSettings([
+    ['항목', '값'], ['공지', '이번 주 일요일 정상 영업해요'], ['영업 시간 안내', '10:00–19:00 · 일요일 휴무'],
+    ['영업요일', '월~토'], ['오픈', '10:00'], ['마감', '19:00'], ['전화', '010-1234-5678'],
+    ['카톡채널', 'https://pf.kakao.com/_abc'], ['밴드', 'https://evil.com/x'], ['입금계좌', '농협 123-45-6789 (홍길동)']
+  ]);
+  assert.equal(s.notice, '이번 주 일요일 정상 영업해요');
+  assert.equal(s.hours, '10:00–19:00 · 일요일 휴무');
+  assert.deepEqual(s.open, { days: [1, 2, 3, 4, 5, 6], from: '10:00', to: '19:00' });
+  assert.equal(s.phone, '010-1234-5678');
+  assert.equal(s.kakaoUrl, 'https://pf.kakao.com/_abc');
+  assert.equal(s.bandUrl, undefined);
+  assert.equal(s.bank, '농협 123-45-6789 (홍길동)');
+  assert.equal(L.parseSettings([['오픈', '25:00'], ['마감', '9:00']]), null);
+  assert.deepEqual(L.parseSettings([['공지', '']]), { notice: '' });
+  assert.equal(L.parseSettings('x'), null);
+});

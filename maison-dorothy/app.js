@@ -19,6 +19,7 @@ window.DorothyApp = function () {
 
   /* ---------- 매장 정보 ---------- */
   $('previewBar').hidden = !C.preview;
+  if (S.notice) { $('notice').textContent = S.notice; $('notice').hidden = false; }
   $('storeName').textContent = S.name;
   $('tagline').textContent = S.tagline + '. ' + S.intro;
   $('footTag').textContent = S.tagline;
@@ -525,25 +526,33 @@ window.DorothyApp = function () {
   };
 };
 
-/* ---------- 시작: 구글 시트 상품표를 불러온 뒤 화면 시작 ----------
- * 1) 지난번에 받아 둔 상품표가 있으면 바로 그걸로 시작하고, 뒤에서 새로 받아 바뀐 게 있으면 목록 갱신
- * 2) 처음 온 손님은 최대 2.5초 기다렸다가 시작 (못 받으면 config.js 상품으로 시작) */
+/* ---------- 시작: 구글 시트(상품·설정 탭)를 불러온 뒤 화면 시작 ----------
+ * 1) 지난번에 받아 둔 시트 내용이 있으면 바로 그걸로 시작하고, 뒤에서 새로 받아 상품이 바뀌었으면 목록 갱신
+ *    (설정 탭의 공지·영업시간·연락처는 다음 방문부터 반영)
+ * 2) 처음 온 손님은 최대 2.5초 기다렸다가 시작 (못 받으면 config.js 내용으로 시작) */
 (function boot() {
   const C = window.DOROTHY, L = window.DLogic, KEY = 'dorothy-sheet';
   if (!C.productsUrl) { window.DorothyApp(); return; }
   let cached = null;
   try { cached = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { cached = null; }
+  if (Array.isArray(cached)) cached = { products: cached };   // 이전 저장 형식
   const fetchSheet = ms => {
     const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms);
     return fetch(C.productsUrl + (C.productsUrl.includes('?') ? '&' : '?') + 'products=1', { signal: ctl.signal, cache: 'no-store' })
-      .then(r => r.json()).then(d => L.parseSheet(d && d.rows)).catch(() => null).finally(() => clearTimeout(t));
+      .then(r => r.json()).then(d => ({ products: L.parseSheet(d && d.rows), settings: L.parseSettings(d && d.settings) }))
+      .catch(() => null).finally(() => clearTimeout(t));
   };
-  const keep = list => { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (e) { /* 저장 불가 */ } };
-  if (cached && cached.length) {
-    C.products = cached;
+  const keep = v => { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) { /* 저장 불가 */ } };
+  const apply = v => { if (v.products && v.products.length) C.products = v.products; if (v.settings) Object.assign(C.store, v.settings); };
+  if (cached && cached.products && cached.products.length) {
+    apply(cached);
     const app = window.DorothyApp();
-    fetchSheet(8000).then(list => { if (list && JSON.stringify(list) !== JSON.stringify(cached)) { keep(list); app.update(list); } });
+    fetchSheet(8000).then(v => {
+      if (!v || !v.products) return;
+      keep(v);
+      if (JSON.stringify(v.products) !== JSON.stringify(cached.products)) app.update(v.products);
+    });
   } else {
-    fetchSheet(2500).then(list => { if (list) { C.products = list; keep(list); } window.DorothyApp(); });
+    fetchSheet(2500).then(v => { if (v && v.products) { apply(v); keep(v); } window.DorothyApp(); });
   }
 })();

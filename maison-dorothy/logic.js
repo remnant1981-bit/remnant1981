@@ -142,6 +142,41 @@
     return out.length ? out : null;
   }
 
+  /* ---------- 구글 시트 '설정' 탭 → 매장 정보 ---------- */
+  // 영업요일: "월~토", "월-토", "월,화,수", "매일", "평일" 등 → [1..6]
+  function parseDays(v) {
+    const t = String(v || '').replace(/\s/g, '').replace(/요일/g, '');
+    if (!t) return null;
+    if (t === '매일') return [0, 1, 2, 3, 4, 5, 6];
+    if (t === '평일') return [1, 2, 3, 4, 5];
+    const N = '일월화수목금토', out = new Set();
+    t.split(/[,·/]/).forEach(part => {
+      const m = part.match(/^([일월화수목금토])[~\-–]([일월화수목금토])$/);
+      if (m) { let i = N.indexOf(m[1]); const j = N.indexOf(m[2]); for (let k = 0; k < 8; k++) { out.add(i); if (i === j) break; i = (i + 1) % 7; } }
+      else if (part.length === 1 && N.includes(part)) out.add(N.indexOf(part));
+    });
+    return out.size ? [...out].sort() : null;
+  }
+  const hhmm = v => (/^([01]?\d|2[0-3]):[0-5]\d$/.test(String(v || '').trim()) ? String(v).trim().padStart(5, '0') : null);
+  const httpsUrl = (v, host) => { const t = String(v || '').trim(); return /^https:\/\/[^\s"'<>]+$/.test(t) && (!host || host.test(t)) ? t : ''; };
+  const SET = { 공지: 'notice', 영업시간안내: 'hours', 영업요일: 'days', 오픈: 'from', 마감: 'to', 전화: 'phone', 카톡채널: 'kakaoUrl', 밴드: 'bandUrl', 입금계좌: 'bank' };
+  // 값이 올바른 항목만 돌려줌 (비우거나 틀리면 config.js 값 유지)
+  function parseSettings(rows) {
+    if (!Array.isArray(rows)) return null;
+    const raw = {};
+    rows.forEach(r => { if (Array.isArray(r) && SET[String(r[0] || '').replace(/\s/g, '')]) raw[SET[String(r[0]).replace(/\s/g, '')]] = String(r[1] == null ? '' : r[1]).trim(); });
+    const s = {};
+    if ('notice' in raw) s.notice = raw.notice.slice(0, 80);
+    if (raw.hours) s.hours = raw.hours.slice(0, 40);
+    const days = parseDays(raw.days), from = hhmm(raw.from), to = hhmm(raw.to);
+    if (days && from && to && from < to) s.open = { days, from, to };
+    if (/^0\d{1,2}-?\d{3,4}-?\d{4}$/.test(raw.phone || '')) s.phone = raw.phone;
+    const k = httpsUrl(raw.kakaoUrl, /^https:\/\/(pf\.kakao\.com|open\.kakao\.com)\//); if (k) s.kakaoUrl = k;
+    const b = httpsUrl(raw.bandUrl, /^https:\/\/(www\.)?band\.us\//); if (b) s.bandUrl = b;
+    if (raw.bank) s.bank = raw.bank.slice(0, 60);
+    return Object.keys(s).length ? s : null;
+  }
+
   const isPhone = s => /^0\d{1,2}-?\d{3,4}-?\d{4}$/.test(String(s || '').trim());
 
   function validate(o) {
@@ -174,7 +209,7 @@
     ].join('\n');
   }
 
-  const api = { won, hasPrice, priceLabel, lineKey, addLine, removeOne, changeQty, totals, freeShipLeft, formatPhone, openStatus, normalizeImg, parseSheet, sizeOptions, fitLabel, fitsSize, isPhone, validate, orderNo, orderText };
+  const api = { won, hasPrice, priceLabel, lineKey, addLine, removeOne, changeQty, totals, freeShipLeft, formatPhone, openStatus, normalizeImg, parseSheet, parseDays, parseSettings, sizeOptions, fitLabel, fitsSize, isPhone, validate, orderNo, orderText };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.DLogic = api;
 })(typeof self !== 'undefined' ? self : this);
