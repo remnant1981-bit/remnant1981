@@ -22,7 +22,7 @@
   const yl = (y) => `${y + 1}차년도`;
 
   // 기능 스위치(config.js features). 꺼진 기능은 숨김만 하고 저장 데이터는 유지
-  const FEAT = Object.assign({ examples: true, project: false, scenarios: false, faq: false, steps: false, legalHeader: false, execution: false, noticeImport: false }, CFG.features || {});
+  const FEAT = Object.assign({ examples: true, project: false, scenarios: false, faq: false, steps: false, legalHeader: false, execution: false, noticeImport: false, helper: false }, CFG.features || {});
   document.querySelectorAll('[data-feature]').forEach((e) => { if (!FEAT[e.dataset.feature]) e.hidden = true; });
   // 연차·공동기관 기능이 꺼져 있으면 첫 기관·1차년도만 편집·계산·내보내기
   const single = (p) => (FEAT.project ? p : { ...p, years: 1, insts: p.insts.slice(0, 1) });
@@ -214,8 +214,14 @@
           oninput: (e) => { v[side] = e.target.value; e.target.value = groupDigits(e.target.value); update(); } }));
       };
       const label = el('td', {}, it.label);
+      if (FEAT.helper && RB.ITEM_HELP[it.key]) {
+        const helpRow = el('tr', { class: 'help-row', hidden: true }, el('td', { colspan: '5', text: RB.ITEM_HELP[it.key] }));
+        label.append(' ', el('button', { type: 'button', class: 'info', 'aria-label': `${it.label} 설명`, 'aria-expanded': 'false', text: 'ⓘ', onclick: (e) => { helpRow.hidden = !helpRow.hidden; e.currentTarget.setAttribute('aria-expanded', String(!helpRow.hidden)); } }));
+        label._help = helpRow;
+      }
       if (auto) label.append(' ', el('span', { class: 'computed', text: it.key === 'personnel' ? '(2단계에서 계산)' : '(자동 계산)' }));
       iBody.append(el('tr', {}, label, num('cash'), num('inkind'), el('td', { 'data-cell': `${it.key}.total` }), el('td', { 'data-cell': `${it.key}.share` })));
+      if (label._help) iBody.append(label._help);
     }
     iBody.querySelectorAll('[data-cell]').forEach((c) => { cells[c.dataset.cell] = c; });
   }
@@ -242,7 +248,17 @@
       remain.className = 'remain ' + (lack > 0 ? 'todo' : 'done');
     } else remain.textContent = '';
     // 오류·주의만 기본 표시, 통과·계산 내역은 접어 둠
-    const li = (c) => el('li', { class: c.level }, el('span', { text: c.msg }), c.basis ? el('small', { class: 'cite', text: c.basis }) : '');
+    const fixes = FEAT.helper ? RB.suggestFixes(RB.sheetState(S, C.i, C.y)) : [];
+    const fixFor = (c) => fixes.filter((x) => x.code === c.code && (x.ref === undefined || x.ref === c.ref));
+    const fixBtn = (x) => el('button', { type: 'button', class: 'btn sm fix', text: `🛠 ${x.label}`, onclick: () => {
+      const d = Y(); const n = RB.applyFix({ people: d.people, items: d.items }, x);
+      d.people = n.people; d.items = n.items; renderPeople(); renderItems(); update();
+      toast($('dlToast'), `고쳤습니다: ${x.label}`);
+    } });
+    const nErr = r.checks.filter((c) => c.level === 'error').length;
+    $('fixAll').hidden = !(FEAT.helper && nErr && fixes.length);
+    $('fixAll').textContent = `🛠 오류 ${nErr}건 한 번에 고치기`;
+    const li = (c) => el('li', { class: c.level }, el('span', { text: c.msg }), c.basis ? el('small', { class: 'cite', text: c.basis }) : '', ...(c.code ? fixFor(c).map(fixBtn) : []));
     const issues = r.checks.filter((c) => c.level === 'error' || c.level === 'warn');
     const passed = r.checks.filter((c) => c.level === 'ok' || c.level === 'info');
     const ready = !!f.gov && !!r.total.total;
@@ -264,6 +280,7 @@
     $('meterGov').style.width = w(Math.min(f.gov, t.cash)); $('meterCash').style.width = w(orgCash); $('meterInk').style.width = w(t.inkind);
     $('liveCur').textContent = $('curLabel').textContent.replace(/^— /, '');
     updateSummary();
+    updateDownload(r);
     save();
     return r;
   }
@@ -302,12 +319,46 @@
     if (!confirm('입력한 내용을 모두 지우고 새로 작성할까요? (저장한 안은 유지)')) return;
     replaceProject({});
   });
+  $('fixAll').addEventListener('click', () => {
+    const d = Y();
+    const res = RB.autoFix({ ...RB.sheetState(S, C.i, C.y) });
+    d.people = res.sheet.people; d.items = res.sheet.items;
+    renderPeople(); renderItems(); update();
+    toast($('dlToast'), res.remaining ? `${res.applied.length}건 고쳤고 ${res.remaining}건은 직접 확인이 필요합니다.` : `오류를 모두 고쳤습니다(${res.applied.length}단계). 바뀐 금액을 확인하세요.`);
+    $('s3').scrollIntoView({ behavior: 'smooth' });
+  });
+  // ---------- 엑셀 다운로드 카드 ----------
+  const safeName = (v) => String(v || '').replace(/[\\/:*?"<>|]/g, '_').replace(/\.xlsx$/i, '').trim().slice(0, 80);
+  const defaultName = () => `${safeName(S.title) || '사업비편성표'}_${today()}`;
+  let nameEdited = false;
+  $('xlsxName').addEventListener('input', () => { nameEdited = true; });
+  function toast(box, msg) {
+    box.textContent = msg; box.hidden = false;
+    clearTimeout(box._t); box._t = setTimeout(() => { box.hidden = true; }, 6000);
+  }
+  function updateDownload(r) {
+    if (!nameEdited) $('xlsxName').value = defaultName();
+    const P = single(S);
+    const sheets = ['총괄표', ...P.insts.map((x, i) => `${i + 1}.${x.name} 사용계획`), '인건비 명세', '적용 기준'];
+    $('dlSheets').replaceChildren(...sheets.map((n) => el('li', { text: n })));
+    const ready = !!RB.int(Y().gov);
+    const P2 = RB.calcProject(P);
+    const errs = P2.insts.reduce((a, it) => a + it.years.reduce((b, y) => b + y.errors, 0), 0);
+    const st = $('dlStatus');
+    st.className = 'dl-status ' + (!ready ? 'wait' : errs ? 'warn' : 'ok');
+    st.replaceChildren(!ready ? '정부출연금을 입력하면 다운로드할 수 있습니다.'
+      : errs ? el('span', {}, `⚠ 점검 오류 ${errs}건 — 다운로드는 되지만 먼저 고치는 것을 권장합니다. `, el('a', { href: '#s4', text: '오류 보기' }))
+        : '✔ 점검 통과 — 합계·비율은 엑셀 수식으로 들어가 계획서에 맞춰 바로 고칠 수 있습니다.');
+    $('xlsx').disabled = !ready;
+  }
   $('xlsx').addEventListener('click', () => {
+    const name = `${safeName($('xlsxName').value) || defaultName()}.xlsx`;
     const bytes = RB.buildXlsx(single(S));
     const url = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-    const a = el('a', { href: url, download: `${(S.title || '사업비편성표').replace(/[\\/:*?"<>|]/g, '_')}_${today()}.xlsx` });
+    const a = el('a', { href: url, download: name });
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast($('dlToast'), `✔ ‘${name}’ 다운로드됨 — 엑셀에서 열면 합계가 자동 계산됩니다.`);
   });
   const MAX_SCEN = 20;
   function renderScenarios() {
@@ -434,9 +485,11 @@
   $('xXlsx').addEventListener('click', () => {
     const bytes = RB.buildExecXlsx(S, C.i, C.y, today(), projEnd());
     const url = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-    const a = el('a', { href: url, download: `${(S.title || '집행현황').replace(/[\\/:*?"<>|]/g, '_')}_${yl(C.y)}_집행현황_${today()}.xlsx` });
+    const fname = `${(S.title || '집행현황').replace(/[\\/:*?"<>|]/g, '_')}_${yl(C.y)}_집행현황_${today()}.xlsx`;
+    const a = el('a', { href: url, download: fname });
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast($('xToast'), `✔ ‘${fname}’ 다운로드됨`);
   });
   // 백업: 과제 전체(편성+집행)를 JSON 파일로 저장·복원
   $('backupSave').addEventListener('click', () => {
@@ -515,6 +568,42 @@
   drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
   drop.addEventListener('dragleave', () => drop.classList.remove('over'));
   drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); importNotice(e.dataTransfer.files && e.dataTransfer.files[0]); });
+
+  // ---------- 처음 편성 도우미(features.helper) ----------
+  const dlg = $('helperDlg');
+  let draft = null;
+  $('hdRuleset').replaceChildren(...[['기업(영리기관)', ['sme', 'midS', 'midL', 'large']], ['비영리기관', ['univ', 'nonprofit']]]
+    .map(([g, keys]) => el('optgroup', { label: g }, ...keys.map((k) => el('option', { value: k, text: RB.RULESETS[k].label })))));
+  ['hdGov', 'hdExSal', 'hdHiSal', 'hdEq', 'hdEqIn', 'hdOut'].forEach((id) => $(id).addEventListener('input', (e) => { e.target.value = groupDigits(e.target.value); }));
+  $('helperOpen').addEventListener('click', () => {
+    $('hdRuleset').value = RB.RULESETS[I().ruleset] && !RB.RULESETS[I().ruleset].custom ? I().ruleset : 'sme';
+    if (RB.int(Y().gov)) $('hdGov').value = groupDigits(Y().gov);
+    $('hdPreview').replaceChildren(); $('hdApply').hidden = true; draft = null;
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  });
+  $('hdMake').addEventListener('click', () => {
+    const v = (id) => $(id).value;
+    if (!RB.int(v('hdGov'))) { $('hdPreview').replaceChildren(el('p', { class: 'nerr', text: '연간 정부출연금을 입력하세요.' })); $('hdGov').focus(); return; }
+    draft = RB.draftBudget({ ruleset: v('hdRuleset'), gov: v('hdGov'), existing: { count: v('hdExN'), salary: v('hdExSal'), rate: v('hdExRate') }, hires: { count: v('hdHiN'), salary: v('hdHiSal'), months: v('hdHiM') }, equipCash: v('hdEq'), equipInkind: v('hdEqIn'), outsource: v('hdOut') });
+    const r = draft.result, errs = r.checks.filter((c) => c.level === 'error');
+    const kv = (k, val) => el('div', {}, el('dt', { text: k }), el('dd', { text: val }));
+    $('hdPreview').replaceChildren(
+      el('dl', { class: 'live-grid' }, kv('총사업비', `${fmt(r.total.total)}천원`), kv('정부출연금', `${fmt(r.funding.gov)}천원`), kv('기관 현금', `${fmt(Math.max(0, r.total.cash - r.funding.gov))}천원`), kv('기관 현물', `${fmt(r.total.inkind)}천원`)),
+      el('ul', { class: 'checks' }, ...(errs.length ? errs.map((c) => el('li', { class: 'error', text: c.msg })) : [el('li', { class: 'ok', text: '초안이 법령 기준을 충족합니다.' })])),
+      el('ul', { class: 'hd-notes' }, ...draft.notes.map((n) => el('li', { text: n }))));
+    $('hdApply').hidden = false;
+  });
+  $('hdApply').addEventListener('click', () => {
+    if (!draft) return;
+    if (hasInput() && !isExample() && !confirm(`${I().name} · ${yl(C.y)}의 현재 입력을 초안으로 바꿀까요?`)) return;
+    I().ruleset = $('hdRuleset').value; I().indirectPct = '';
+    const d = Y(); d.gov = draft.sheet.gov; d.people = draft.sheet.people; d.items = draft.sheet.items;
+    if (isExample()) S.title = '';
+    dlg.close ? dlg.close() : dlg.removeAttribute('open');
+    renderAll();
+    toast($('dlToast'), '초안을 채웠습니다. 연구재료비 등은 실제 필요 금액에 맞춰 조정하세요.');
+    $('s1').scrollIntoView({ behavior: 'smooth' });
+  });
 
   // ---------- 광고(설정 시에만) ----------
   const slots = CFG.adsenseSlots || {};

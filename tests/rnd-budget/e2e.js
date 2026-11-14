@@ -246,6 +246,39 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   }
   await nc.close();
 
+  // ⑤ 편성 도우미(helper 켬) + 다운로드 카드
+  const hc = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+  const h = await hc.newPage();
+  h.on('pageerror', (e) => errors.push(e.message));
+  h.on('dialog', (d) => d.accept());
+  await h.route('**/config.js', (r) => r.fulfill({ contentType: 'text/javascript', body: 'window.RB_CONFIG={features:{examples:true,helper:true}};' }));
+  await h.goto(base);
+  check('다운로드: 입력 전 비활성·안내', (await h.isDisabled('#xlsx')) && (await h.textContent('#dlStatus')).includes('정부출연금을 입력'));
+  await h.click('#helperOpen');
+  check('도우미 열림', await h.locator('#helperDlg').isVisible());
+  await h.fill('#hdGov', '300000'); await h.fill('#hdExN', '3'); await h.fill('#hdExSal', '60000'); await h.fill('#hdExRate', '40');
+  await h.fill('#hdHiN', '1'); await h.fill('#hdHiSal', '42000'); await h.fill('#hdHiM', '10'); await h.fill('#hdEq', '50000');
+  await h.click('#hdMake');
+  check('도우미: 초안 미리보기 기준 충족', (await h.textContent('#hdPreview')).includes('초안이 법령 기준을 충족') && (await h.textContent('#hdPreview')).includes('400,000천원'));
+  await h.click('#hdApply');
+  check('도우미: 초안 반영(오류 0·인원 4명)', (await h.locator('#helperDlg').isHidden()) && (await h.inputValue('#gov')) === '300,000' && (await h.locator('#people tbody tr').count()) === 4 && (await h.locator('#checks .error').count()) === 0);
+  check('다운로드: 점검 통과 표시·시트 목록', (await h.textContent('#dlStatus')).includes('점검 통과') && (await h.locator('#dlSheets li').count()) === 4 && !(await h.isDisabled('#xlsx')));
+  await h.fill('#xlsxName', '우리과제_초안');
+  const [hd] = await Promise.all([h.waitForEvent('download'), h.click('#xlsx')]);
+  check('다운로드: 파일 이름 반영·완료 안내', hd.suggestedFilename() === '우리과제_초안.xlsx' && (await h.textContent('#dlToast')).includes('다운로드됨'), hd.suggestedFilename());
+  await h.getByLabel('연구재료비 설명').click();
+  check('ⓘ 비목 설명 펼침', (await h.locator('.help-row:not([hidden])').count()) === 1);
+  await h.click('[data-example="error"]'); await h.waitForLoadState();
+  check('오류 예시: 고치기 버튼 표시', (await h.locator('#checks .fix').count()) >= 4 && (await h.textContent('#fixAll')).includes('한 번에'));
+  await h.click('#fixAll');
+  check('한 번에 고치기 → 오류 0', (await h.locator('#checks .error').count()) === 0 && (await h.locator('#fixAll').isHidden()) && (await h.textContent('#dlToast')).includes('모두 고쳤'));
+  await h.click('[data-example="error"]'); await h.waitForLoadState();
+  check('다운로드: 오류 경고', (await h.textContent('#dlStatus')).includes('점검 오류'));
+  let clicks = 0; for (let k = 0; k < 15 && (await h.locator('#checks .fix').count()); k++, clicks++) await h.locator('#checks .fix').first().click();
+  check('고치기 반복 → 오류 0', (await h.locator('#checks .error').count()) === 0, await h.textContent('#checks'));
+  console.log('   (고치기 클릭 ' + clicks + '회)');
+  await hc.close();
+
   check('콘솔·스크립트 오류 없음', errors.length === 0, errors.join(' | '));
   await browser.close(); server.close();
   const fail = results.filter((x) => !x).length;

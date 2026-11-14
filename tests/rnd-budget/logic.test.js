@@ -249,3 +249,42 @@ test('v2 저장값에 exec 자동 추가, 편성 계산 영향 없음', () => {
   assert.deepEqual(p.insts[0].data[0].exec, RB.blankExec());
   assert.equal(RB.calcProject(p).total.total, RB.calcProject(RB.EXAMPLES.ok.state).total.total);
 });
+
+// ---------- 처음 편성 도우미 ----------
+test('도우미 초안: 최소 총사업비·현금 기준을 정확히 충족', () => {
+  for (const [ruleset, gov] of [['sme', 300000], ['midS', 150000], ['midL', 200000], ['large', 500000], ['univ', 100000]]) {
+    const d = RB.draftBudget({ ruleset, gov, existing: { count: 3, salary: 60000, rate: 40 }, hires: { count: 1, salary: 42000, months: 10 }, equipCash: 50000, equipInkind: 10000, outsource: 30000 });
+    assert.equal(d.result.checks.filter((c) => c.level === 'error').length, 0, ruleset);
+    assert.ok(d.result.total.total >= d.result.funding.total, ruleset);
+    // 연구재료비 1천원만 줄여도 기준 미달(최소값)
+    const less = { ...d.sheet, ruleset, items: { ...d.sheet.items, material: { cash: String(RB.int(d.sheet.items.material.cash) - 1) } } };
+    if (RB.int(d.sheet.items.material.cash) > 0) assert.ok(RB.calcBudget(less).checks.some((c) => c.code === 'total' || c.code === 'cash'), ruleset);
+  }
+  const d = RB.draftBudget({ ruleset: 'sme', gov: 300000, existing: { count: 3, salary: 60000, rate: 40 } });
+  assert.equal(d.sheet.people.length, 3); assert.equal(d.sheet.people[0].kind, 'existing');
+  assert.equal(RB.int(d.sheet.items.allowance.cash), Math.floor(72000 * 0.1));
+  assert.equal(d.result.total.total, 400000);
+});
+
+test('고치기 제안: 적용하면 오류 해소', () => {
+  let sh = RB.sheetState(RB.normalizeProject(RB.EXAMPLES.error.state), 0, 0);
+  const codes = RB.suggestFixes(sh).map((f) => f.code).sort();
+  assert.deepEqual(codes, ['allowance', 'kindcash', 'outsource', 'rate', 'total']);
+  for (let k = 0; k < 4; k++) { const fx = RB.suggestFixes(sh); if (!fx.length) break; for (const f of fx) sh = { ...sh, ...RB.applyFix(sh, f) }; }
+  assert.equal(RB.calcBudget(sh).checks.filter((c) => c.level === 'error').length, 0);
+  // 원본 불변
+  const orig = RB.sheetState(RB.normalizeProject(RB.EXAMPLES.error.state), 0, 0);
+  RB.applyFix(orig, RB.suggestFixes(orig)[0]);
+  assert.equal(orig.items.material.cash, '150000');
+  // 비목 설명
+  for (const k of ['personnel', 'equipment', 'material', 'outsource', 'activity', 'allowance', 'indirect']) assert.ok(RB.ITEM_HELP[k]);
+});
+
+test('한 번에 고치기: 오류 0, 주의 항목은 유지', () => {
+  const sh = RB.sheetState(RB.normalizeProject(RB.EXAMPLES.error.state), 0, 0);
+  const r = RB.autoFix(sh);
+  assert.equal(r.remaining, 0);
+  assert.ok(r.applied.length >= 4);
+  assert.equal(r.sheet.people[1].kind, 'existingCash'); // 주의(warn) 항목은 사용자가 판단
+  assert.equal(RB.calcBudget(r.sheet).checks.filter((c) => c.level === 'error').length, 0);
+});

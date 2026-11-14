@@ -153,7 +153,7 @@
 
   function runChecks({ rules, funding, get, direct, total, people, indirectBase, indirectPct, outsource }) {
     const out = [];
-    const add = (level, msg, basis) => out.push({ level, msg, basis: basis || '' });
+    const add = (level, msg, basis, code, ref) => out.push({ level, msg, basis: basis || '', code: code || '', ref }); // code: 도우미 '고치기' 연결용
     const fmt = (n) => n.toLocaleString('ko-KR');
     const gov = funding.gov;
     if (!gov) { add('info', '정부출연금(정부지원연구개발비)을 입력하면 기관부담금과 편성 점검 결과가 표시됩니다.'); return out; }
@@ -161,15 +161,15 @@
 
     const { govMaxPct, cashMinPct } = rules;
     const govShare = (gov / total.total) * 100;
-    if (total.total < funding.total) add('error', `총사업비가 최소 총사업비보다 ${fmt(funding.total - total.total)}천원 부족합니다(정부지원 비율 ${govShare.toFixed(1)}% > ${govMaxPct}%).`, rules.basis.gov);
+    if (total.total < funding.total) add('error', `총사업비가 최소 총사업비보다 ${fmt(funding.total - total.total)}천원 부족합니다(정부지원 비율 ${govShare.toFixed(1)}% > ${govMaxPct}%).`, rules.basis.gov, 'total');
     else add('ok', `총사업비 ${fmt(total.total)}천원 — 정부지원 비율 ${govShare.toFixed(1)}%(한도 ${govMaxPct}%).`, rules.basis.gov);
 
     const org = total.total - gov;
     const orgCash = total.cash - gov;
-    if (orgCash < 0) add('error', `현금 편성 ${fmt(total.cash)}천원이 정부출연금보다 ${fmt(-orgCash)}천원 적습니다. 정부출연금은 전액 현금 비목으로 편성해야 합니다.`);
+    if (orgCash < 0) add('error', `현금 편성 ${fmt(total.cash)}천원이 정부출연금보다 ${fmt(-orgCash)}천원 적습니다. 정부출연금은 전액 현금 비목으로 편성해야 합니다.`, '', 'cash');
     else if (org > 0 && cashMinPct > 0) {
       const need = Math.ceil((org * cashMinPct) / 100);
-      if (orgCash < need) add('error', `기관부담금 중 현금 ${fmt(orgCash)}천원 — 최소 ${fmt(need)}천원(${cashMinPct}%)보다 ${fmt(need - orgCash)}천원 부족합니다.`, rules.basis.cash);
+      if (orgCash < need) add('error', `기관부담금 중 현금 ${fmt(orgCash)}천원 — 최소 ${fmt(need)}천원(${cashMinPct}%)보다 ${fmt(need - orgCash)}천원 부족합니다.`, rules.basis.cash, 'cash');
       else add('ok', `기관부담금 ${fmt(org)}천원 = 현금 ${fmt(orgCash)} + 현물 ${fmt(total.inkind)}(현금 ${((orgCash / org) * 100).toFixed(1)}%, 최소 ${cashMinPct}%).`, rules.basis.cash);
     }
 
@@ -177,22 +177,22 @@
     const personnel = get('personnel').total + get('student').total;
     const allowance = get('allowance').total;
     const allowanceMax = Math.floor((personnel * rules.allowancePct) / 100);
-    if (allowance > allowanceMax) add('error', `연구수당 ${fmt(allowance)}천원이 한도 ${fmt(allowanceMax)}천원(인건비·학생인건비의 ${rules.allowancePct}%)을 넘습니다.`, '사용 기준 제26조①');
+    if (allowance > allowanceMax) add('error', `연구수당 ${fmt(allowance)}천원이 한도 ${fmt(allowanceMax)}천원(인건비·학생인건비의 ${rules.allowancePct}%)을 넘습니다.`, '사용 기준 제26조①', 'allowance');
     else if (allowance) add('ok', `연구수당 ${fmt(allowance)}천원 — 한도 ${fmt(allowanceMax)}천원 이내.`, '사용 기준 제26조①');
 
     // 위탁연구개발비: (직접비 − 위탁)의 40% 이하
     if (outsource) {
       const base = direct.total - outsource;
       const max = Math.floor((base * rules.outsourcePct) / 100);
-      if (outsource > max) add('error', `위탁연구개발비 ${fmt(outsource)}천원이 한도 ${fmt(max)}천원((직접비 − 위탁) ${fmt(base)}의 ${rules.outsourcePct}%)을 넘습니다. 부처가 인정한 경우만 초과 가능.`, '사용 기준 제27조①');
+      if (outsource > max) add('error', `위탁연구개발비 ${fmt(outsource)}천원이 한도 ${fmt(max)}천원((직접비 − 위탁) ${fmt(base)}의 ${rules.outsourcePct}%)을 넘습니다. 부처가 인정한 경우만 초과 가능.`, '사용 기준 제27조①', 'outsource');
       else add('ok', `위탁연구개발비 ${fmt(outsource)}천원 — 한도 ${fmt(max)}천원 이내.`, '사용 기준 제27조①');
     }
 
     for (const p of people) {
       const name = p.name || '이름 없음';
-      if (p.totalRate > LIMITS.rateMax) add('error', `${name}: 총 참여율 ${p.totalRate}%(이 과제 ${pct(p.rate, 1000)}% + 다른 과제 ${pct(p.otherRate, 1000)}%)가 100%를 넘습니다.`, '사용 기준 제65조⑦');
+      if (p.totalRate > LIMITS.rateMax) add('error', `${name}: 총 참여율 ${p.totalRate}%(이 과제 ${pct(p.rate, 1000)}% + 다른 과제 ${pct(p.otherRate, 1000)}%)가 100%를 넘습니다.`, '사용 기준 제65조⑦', 'rate', people.indexOf(p));
       if (p.cost === 0 && (p.name || p.salary)) add('warn', `${name}: 연봉·참여개월·참여율을 확인하세요(인건비 0).`);
-      if (p.kind === 'existingCash' && rules.profit) add('warn', `${name}: 기존 인력 인건비는 원칙적으로 현물입니다. 현금 계상은 부처(전문기관)가 인정한 경우에만 가능합니다.`, '사용 기준 제64조②');
+      if (p.kind === 'existingCash' && rules.profit) add('warn', `${name}: 기존 인력 인건비는 원칙적으로 현물입니다. 현금 계상은 부처(전문기관)가 인정한 경우에만 가능합니다.`, '사용 기준 제64조②', 'kindcash', people.indexOf(p));
     }
     const equip = get('equipment').total;
     if (equip >= 30000) add('warn', `연구시설·장비비 ${fmt(equip)}천원 — 3천만 원 이상 장비는 ZEUS 공동활용 확인이 필요하고, 1억 원 이상은 시설·장비 표준지침 절차를 따릅니다(장비 1건 기준).`, '사용 기준 제23조');
@@ -596,7 +596,112 @@
     ]);
   }
 
-  const RB = { isYmd, ymdAddMonths, blankExec, normalizeExec, execMonths, calcExecution, buildExecXlsx, MAX_YEARS, MAX_INSTS, ROLES, blankYear, newInst, normalizeProject, sheetState, calcProject, splitCash, EXAMPLES, BASIS_DATE, SOURCES, RULESETS, LIMITS, ITEMS, PERSON_KINDS, DEFAULT_RULES, int, pct, effectiveRules, calcFunding, personCost, calcBudget, buildXlsx, crc32 };
+
+  // ---------- 처음 편성 도우미(features.helper) ----------
+  const ITEM_HELP = {
+    personnel: '참여연구원 인건비. 2단계 표에서 자동 계산. 기존 인력은 현물, 신규 채용은 현금(사용 기준 제64조).',
+    student: '학생연구자 인건비(대학·연구기관만). 기업은 해당 없음.',
+    equipment: '연구에 필요한 장비 구입·임차·제작비. 보유 장비는 구입가의 20% 이내 현물 가능. 3천만 원 이상은 ZEUS 공동활용 확인.',
+    material: '시약·재료·시제품 제작 재료·소모품. 보통 현금 편성의 중심 비목이라 금액 조정에 가장 많이 씀.',
+    outsource: '다른 기관에 맡기는 연구(위탁연구개발기관). (직접비 − 위탁)의 40% 이하.',
+    activity: '출장·회의·전문가 활용·특허 출원·소프트웨어 활용 등 연구 활동 비용.',
+    allowance: '연구 성과에 대한 보상(연구수당). 인건비(현물 포함)의 20% 이내, 1인 70% 초과 지급 불가.',
+    indirect: '기관 운영 공통비용. 자동 계산 = (직접비 − 현물 − 위탁) × 간접비율, 현금.',
+  };
+  const DRAFT = { allowancePct: 10, activityPct: 5 }; // 초안 기본 배분: 연구수당 = 인건비의 10%, 연구활동비 = 목표 총사업비의 5%(조정 가능)
+
+  /** 오류 없이 total·cash 조건을 맞추는 최소 연구재료비(현금) 찾기(이분 탐색) */
+  function minMaterialCash(state) {
+    const ok = (m) => { const s = { ...state, items: { ...state.items, material: { ...(state.items.material || {}), cash: m } } }; return !calcBudget(s).checks.some((c) => c.code === 'total' || c.code === 'cash'); };
+    const cur = int((state.items.material || {}).cash);
+    if (ok(cur)) return cur;
+    let lo = cur, hi = Math.max(1000, cur * 2 + int(state.gov) * 3);
+    for (let g = 0; g < 40 && !ok(hi); g++) hi *= 2;
+    if (!ok(hi)) return null;
+    while (hi - lo > 1) { const mid = Math.floor((lo + hi) / 2); if (ok(mid)) hi = mid; else lo = mid; }
+    return hi;
+  }
+
+  /**
+   * 질문 답변 → 편성 초안(한 기관·한 연차). answers:
+   * { ruleset, gov, existing:{count, salary, rate}, hires:{count, salary, months}, equipCash, equipInkind, outsource }
+   */
+  function draftBudget(a) {
+    const rules = effectiveRules({ ruleset: a.ruleset });
+    const funding = calcFunding(a.gov, rules.govMaxPct, rules.cashMinPct);
+    const people = [];
+    const ex = a.existing || {}, hi = a.hires || {};
+    for (let k = 0; k < Math.min(int(ex.count), 30); k++) people.push({ name: `기존연구원${k + 1}`, salary: String(int(ex.salary)), months: 12, rate: pct(ex.rate) || 30, otherRate: '', kind: rules.profit ? 'existing' : 'new' });
+    for (let k = 0; k < Math.min(int(hi.count), 30); k++) people.push({ name: `신규연구원${k + 1}`, salary: String(int(hi.salary)), months: Math.min(int(hi.months) || 12, 12), rate: 100, otherRate: '', kind: 'new' });
+    const personnel = people.reduce((s, p) => s + personCost(p), 0);
+    const items = {
+      equipment: { cash: String(int(a.equipCash)), inkind: rules.profit ? String(int(a.equipInkind)) : '' },
+      outsource: { cash: String(int(a.outsource)) },
+      allowance: { cash: String(Math.floor((personnel * DRAFT.allowancePct) / 100)) },
+      activity: { cash: String(Math.round((funding.total * DRAFT.activityPct) / 100)) },
+      material: { cash: '0' },
+    };
+    const state = { ruleset: a.ruleset, gov: String(int(a.gov)), people, items };
+    const m = minMaterialCash(state);
+    items.material.cash = String(m === null ? 0 : m);
+    const result = calcBudget(state);
+    return { sheet: { gov: state.gov, people, items }, result, notes: [
+      `연구재료비 ${int(items.material.cash).toLocaleString('ko-KR')}천원은 최소 총사업비·현금 기준을 맞추기 위해 자동으로 채운 값입니다. 실제 필요 금액으로 나눠 조정하세요.`,
+      `연구수당은 인건비의 ${DRAFT.allowancePct}%, 연구활동비는 총사업비의 ${DRAFT.activityPct}%로 넣었습니다.`,
+    ] };
+  }
+
+  /** 점검 결과별 '이렇게 고치기' 제안. 반환: [{ code, label, ops }] — ops는 applyFix로 적용 */
+  function suggestFixes(state) {
+    const r = calcBudget(state);
+    const fixes = [];
+    const fmt = (n) => n.toLocaleString('ko-KR');
+    const codes = new Set(r.checks.map((c) => c.code));
+    if (codes.has('total') || codes.has('cash')) {
+      const m = minMaterialCash(state), cur = int((state.items.material || {}).cash);
+      if (m !== null && m > cur) fixes.push({ code: codes.has('total') ? 'total' : 'cash', label: `연구재료비 현금 +${fmt(m - cur)}천원 → 총사업비·현금 기준 충족`, ops: [{ t: 'item', key: 'material', side: 'cash', value: m }] });
+    }
+    const get = (k) => r.rows.find((x) => x.key === k) || { total: 0, cash: 0 };
+    if (codes.has('allowance')) {
+      const max = Math.floor(((get('personnel').total + get('student').total) * r.rules.allowancePct) / 100);
+      fixes.push({ code: 'allowance', label: `연구수당을 한도 ${fmt(max)}천원으로 낮추기`, ops: [{ t: 'item', key: 'allowance', side: 'cash', value: max }] });
+    }
+    if (codes.has('outsource')) {
+      // 직접비 총액은 유지: 줄인 만큼 연구재료비로 옮김 → o' ≤ pct × (직접비 − o') 이므로 o' = ⌊직접비 × pct ÷ (100 + pct)⌋
+      const o = get('outsource').total, p = r.rules.outsourcePct, max = Math.floor((r.direct.total * p) / (100 + p));
+      const mat = int((state.items.material || {}).cash) + (o - max);
+      fixes.push({ code: 'outsource', label: `위탁연구개발비 ${fmt(o - max)}천원을 연구재료비로 옮기기(위탁 ${fmt(max)}천원)`, ops: [{ t: 'item', key: 'outsource', side: 'cash', value: max }, { t: 'item', key: 'material', side: 'cash', value: mat }] });
+    }
+    for (const c of r.checks) {
+      if (c.code === 'rate' && Number.isInteger(c.ref)) { const p = state.people[c.ref]; const v = Math.max(0, 100 - pct(p.otherRate, 1000)); fixes.push({ code: 'rate', ref: c.ref, label: `${p.name || '연구원'} 참여율을 ${v}%로 낮추기`, ops: [{ t: 'person', index: c.ref, field: 'rate', value: v }] }); }
+      if (c.code === 'kindcash' && Number.isInteger(c.ref)) { const p = state.people[c.ref]; fixes.push({ code: 'kindcash', ref: c.ref, label: `${p.name || '연구원'}을 기존 인력(현물)로 바꾸기`, ops: [{ t: 'person', index: c.ref, field: 'kind', value: 'existing' }] }); }
+    }
+    return fixes;
+  }
+  /** 오류(error) 고치기를 오류가 없어질 때까지 반복 적용. 주의(warn) 항목은 그대로 둠 */
+  function autoFix(sheet) {
+    const ERR = new Set(['total', 'cash', 'allowance', 'outsource', 'rate']);
+    let s = sheet; const applied = [];
+    for (let k = 0; k < 30; k++) {
+      const errs = calcBudget(s).checks.filter((c) => c.level === 'error');
+      if (!errs.length) break;
+      const fx = suggestFixes(s).filter((f) => ERR.has(f.code));
+      if (!fx.length) break;
+      s = { ...s, ...applyFix(s, fx[0]) }; applied.push(fx[0].label);
+    }
+    return { sheet: s, applied, remaining: calcBudget(s).checks.filter((c) => c.level === 'error').length };
+  }
+  /** 고치기 적용(원본 변경 없이 새 시트 반환) */
+  function applyFix(sheet, fix) {
+    const s = JSON.parse(JSON.stringify(sheet));
+    for (const op of fix.ops) {
+      if (op.t === 'item') { s.items[op.key] = s.items[op.key] || {}; s.items[op.key][op.side] = String(op.value); }
+      if (op.t === 'person' && s.people[op.index]) s.people[op.index][op.field] = op.field === 'kind' ? op.value : String(op.value);
+    }
+    return s;
+  }
+
+  const RB = { ITEM_HELP, DRAFT, minMaterialCash, draftBudget, suggestFixes, applyFix, autoFix, isYmd, ymdAddMonths, blankExec, normalizeExec, execMonths, calcExecution, buildExecXlsx, MAX_YEARS, MAX_INSTS, ROLES, blankYear, newInst, normalizeProject, sheetState, calcProject, splitCash, EXAMPLES, BASIS_DATE, SOURCES, RULESETS, LIMITS, ITEMS, PERSON_KINDS, DEFAULT_RULES, int, pct, effectiveRules, calcFunding, personCost, calcBudget, buildXlsx, crc32 };
   if (typeof module !== 'undefined' && module.exports) module.exports = RB;
   else root.RB = RB;
 })(typeof self !== 'undefined' ? self : this);

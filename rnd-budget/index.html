@@ -24,6 +24,7 @@
       <span>처음이면 예시로 체험해 보세요:</span>
       <button type="button" class="btn ghost sm" data-example="ok">정상 편성 예시</button>
       <button type="button" class="btn ghost sm" data-example="error">오류 점검 예시</button>
+      <button type="button" class="btn sm" id="helperOpen" data-feature="helper">처음이세요? 편성 도우미</button>
     </div>
     <p class="basis-line" id="basisLine" data-feature="legalHeader"></p>
   </div>
@@ -152,6 +153,7 @@
     </section>
   <section class="card" id="s4" aria-labelledby="h-check">
     <h2 id="h-check"><span class="no">4</span>편성 점검</h2>
+    <button type="button" class="btn fixall" id="fixAll" hidden></button>
     <ul id="checks" class="checks" aria-live="polite"></ul>
     <details class="passed" id="passedBox" hidden><summary id="passedSum"></summary><ul id="passed" class="checks"></ul></details>
   </section>
@@ -161,13 +163,20 @@
     <h2 id="h-out"><span class="no">5</span><span id="h-out-t">엑셀 편성표</span></h2>
     <div data-feature="project"><div class="tbl-wrap"><table class="tbl" id="summary"></table></div>
     <ul id="projChecks" class="checks" aria-live="polite"></ul></div>
-    <div class="actions">
-      <button type="button" class="btn" id="xlsx">엑셀(.xlsx) 다운로드</button>
-      <button type="button" class="btn ghost" id="print">인쇄·PDF</button>
-      <button type="button" class="btn ghost" id="saveScenario" data-feature="scenarios">현재 안 저장</button>
-      <button type="button" class="btn ghost" id="reset">새로 작성</button>
+    <div class="dl-card">
+      <div class="dl-main">
+        <label class="dl-name">파일 이름<span class="dl-file"><input id="xlsxName" maxlength="80" autocomplete="off"><span>.xlsx</span></span></label>
+        <ul class="dl-sheets" id="dlSheets" aria-label="엑셀에 들어가는 시트"></ul>
+        <p class="dl-status" id="dlStatus" aria-live="polite"></p>
+      </div>
+      <button type="button" class="btn dl-btn" id="xlsx"><span aria-hidden="true">⬇</span> 엑셀 다운로드</button>
     </div>
-    <p class="hint">엑셀: 총괄표 · 기관별 사용계획 · 인건비 명세 · 적용 기준(합계는 수식). 입력값은 이 브라우저에 자동 저장됩니다.</p>
+    <p class="dl-toast" id="dlToast" role="status" hidden></p>
+    <div class="actions sub-actions">
+      <button type="button" class="btn ghost sm" id="print">인쇄·PDF</button>
+      <button type="button" class="btn ghost sm" id="saveScenario" data-feature="scenarios">현재 안 저장</button>
+      <button type="button" class="btn ghost sm" id="reset">새로 작성</button>
+    </div>
     <ul id="scenarios" class="scenarios" data-feature="scenarios"></ul>
   </section>
     </aside>
@@ -216,6 +225,7 @@
           <button type="button" class="btn ghost" id="backupSave">백업 저장</button>
           <label class="btn ghost" id="backupLoadBtn">백업 불러오기<input type="file" id="backupLoad" accept=".json,application/json" hidden></label>
         </div>
+        <p class="dl-toast" id="xToast" role="status" hidden></p>
         <p class="hint">집행 기록은 이 브라우저에만 저장됩니다. 브라우저 정리·PC 교체 전에 <strong>백업 저장</strong>하세요.</p>
       </section>
     </aside>
@@ -236,6 +246,27 @@
 
   <p class="foot" id="foot"></p>
 </main>
+
+<dialog id="helperDlg" class="helper" aria-labelledby="hd-t">
+  <form method="dialog" id="helperForm">
+    <h2 id="hd-t">편성 도우미 <span class="badge">처음 편성용</span></h2>
+    <p class="hint">몇 가지만 답하면 법령 기준에 맞는 편성 초안을 만들어 드립니다. 모르는 칸은 비워 두세요(0으로 계산).</p>
+    <fieldset><legend>1. 기관·금액</legend>
+      <div class="grid2"><label>기관 유형<select id="hdRuleset"></select></label><label>연간 정부출연금(천원)<input id="hdGov" inputmode="numeric" placeholder="예: 300,000" required></label></div></fieldset>
+    <fieldset><legend>2. 기존 인력(현물)</legend>
+      <div class="grid3"><label>인원(명)<input id="hdExN" inputmode="numeric" placeholder="예: 3"></label><label>평균 연봉(천원)<input id="hdExSal" inputmode="numeric" placeholder="예: 60,000"></label><label>평균 참여율(%)<input id="hdExRate" inputmode="numeric" placeholder="예: 40"></label></div></fieldset>
+    <fieldset><legend>3. 신규 채용(현금)</legend>
+      <div class="grid3"><label>인원(명)<input id="hdHiN" inputmode="numeric" placeholder="예: 1"></label><label>연봉(천원)<input id="hdHiSal" inputmode="numeric" placeholder="예: 42,000"></label><label>참여개월<input id="hdHiM" inputmode="numeric" placeholder="예: 10"></label></div></fieldset>
+    <fieldset><legend>4. 장비·위탁</legend>
+      <div class="grid3"><label>장비 구입(현금, 천원)<input id="hdEq" inputmode="numeric" placeholder="없으면 비움"></label><label>보유 장비 활용(현물, 천원)<input id="hdEqIn" inputmode="numeric" placeholder="구입가의 20% 이내"></label><label>위탁연구개발비(천원)<input id="hdOut" inputmode="numeric" placeholder="없으면 비움"></label></div></fieldset>
+    <div id="hdPreview" class="hd-preview" aria-live="polite"></div>
+    <div class="actions">
+      <button type="button" class="btn" id="hdMake">초안 만들기</button>
+      <button type="button" class="btn" id="hdApply" hidden>이 초안으로 채우기</button>
+      <button type="submit" class="btn ghost" value="cancel">닫기</button>
+    </div>
+  </form>
+</dialog>
 <script src="config.js"></script>
 <script src="logic.js"></script>
 <script src="notice.js"></script>
