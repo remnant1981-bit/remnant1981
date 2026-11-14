@@ -72,3 +72,12 @@ test('칸 표시: 머리줄 메모(자동/직접 입력)와 예시 줄 강조 �
   assert.ok(notes >= 15 + 17 + 3, `메모 ${notes}개`);                                              // 주문 15칸 + 상품 17칸 + 설정 3칸 (+ 계산 탭)
   assert.ok(styleLog.some(x => /Rule\.setItalic/.test(x)));                                        // 예시 줄 기울임 강조
 });
+
+test('현황 대시보드: 카드·추세·TOP5·준비도·손님 구역이 모두 만들어지고 맨 앞 탭', () => {
+  const { env } = setup();
+  const all = env.sheets.get('현황').getDataRange().getValues().flat().join('|');
+  for (const t of ['오늘 할 일', '입금 확인할 주문', '보낼 택배', '이번 달 입금액', '최근 14일 주문 흐름',
+    '인기 옷 TOP 5', '다시 들여올 옷', '상품 준비도', '가격 입력', '전체 고객', 'VIP'])
+    assert.ok(all.includes(t), `없음: ${t}`);
+  assert.ok((all.match(/SPARKLINE/g) || []).length >= 4);                                          // 추세 1 + 준비도 막대 3
+});

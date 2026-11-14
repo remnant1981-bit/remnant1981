@@ -55,9 +55,10 @@ class Sheet {
   appendRow(r) { this.d.push(r.map(store)); }
   getRange(r, c, nr = 1, nc = 1) {
     if (typeof r === 'string') {   // 'B2' 같은 A1 표기
-      const m = r.match(/^([A-Z]+)(\d+)$/); let col = 0;
-      for (const ch of m[1]) col = col * 26 + ch.charCodeAt(0) - 64;
-      return new Range(this, Number(m[2]), col, 1, 1);
+      const cell = a => { const m = a.match(/^([A-Z]+)(\d+)$/); let col = 0;
+        for (const ch of m[1]) col = col * 26 + ch.charCodeAt(0) - 64; return [Number(m[2]), col]; };
+      const [p, q = p] = r.split(':'); const [r1, c1] = cell(p), [r2, c2] = cell(q);   // 'B2' / 'B2:I3'
+      return new Range(this, r1, c1, r2 - r1 + 1, c2 - c1 + 1);
     }
     return new Range(this, r, c, nr, nc);
   }
@@ -71,6 +72,8 @@ function makeEnv(opts = {}) {
   const ss = {
     getSheetByName: n => sheets.get(n) || null,
     getSheets: () => [...sheets.values()],
+    setActiveSheet: sh => sh,
+    moveActiveSheet: () => {},
     deleteSheet: sh => { sheets.delete(sh.getName()); },
     insertSheet: n => { const s = new Sheet(n); sheets.set(n, s); return s; },
     toast: () => {},
