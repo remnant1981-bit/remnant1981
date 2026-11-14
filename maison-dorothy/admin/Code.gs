@@ -74,7 +74,7 @@ function loadAll() {
     address: pick_(o.head, r, '주소'), items: pick_(o.head, r, '상품'), sub: pick_(o.head, r, '상품금액'),
     ship: pick_(o.head, r, '택배비'), all: pick_(o.head, r, '입금액'), memo: pick_(o.head, r, '메모'),
     tracking: pick_(o.head, r, '송장번호'), note: pick_(o.head, r, '관리메모')
-  })).filter(x => x.no).reverse();
+  })).filter(x => x.no && !/^EX-/i.test(x.no)).reverse();   // 예시 주문(EX-)은 관리자 앱에 안 보임
   const p = ss.getSheetByName(PRODUCT) ? table_(sh_(PRODUCT)) : { head: [], rows: [] };
   const products = p.rows.map(r => {
     const x = {}; Object.keys(PKEY).forEach(k => { x[k] = pick_(p.head, r, PKEY[k]); }); return x;

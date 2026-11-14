@@ -90,7 +90,7 @@ test('관리자: 상품 추가(맨 위)·수정·품절·숨김·순서·삭제'
   const id2 = adm.saveProduct({ name: '=수식 상품명', price: '', cat: '하의', show: true, soldOut: false });
   assert.match(id1, /^p[a-z0-9]+$/);
   let ps = adm.loadAll().products;
-  assert.deepEqual(ps.map(p => p.name), ['=수식 상품명', '울 코트', '예시) 울 롱코트']);   // 새 상품이 맨 위
+  assert.deepEqual(ps.map(p => p.name), ['=수식 상품명', '울 코트', '예시) 울 롱코트 (예시 줄)']);   // 새 상품이 맨 위
   assert.equal(ps[1].price, '89000');
   adm.saveProduct({ ...ps[1], id: id1, price: '79000', show: true, soldOut: false });
   adm.setProductFlag(id1, 'soldOut', true);
@@ -102,10 +102,10 @@ test('관리자: 상품 추가(맨 위)·수정·품절·숨김·순서·삭제'
   assert.equal(ps[0].price, '79000');
   assert.equal(ps[0].soldOut, 'Y');
   assert.equal(ps[1].show, 'N');
-  adm.moveProduct('p20', 'top');
-  assert.equal(adm.loadAll().products[0].id, 'p20');
-  assert.equal(adm.moveProduct('p20', 'up'), false);
-  adm.deleteProduct('p20');
+  adm.moveProduct('ex-sample', 'top');
+  assert.equal(adm.loadAll().products[0].id, 'ex-sample');
+  assert.equal(adm.moveProduct('ex-sample', 'up'), false);
+  adm.deleteProduct('ex-sample');
   assert.deepEqual(adm.loadAll().products.map(p => p.id), [id1, id2]);
   assert.throws(() => adm.saveProduct({ name: '' }), /상품명/);
   assert.throws(() => adm.saveProduct({ name: 'x', id: '한글아이디' }), /영문·숫자/);
@@ -158,7 +158,7 @@ test('공개: 보기 좋게 꾸미기 — 값은 그대로, 현황 탭 추가, �
   assert.ok(env.sheets.has('현황'));
   const dash = env.sheets.get('현황').getDataRange().getValues().flat().join('|');
   assert.match(dash, /입금 확인할 주문/);
-  assert.match(dash, /=COUNTIF\('주문'!C2:C,"입금대기"\)/);     // 칸 이름으로 찾은 열(상태=C)
+  assert.match(dash, /=COUNTIFS\('주문'!C2:C,"입금대기",'주문'!B2:B,"<>EX-\*"\)/);   // 칸 이름으로 찾은 열(상태=C), 예시 주문 제외
   assert.match(dash, /'상품'!E2:E,""/);                         // 가격=E
   assert.equal(env.sheets.get('상품').bandings.length, 1);      // 줄무늬 중복 없이 1개
   assert.ok(env.sheets.get('주문').rules.length >= 4);          // 상태별 색

@@ -66,6 +66,9 @@ function onOpen() {
     .addItem('자동화 끄기', 'disableAutomation')
     .addItem('지금 아침 요약 받아보기', 'dailyJob')
     .addItem('고객·인기상품 새로 계산', 'buildInsights')
+    .addSeparator()
+    .addItem('예시 넣기', 'insertExamples')
+    .addItem('예시 지우기', 'removeExamples')
     .addToUi();
 }
 
@@ -77,7 +80,7 @@ function setupSheets() {
   if (!p) p = ss.insertSheet(PRODUCT_SHEET);
   if (p.getLastRow() === 0) {
     p.appendRow(PRODUCT_HEADER);
-    p.appendRow(['N', 'p20', '아우터', '예시) 울 롱코트', '89000', 'NEW', '', '', '베이지, 블랙', '', '66~88', '옷 설명', '사장님 코디 팁', '', '', 'N']);
+    p.appendRow(['N', 'ex-sample', '아우터', '예시) 울 롱코트 (예시 줄)', '89000', 'NEW', '', '', '베이지, 블랙', '', '66~88', '옷 설명', '사장님 코디 팁', '', '', 'N']);
   }
   ensureHeader_(p, '재고');
   HEADER.forEach(h => ensureHeader_(sheet(), h));
@@ -221,6 +224,7 @@ function cond_(range, formula, bg, fg, extra) {
   if (fg) b = b.setFontColor(fg);
   if (extra === 'bold') b = b.setBold(true);
   if (extra === 'strike') b = b.setStrikethrough(true);
+  if (extra === 'italic') b = b.setItalic(true);
   return b.build();
 }
 
@@ -252,9 +256,12 @@ function styleOrders_(sh) {
   const dd = (name, list, strict) => fmt_(sh, name, rows, r => r.setHorizontalAlignment('center').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(list, true).setAllowInvalid(!strict).build()));
   dd('받는방법', LISTS.받는방법, true);
   dd('소식수신', LISTS.YN, true);
+  const exc = colOf_(sh, '주문번호');
+  if (exc) rules.unshift(cond_(sh.getRange(2, 1, rows - 1, cols), '=LEFT($' + letter_(exc) + '2,3)="EX-"', '#fff8d6', THEME.muted, 'italic'));
   const ac = colOf_(sh, '입금액');
   if (ac) rules.push(cond_(sh.getRange(2, ac, rows - 1, 1), `=$${letter_(ac)}2="확인 후 안내"`, '#fff4e5', THEME.wait[1], 'bold'));
   sh.setConditionalFormatRules(rules);
+  markColumns_(sh, ORDER_COLS);
 }
 
 function styleProducts_(sh) {
@@ -275,10 +282,13 @@ function styleProducts_(sh) {
   const nc = colOf_(sh, '노출'), sc = colOf_(sh, '품절'), pc = colOf_(sh, '가격'), nm = colOf_(sh, '상품명');
   if (nc) rules.push(cond_(row, `=AND($${letter_(nm || 1)}2<>"",$${letter_(nc)}2="N")`, THEME.hidden, THEME.muted));
   if (sc) rules.push(cond_(row, `=$${letter_(sc)}2="Y"`, THEME.sold, '#a2512f'));
+  const ic = colOf_(sh, '아이디');
+  if (ic) rules.unshift(cond_(row, '=LEFT($' + letter_(ic) + '2,3)="ex-"', '#fff8d6', THEME.muted, 'italic'));
   const kc = colOf_(sh, '재고');
   if (kc) rules.push(cond_(sh.getRange(2, kc, rows - 1, 1), `=AND(ISNUMBER($${letter_(kc)}2),$${letter_(kc)}2<=2)`, '#fff4e5', THEME.wait[1], 'bold'));
   if (pc && nm) rules.push(cond_(sh.getRange(2, pc, rows - 1, 1), `=AND($${letter_(nm)}2<>"",$${letter_(pc)}2="")`, '#fff4e5', THEME.wait[1]));
   sh.setConditionalFormatRules(rules);
+  markColumns_(sh, PRODUCT_COLS);
 }
 
 function styleSettings_(sh) {
@@ -292,6 +302,7 @@ function styleSettings_(sh) {
   sh.getRange(1, 1, rows, 3).setBorder(true, true, true, true, true, true, THEME.line, SpreadsheetApp.BorderStyle.SOLID);
   sh.setColumnWidth(1, 120).setColumnWidth(2, 320).setColumnWidth(3, 300);
   for (let r = 2; r <= rows; r++) sh.setRowHeight(r, 34);
+  markColumns_(sh, SETTING_COLS);
 }
 
 // 한눈에 보는 현황 탭 (수식만 있음 — 손님 페이지·관리자 앱은 읽지 않음)
@@ -303,12 +314,13 @@ function styleDashboard_(ss) {
   d.clear(); d.setHiddenGridlines(true);
   const c = n => letter_(colOf_(o, n)), q = n => letter_(colOf_(p, n));
   const O = `'${SHEET_NAME}'!`, P = `'${PRODUCT_SHEET}'!`;
+  const NX = `,${O}${c('주문번호')}2:${c('주문번호')},"<>EX-*"`;   // 예시 주문(EX-)은 세지 않음
   const items = [
-    ['오늘 들어온 주문', `=COUNTIFS(${O}${c('접수시각')}2:${c('접수시각')},">="&TODAY())`, '건'],
-    ['입금 확인할 주문', `=COUNTIF(${O}${c('상태')}2:${c('상태')},"입금대기")`, '건'],
-    ['보낼 택배', `=COUNTIFS(${O}${c('상태')}2:${c('상태')},"입금확인",${O}${c('받는방법')}2:${c('받는방법')},"택배")`, '건'],
-    ['픽업 대기', `=COUNTIFS(${O}${c('상태')}2:${c('상태')},"입금확인",${O}${c('받는방법')}2:${c('받는방법')},"매장 픽업")`, '건'],
-    ['이번 달 입금액', `=SUMIFS(${O}${c('입금액')}2:${c('입금액')},${O}${c('상태')}2:${c('상태')},"<>입금대기",${O}${c('상태')}2:${c('상태')},"<>취소",${O}${c('접수시각')}2:${c('접수시각')},">="&EOMONTH(TODAY(),-1)+1)`, '원'],
+    ['오늘 들어온 주문', `=COUNTIFS(${O}${c('접수시각')}2:${c('접수시각')},">="&TODAY()${NX})`, '건'],
+    ['입금 확인할 주문', `=COUNTIFS(${O}${c('상태')}2:${c('상태')},"입금대기"${NX})`, '건'],
+    ['보낼 택배', `=COUNTIFS(${O}${c('상태')}2:${c('상태')},"입금확인",${O}${c('받는방법')}2:${c('받는방법')},"택배"${NX})`, '건'],
+    ['픽업 대기', `=COUNTIFS(${O}${c('상태')}2:${c('상태')},"입금확인",${O}${c('받는방법')}2:${c('받는방법')},"매장 픽업"${NX})`, '건'],
+    ['이번 달 입금액', `=SUMIFS(${O}${c('입금액')}2:${c('입금액')},${O}${c('상태')}2:${c('상태')},"<>입금대기",${O}${c('상태')}2:${c('상태')},"<>취소",${O}${c('접수시각')}2:${c('접수시각')},">="&EOMONTH(TODAY(),-1)+1${NX})`, '원'],
     ['판매 중인 옷', `=COUNTIFS(${P}${q('노출')}2:${q('노출')},"Y",${P}${q('품절')}2:${q('품절')},"<>Y")`, '벌'],
     ['품절 표시', `=COUNTIFS(${P}${q('노출')}2:${q('노출')},"Y",${P}${q('품절')}2:${q('품절')},"Y")`, '벌'],
     ['가격 미입력', `=COUNTIFS(${P}${q('노출')}2:${q('노출')},"Y",${P}${q('가격')}2:${q('가격')},"")`, '벌']
@@ -327,6 +339,13 @@ function styleDashboard_(ss) {
   d.getRange(5, 2, items.length, 1).setBackground(THEME.band);
   d.setColumnWidth(1, 24).setColumnWidth(2, 170).setColumnWidth(3, 150);
   d.getRange(5 + items.length + 1, 2).setValue('주문 처리·상품 등록은 관리자 앱에서 하면 편해요. 이 탭은 보기 전용이에요.').setFontColor(THEME.muted).setFontSize(9);
+  // 칸 색 안내 (주문·상품·설정 탭 머리줄)
+  const g = 5 + items.length + 3;
+  d.getRange(g, 2).setValue('머리줄 색 안내 (칸 이름에 마우스를 올리면 설명)').setFontWeight('bold').setFontColor(THEME.ink);
+  [[MARK.auto, '자동 — 손님 주문·자동화가 채워요. 고치지 마세요'], [MARK.mix, '자동 + 수정 가능 — 자동으로 들어가지만 바꿔도 돼요'],
+   [MARK.manual, '직접 입력 — 사장님이 쓰는 칸 (관리자 앱에서도 가능)'], ['#fff8d6', '노란 줄 = 예시 (손님 화면·숫자·메일에서 빠짐, 메뉴 "예시 지우기")']]
+    .forEach((m, k) => { d.getRange(g + 1 + k, 2).setValue('').setBackground(m[0]); d.getRange(g + 1 + k, 3).setValue(m[1]).setFontSize(9).setFontColor(THEME.ink); });
+  d.setColumnWidth(3, 320);
 }
 
 
@@ -377,7 +396,7 @@ function ordersTable_() {
     row: k + 2, at: r[i('접수시각')] instanceof Date ? r[i('접수시각')] : new Date(disp[k + 1][i('접수시각')]),
     no: disp[k + 1][i('주문번호')], status: disp[k + 1][i('상태')], name: disp[k + 1][i('받는분')],
     method: disp[k + 1][i('받는방법')], items: disp[k + 1][i('상품')], all: r[i('입금액')], note: i('관리메모') >= 0 ? disp[k + 1][i('관리메모')] : ''
-  })).filter(o => o.no);
+  })).filter(o => o.no && !isExample_(o.no));
   return { sh, head, rows };
 }
 const days_ = d => (Date.now() - d.getTime()) / 86400000;
@@ -508,7 +527,7 @@ function allOrders_() {
     const v = sh.getDataRange().getValues(), d = sh.getDataRange().getDisplayValues();
     const h = d[0].map(x => String(x).replace(/\s/g, '')), i = k => h.indexOf(k);
     v.slice(1).forEach((r, k) => {
-      const dr = d[k + 1]; if (!dr[i('주문번호')]) return;
+      const dr = d[k + 1]; if (!dr[i('주문번호')] || isExample_(dr[i('주문번호')])) return;
       const at = r[i('접수시각')] instanceof Date ? r[i('접수시각')] : new Date(dr[i('접수시각')]);
       out.push({ at, status: dr[i('상태')], name: dr[i('받는분')], phone: dr[i('연락처')], method: dr[i('받는방법')],
         items: parseItems_(dr[i('상품')]), all: Number(String(r[i('입금액')]).replace(/[^\d]/g, '')) || 0, ad: i('소식수신') >= 0 ? dr[i('소식수신')] : '' });
@@ -598,10 +617,13 @@ function buildInsights() {
     return [grade(c), c.name, "'" + c.phone, c.n, c.spent, c.first, c.last, days, top_(c.sizes) ? top_(c.sizes) + ' 사이즈' : '', top_(c.cats), top_(c.methods), c.ad === 'Y' ? 'Y' : 'N',
       call ? '다시 연락해보기' : days >= 90 ? '휴면' : '', memo[String(c.phone).replace(/[^\d]/g, '')] || ''];
   });
+  const realCustomers = crow.length;
+  if (!crow.length) crow.push(['신규', '예시) 홍길동', "'010-0000-0000", 1, 55500, new Date(), new Date(), 0, '88 사이즈', '아우터', '택배', 'Y', '',
+    '예시 줄 — 실제 주문이 생기면 자동으로 사라져요']);
   const CH = ['등급', '이름', '연락처', '주문 횟수', '누적 구매액', '첫 주문', '최근 주문', '지난 일수', '평소 사이즈', '자주 산 분류', '받는 방법', '소식 수신', '마케팅', '메모(직접 입력)'];
   writeTable_(ss, CUSTOMER_SHEET, CH, crow, { widths: [56, 84, 112, 70, 96, 96, 96, 70, 90, 90, 84, 70, 110, 220], money: [5], date: [6, 7], center: [1, 4, 8, 9, 11, 12, 13] },
-    `고객 ${crow.length}명 · VIP 누적 30만원 또는 4회 이상, 단골 2회 이상 · 소식 수신 Y 손님에게만 마케팅 문자 가능 ((광고) 표기·수신거부 안내 필수)`);
-  return { best: list.filter(x => x.d30 > 0), restock: list.filter(x => x.restock), dormant, customers: crow.length };
+    `${realCustomers ? '고객 ' + realCustomers + '명' : '아직 주문이 없어 예시 1줄만 보여요'} · VIP 누적 30만원 또는 4회 이상, 단골 2회 이상 · 소식 수신 Y 손님에게만 마케팅 문자 가능 ((광고) 표기·수신거부 안내 필수)`);
+  return { best: list.filter(x => x.d30 > 0), restock: list.filter(x => x.restock), dormant, customers: realCustomers };
 }
 
 // 결과 표 쓰기: 1행 설명, 2행 머리줄, 3행부터 내용 (서식 포함, 매번 새로 씀)
@@ -613,6 +635,11 @@ function writeTable_(ss, name, head, rows, o, note) {
   sh.getRange(1, 1).setValue(note || '').setFontColor(THEME.muted).setFontSize(9).setFontStyle('italic');
   sh.getRange(2, 1, 1, head.length).setValues([head]).setBackground(THEME.head).setFontColor(THEME.headInk).setFontWeight('bold').setHorizontalAlignment('center').setWrap(true);
   sh.setFrozenRows(2); sh.setRowHeight(2, 34);
+  head.forEach((h, k) => {
+    const manual = h === '메모(직접 입력)';
+    sh.getRange(2, k + 1).setBackground(manual ? MARK.manual : MARK.auto)
+      .setNote(manual ? '직접 입력 — 연락처별로 저장돼 다시 계산해도 남아요' : '자동 계산 — 주문·상품 탭에서 매일 아침 다시 계산돼요. 직접 고쳐도 다음 계산 때 바뀌어요');
+  });
   if (rows.length) {
     const r = sh.getRange(3, 1, rows.length, head.length);
     r.setValues(rows).setFontSize(10).setVerticalAlignment('middle');
@@ -634,5 +661,89 @@ function writeTable_(ss, name, head, rows, o, note) {
     cond_(rng('추천'), eq('추천', 'BEST'), '#f6e3ea', '#6b3a4c', 'bold'),
     cond_(rng('추천'), '=LEFT($' + L('추천') + '3,2)="홍보"', THEME.paid[0], THEME.paid[1]));
   if (col('상태') && name === BEST_SHEET) rules.push(cond_(sh.getRange(3, 1, n, head.length), eq('상태', '품절'), THEME.sold, null));
+  rules.unshift(cond_(sh.getRange(3, 1, n, head.length), '=LEFT($B3,3)="예시)"', '#fff8d6', THEME.muted, 'italic'));
   sh.setConditionalFormatRules(rules);
+}
+
+
+/* ================================================================
+ * 칸 표시 · 예시 줄
+ * ================================================================ */
+const MARK = { auto: '#5b3a46', mix: '#a2512f', manual: '#3f6b3a' };
+const ORDER_COLS = {
+  접수시각: ['auto', '손님이 주문서를 보낸 시각'], 주문번호: ['auto', '주문서가 만든 번호 (EX- 로 시작하면 예시)'],
+  상태: ['mix', '처음엔 입금대기로 자동. 입금 확인·발송·픽업·취소는 관리자 앱이나 목록에서 고르기'],
+  받는분: ['auto', '손님 입력'], 연락처: ['auto', '손님 입력'], 받는방법: ['auto', '손님 선택 (택배 / 매장 픽업)'], 주소: ['auto', '손님 입력 (픽업이면 비어 있음)'],
+  상품: ['auto', '손님이 담은 옷 · 컬러/사이즈 × 수량'], 상품금액: ['auto', '가격이 있는 옷의 합계'], 택배비: ['auto', '자동 계산 (가격 문의 옷이 있으면 확인 후 안내)'],
+  입금액: ['mix', '자동 계산. "확인 후 안내"면 가격 확인 뒤 관리자 앱에서 입력'], 메모: ['auto', '손님 요청사항'],
+  송장번호: ['manual', '발송할 때 입력 (관리자 앱의 발송 완료에서 함께 입력)'],
+  관리메모: ['mix', '사장님 메모. 입금기한이 지나면 자동으로 표시가 붙어요'], 소식수신: ['auto', '손님이 신상·할인 소식 받기에 동의했는지 (Y/N)']
+};
+const PRODUCT_COLS = {
+  노출: ['manual', 'Y 손님에게 보임 / N 숨김'], 아이디: ['mix', '관리자 앱이 자동으로 만들어요. 한 번 정하면 바꾸지 마세요 (찜·공유 링크 연결)'],
+  분류: ['manual', '목록에서 고르거나 직접 입력'], 상품명: ['manual', '손님 화면에 보이는 이름'], 가격: ['manual', '숫자 (비우면 가격 문의)'],
+  배지: ['manual', 'NEW · 사장님 추천 · 재입고 · BEST'], 사진: ['manual', '드라이브 사진 링크 (관리자 앱에서 사진 올리면 자동 입력)'],
+  추가사진: ['manual', '쉼표로 여러 장'], 컬러: ['manual', '쉼표로 구분'], 사이즈: ['manual', '정해진 사이즈만 (예: S, M, L). 비우면 66~99 선택'],
+  추천사이즈: ['manual', '목록에서 고르기'], 설명: ['manual', '원단·핏·기장'], 코디팁: ['manual', '사장님 한마디'], 인스타링크: ['manual', '인스타 게시물 주소 (선택)'],
+  함께입기: ['manual', '같이 입으면 좋은 옷의 아이디, 쉼표로'], 품절: ['mix', 'Y 품절. 재고가 0 이면 다음 날 아침 자동으로 Y'],
+  재고: ['manual', '남은 수량 (비우면 재고 관리 안 함). 1~2벌이면 손님 화면에 "마지막 N벌"']
+};
+const SETTING_COLS = { 항목: ['auto', '항목 이름 — 바꾸지 마세요'], 값: ['manual', '여기에 입력하면 손님 화면에 반영돼요'], 설명: ['auto', '입력 예시와 설명'] };
+
+// 머리줄 색과 메모로 자동/직접 입력 칸 구분 (칸 이름은 그대로 — 페이지·관리자 앱이 이름으로 읽음)
+function markColumns_(sh, spec) {
+  Object.keys(spec).forEach(name => {
+    const c = colOf_(sh, name); if (!c) return;
+    const [kind, note] = spec[name];
+    const label = kind === 'auto' ? '🟪 자동' : kind === 'mix' ? '🟧 자동 + 수정 가능' : '🟩 직접 입력';
+    sh.getRange(1, c).setBackground(MARK[kind]).setFontColor('#ffffff').setNote(`${label}\n${note}`);
+  });
+}
+
+const isExample_ = no => /^EX-/i.test(String(no || ''));
+
+// 메뉴 "예시 넣기": 주문·상품 탭에 예시 줄 하나씩 (이미 있으면 그대로). 손님 화면·숫자·메일에서는 빠짐
+function insertExamples() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const o = sheet();
+  HEADER.forEach(h => ensureHeader_(o, h));
+  const ov = o.getDataRange().getDisplayValues(), oh = ov[0].map(h => String(h).replace(/\s/g, ''));
+  if (!ov.slice(1).some(r => isExample_(r[oh.indexOf('주문번호')]))) {
+    const v = {
+      접수시각: new Date(), 주문번호: 'EX-0001', 상태: '입금대기', 받는분: '예시) 홍길동', 연락처: "'010-0000-0000", 받는방법: '택배',
+      주소: '예시) 충남 홍성군 홍북읍 ○○로 1, 101동 101호', 상품: '예시) 니트 후드 가디건(아이보리/평소 88)×1',
+      상품금액: 52000, 택배비: 3500, 입금액: 55500, 메모: '예시) 키 160, 팔뚝 커버되면 좋겠어요',
+      송장번호: '', 관리메모: '예시 줄 — 메뉴 "예시 지우기"로 삭제', 소식수신: 'Y'
+    };
+    o.appendRow(oh.map(h => (h in v ? v[h] : '')));
+  }
+  const p = ss.getSheetByName(PRODUCT_SHEET);
+  if (p) {
+    ensureHeader_(p, '재고');
+    const pv = p.getDataRange().getDisplayValues(), ph = pv[0].map(h => String(h).replace(/\s/g, ''));
+    if (!pv.slice(1).some(r => /^ex-/i.test(r[ph.indexOf('아이디')]))) {
+      const v = {
+        노출: 'N', 아이디: 'ex-sample', 분류: '아우터', 상품명: '예시) 울 롱코트 (예시 줄)', 가격: 89000, 배지: 'NEW', 사진: '',
+        추가사진: '', 컬러: '베이지, 블랙', 사이즈: '', 추천사이즈: '66~88', 설명: '예시) 원단·핏·기장을 적어요', 코디팁: '예시) 청바지에 툭 걸치면 예뻐요',
+        인스타링크: '', 함께입기: '', 품절: 'N', 재고: 3
+      };
+      p.insertRowAfter(1);
+      p.getRange(2, 1, 1, ph.length).setValues([ph.map(h => (h in v ? v[h] : ''))]);
+    }
+  }
+  styleSheets();
+  toast_('예시 줄을 넣었어요 (노란 줄). 손님 화면·현황 숫자·요약 메일에는 빠져요.');
+}
+
+// 메뉴 "예시 지우기": EX- 주문, ex- 상품 줄 삭제 (아래 줄부터)
+function removeExamples() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  [[SHEET_NAME, '주문번호', isExample_], [PRODUCT_SHEET, '아이디', x => /^ex-/i.test(String(x || ''))]].forEach(([n, col, test]) => {
+    const sh = ss.getSheetByName(n); if (!sh || sh.getLastRow() < 2) return;
+    const v = sh.getDataRange().getDisplayValues(), c = v[0].map(h => String(h).replace(/\s/g, '')).indexOf(col);
+    if (c < 0) return;
+    v.map((r, k) => (k && test(r[c]) ? k + 1 : 0)).filter(Boolean).reverse().forEach(r => sh.deleteRow(r));
+  });
+  buildInsights();
+  toast_('예시 줄을 지웠어요.');
 }
