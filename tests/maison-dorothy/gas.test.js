@@ -169,3 +169,16 @@ test('공개: 보기 좋게 꾸미기 — 값은 그대로, 현황 탭 추가, �
   adm.updateOrder('D9', { status: '입금확인' });
   assert.equal(adm.loadAll().orders[0].status, '입금확인');
 });
+
+test('공개: 시트 준비하기 → 빈 기본 탭(시트1·Sheet2)만 정리, 내용 있는 탭은 유지', () => {
+  const env = makeEnv();
+  env.ss.insertSheet('시트1');                                   // 빈 기본 탭
+  env.ss.insertSheet('Sheet2');                                  // 빈 영문 기본 탭
+  env.ss.insertSheet('시트3').appendRow(['훈이 메모']);          // 내용 있음 → 유지
+  env.ss.insertSheet('메모');                                    // 기본 이름 아님 → 유지
+  const pub = env.load('order-apps-script.gs');
+  pub.setupSheets();
+  assert.deepEqual([...env.sheets.keys()].sort(), ['메모', '상품', '설정', '시트3', '주문', '현황']);
+  pub.setupSheets();                                             // 다시 눌러도 같음
+  assert.equal(env.sheets.size, 6);
+});

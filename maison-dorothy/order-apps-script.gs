@@ -6,7 +6,7 @@
  * 1. 구글 시트 새로 만들기 → 이름 "메종도로시 운영"
  * 2. 메뉴 확장 프로그램 → Apps Script → 이 파일 내용 전체 붙여넣기 → 저장
  * 3. 아래 NOTIFY_EMAIL 에 주문 알림 받을 메일 주소 입력 (비우면 시트 주인에게 보냄)
- * 4. 시트를 새로고침 → 위쪽 메뉴 "메종도로시 → 시트 준비하기" (현황·주문·상품·설정 탭 생성, 서식 적용)
+ * 4. 시트를 새로고침 → 위쪽 메뉴 "메종도로시 → 시트 준비하기" (현황·주문·상품·설정 탭 생성, 서식 적용, 빈 기본 탭 정리)
  *    상품을 가져오거나 칸을 손본 뒤에는 "메종도로시 → 보기 좋게 꾸미기"를 다시 누르면 서식이 맞춰짐
  *    지금 상품 11개를 넣으려면 products-sheet.csv 를 "상품" 탭에 가져오기(현재 시트 바꾸기)
  * 5. 배포 → 새 배포 → 유형 "웹 앱" / 실행 사용자: 나 / 액세스 권한: 모든 사용자 → 배포 → 권한 허용
@@ -69,7 +69,17 @@ function setupSheets() {
   if (s.getLastRow() === 0) s.getRange(1, 1, SETTING_ROWS.length, 3).setValues(SETTING_ROWS);
   s.setFrozenRows(1);
   s.getRange(1, 1, 1, 3).setFontWeight('bold').setBackground('#efe9e4');
+  removeEmptyDefaultSheets_(ss);
   styleSheets();
+}
+
+// 새 시트를 만들 때 생기는 빈 기본 탭(시트1, Sheet1 …) 정리 — 내용이 한 칸이라도 있으면 그대로 둠
+function removeEmptyDefaultSheets_(ss) {
+  ss.getSheets().forEach(sh => {
+    if (!/^(시트|Sheet)\s*\d+$/i.test(sh.getName())) return;
+    if (sh.getLastRow() > 0 || sh.getLastColumn() > 0) return;
+    if (ss.getSheets().length > 1) ss.deleteSheet(sh);
+  });
 }
 // 예전 메뉴 이름 호환
 function setupProducts() { setupSheets(); }

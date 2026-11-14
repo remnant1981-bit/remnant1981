@@ -70,6 +70,8 @@ function makeEnv(opts = {}) {
   const sheets = new Map();
   const ss = {
     getSheetByName: n => sheets.get(n) || null,
+    getSheets: () => [...sheets.values()],
+    deleteSheet: sh => { sheets.delete(sh.getName()); },
     insertSheet: n => { const s = new Sheet(n); sheets.set(n, s); return s; },
     toast: () => {}
   };
