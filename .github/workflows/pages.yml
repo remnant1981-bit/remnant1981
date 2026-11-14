@@ -1,4 +1,4 @@
-name: Deploy 쿠폰 지갑·R&D 사업비 계산기 to GitHub Pages
+name: Deploy 쿠폰 지갑·R&D 사업비 계산기·메종도로시 to GitHub Pages
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
     paths:
       - 'coupon-wallet/**'
       - 'rnd-budget/**'
+      - 'maison-dorothy/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -27,11 +28,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
-      # 게시 대상만 모음: coupon-wallet/ → 루트(기존 주소 유지), rnd-budget/ → /rnd-budget/
+      # 게시 대상만 모음: coupon-wallet/ → 루트(기존 주소 유지), rnd-budget/ → /rnd-budget/, maison-dorothy/ → /maison-dorothy/
       - run: |
           mkdir _site
           cp -r coupon-wallet/. _site/
           cp -r rnd-budget _site/rnd-budget
+          cp -r maison-dorothy _site/maison-dorothy
+          rm -f _site/maison-dorothy/order-apps-script.gs _site/maison-dorothy/README.md _site/maison-dorothy/products-sheet.csv
+          rm -r _site/maison-dorothy/admin
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
