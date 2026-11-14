@@ -1,0 +1,18 @@
+name = "coupon-wallet-push"
+main = "src/worker.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+# 매시 정각: 오늘이 알림 날짜인 기기에 푸시 신호를 보냄
+[triggers]
+crons = ["0 * * * *"]
+
+# 구독 정보 저장소. id를 비워 두면 배포할 때 자동으로 만들어짐(wrangler 4.x 자동 프로비저닝)
+[[kv_namespaces]]
+binding = "SUBS"
+
+[vars]
+# 브라우저 호출을 허용할 출처(GitHub Pages 주소의 origin)
+ALLOWED_ORIGIN = "https://remnant1981-bit.github.io"
+# 푸시 서비스에 알리는 연락처(https 주소 또는 mailto). 개인 이메일을 넣지 않아도 됨
+VAPID_SUBJECT = "https://remnant1981-bit.github.io/remnant1981/"

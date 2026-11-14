@@ -244,3 +244,38 @@ test('isOwnPath: 이 앱 파일만 서비스워커가 처리 (같은 사이트�
   assert.equal(CW.isOwnPath('/app.js', '/'), true);
   assert.equal(CW.isOwnPath('/rnd-budget/index.html', '/'), false);
 });
+
+/* ---------- 서버 푸시: 알림 날짜 ---------- */
+test('addDays: 월·연·윤년 경계', () => {
+  assert.equal(CW.addDays('2026-12-31', 1), '2027-01-01');
+  assert.equal(CW.addDays('2026-03-01', -1), '2026-02-28');
+  assert.equal(CW.addDays('2028-03-01', -1), '2028-02-29');
+  assert.equal(CW.addDays('2026-11-14', 0), '2026-11-14');
+});
+
+test('pushSchedule: 쿠폰 만료 3일 전~당일, 적립 마감 7일 전~당일', () => {
+  const T2 = '2026-11-14';
+  const s = CW.pushSchedule({
+    coupons: [{ expires: '2026-11-20' }],
+    loyalty: [{ current: 1, target: 5, deadline: '2026-11-25' }]
+  }, T2);
+  assert.deepEqual(s, ['2026-11-17', '2026-11-18', '2026-11-19', '2026-11-20', '2026-11-21', '2026-11-22', '2026-11-23', '2026-11-24', '2026-11-25']);
+});
+
+test('pushSchedule: 사용·만료·달성·기한 없음·범위 밖은 제외, 지난 날짜는 포함 안 함', () => {
+  const T2 = '2026-11-14';
+  assert.deepEqual(CW.pushSchedule({ coupons: [{ expires: '2026-11-15', usedAt: '2026-11-14' }, { expires: '2026-11-10' }, { expires: '' }], loyalty: [{ current: 5, target: 5, deadline: '2026-11-16' }] }, T2), []);
+  assert.deepEqual(CW.pushSchedule({ coupons: [{ expires: '2027-06-01' }], loyalty: [] }, T2), []);          // 90일 밖
+  assert.deepEqual(CW.pushSchedule({ coupons: [{ expires: '2026-11-15' }], loyalty: [] }, T2), ['2026-11-14', '2026-11-15']); // 3일 전이 과거면 오늘부터
+  assert.deepEqual(CW.pushSchedule({ coupons: [{ expires: '2026-11-14' }], loyalty: [] }, T2), ['2026-11-14']);              // 당일
+  assert.deepEqual(CW.pushSchedule({ coupons: [], loyalty: [] }, T2), []);
+});
+
+test('pushSchedule: 알림 날짜는 notifyLines가 알림을 내는 날과 일치', () => {
+  const data = { coupons: [{ brand: 'A', title: 'x', expires: '2026-11-20' }], loyalty: [{ brand: 'B', name: 'y', current: 1, target: 5, deadline: '2026-11-25' }] };
+  const sched = new Set(CW.pushSchedule(data, '2026-11-14'));
+  for (let i = 0; i < 20; i++) {
+    const day = CW.addDays('2026-11-14', i);
+    assert.equal(sched.has(day), CW.notifyLines(data, day).length > 0, day);
+  }
+});
