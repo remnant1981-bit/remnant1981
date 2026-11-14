@@ -42,6 +42,7 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   check('Q&A 분류(비목 5개)', (await p.locator('#faq details:not([hidden])').count()) === 5);
   await p.click('#faqCats [data-qcat=""]');
   check('기본: 집행 전환 표시(공개)', await p.locator('#modeBar').isVisible());
+  check('기본: 편성 도우미 버튼 표시(공개)', await p.locator('#helperOpen').isVisible());
   check('기본: 공고문 가져오기 표시(베타)', (await p.locator('#noticeDrop').isVisible()) && (await p.textContent('#noticeDrop')).includes('베타'));
   check('기본: 예시·엑셀·점검 표시', (await p.locator('.demo-bar').isVisible()) && (await p.locator('#xlsx').isVisible()) && (await p.locator('#s4').isVisible()));
   await p.click('[data-example="ok"]'); await p.waitForLoadState();
