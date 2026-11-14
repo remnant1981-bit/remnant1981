@@ -49,11 +49,11 @@ window.DOROTHY = {
 
   /* 주문 접수 주소: 구글 Apps Script 웹앱 URL (order-apps-script.gs 안내 참고).
    * 비워두면 손님이 주문 내용을 복사해 DM·카톡으로 보내는 방식으로 동작합니다. */
-  orderEndpoint: '',
+  orderEndpoint: 'https://script.google.com/macros/s/AKfycbyiBHU-35H8io8r9BIvg6uyx5165r0VQ4BxlhrSFzNlkkWHSW9C98rP1GG9OVI2KHwfFA/exec',
 
   /* 상품표 주소: 구글 시트 '상품' 탭을 읽는 Apps Script 웹앱 URL (보통 orderEndpoint 와 같은 주소).
    * 넣으면 아래 products 대신 시트의 상품이 보입니다. 시트를 못 읽으면 아래 products 로 보입니다. */
-  productsUrl: '',
+  productsUrl: 'https://script.google.com/macros/s/AKfycbyiBHU-35H8io8r9BIvg6uyx5165r0VQ4BxlhrSFzNlkkWHSW9C98rP1GG9OVI2KHwfFA/exec',
 
   categories: ['아우터', '조끼', '원피스', '상의', '하의'],
 

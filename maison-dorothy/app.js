@@ -1,42 +1,47 @@
 /* 메종도로시 화면 — 설정(config.js)과 로직(logic.js)을 읽어 그림. 상품은 구글 시트(productsUrl)가 있으면 그쪽이 우선 */
-window.DorothyApp = function () {
+window.DorothyApp = function (opt) {
   'use strict';
+  let loading = !!(opt && opt.loading);   // 시트 상품표를 기다리는 중이면 회색 로딩 카드 표시
   const C = window.DOROTHY, L = window.DLogic, S = C.store;
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const CART_KEY = 'dorothy-cart';
   const byId = id => C.products.find(p => p.id === id);
-  const askUrl = S.kakaoUrl || S.dmUrl || S.instagram;   // 문의 창구: 카톡채널 > 인스타 DM
-  const askName = S.kakaoUrl ? '카톡' : 'DM';
+  let askUrl = '', askName = '';   // 문의 창구: 카톡채널 > 인스타 DM (설정 탭이 오면 바뀔 수 있음)
   const src = f => (/^https:/.test(f) ? f : (window.__IMG && window.__IMG[f]) || `images/${f}`);   // 시트의 https 사진 / 미리보기 번들 내장 이미지 / images 폴더
   const arrow = '<svg><use href="#i-arrow"/></svg>';
   const thumb = f => (/^https:/.test(f) ? f : (window.__IMG && window.__IMG['t/' + f]) || `images/t/${f}`);   // 작은 정사각 썸네일(180px)
   const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') || d; } catch (e) { return d; } };
   const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 저장 불가 */ } };
-  const wish = new Set(load('dorothy-wish', []).filter(id => byId(id)));
-  let recent = load('dorothy-recent', []).filter(id => byId(id));
+  const wish = new Set(load('dorothy-wish', []));   // 없는 상품은 그릴 때 거름 (시트 상품표가 늦게 와도 찜 유지)
+  let recent = load('dorothy-recent', []);
   const buzz = () => { try { navigator.vibrate && navigator.vibrate(12); } catch (e) { /* 미지원 */ } };
 
   /* ---------- 매장 정보 ---------- */
   $('previewBar').hidden = !C.preview;
-  if (S.notice) { $('notice').textContent = S.notice; $('notice').hidden = false; }
   $('storeName').textContent = S.name;
   $('tagline').textContent = S.tagline + '. ' + S.intro;
   $('footTag').textContent = S.tagline;
   $('addr').textContent = S.address;
   $('landmark').textContent = S.landmark;
-  $('hours').textContent = S.hours;
   $('biz').textContent = S.business;
   $('shipInfo').textContent = `${L.won(C.shipping.fee)}, ${L.won(C.shipping.freeOver)} 이상 무료예요. 매장 픽업은 택배비가 없어요. 입금 다음 날 발송합니다.`;
   $('shipSmall').textContent = `${L.won(C.shipping.fee)} · ${C.shipping.freeOver / 10000}만원 이상 무료`;
   function link(id, href) { const a = $(id); a.hidden = !href; if (href) a.href = href; }
-  link('ctaAsk', askUrl);
-  link('qMap', S.mapUrl);
-  link('qInsta', S.instagram);
-  link('qBand', S.bandUrl);
-  link('qPhone', S.phone ? 'tel:' + S.phone.replace(/[^0-9]/g, '') : '');
-  link('dAsk', askUrl);
-  $('dAsk').textContent = `${askName}으로 보내기`;
+  // 매장 정보(공지·영업시간·연락처) — 처음과, 시트 설정 탭이 도착했을 때 다시 그림
+  function applyStore() {
+    askUrl = S.kakaoUrl || S.dmUrl || S.instagram; askName = S.kakaoUrl ? '카톡' : 'DM';
+    $('notice').textContent = S.notice || ''; $('notice').hidden = !S.notice;
+    $('hours').textContent = S.hours;
+    link('ctaAsk', askUrl);
+    link('qMap', S.mapUrl);
+    link('qInsta', S.instagram);
+    link('qBand', S.bandUrl);
+    link('qPhone', S.phone ? 'tel:' + S.phone.replace(/[^0-9]/g, '') : '');
+    link('dAsk', askUrl);
+    $('dAsk').textContent = `${askName}으로 보내기`;
+  }
+  applyStore();
 
   const st = C.story;
   if (st) {
@@ -64,8 +69,15 @@ window.DorothyApp = function () {
       <button type="button" class="heart" data-heart="${esc(p.id)}" aria-pressed="${wish.has(p.id)}" aria-label="${esc(p.name)} 찜하기"><svg><use href="#i-heart"/></svg></button>
     </div>`;
 
+  /* ---------- 로딩 카드 (시트 상품표를 기다리는 동안) ---------- */
+  const skel = n => Array.from({ length: n }, () => '<div class="card sk" aria-hidden="true"><div class="ph"></div><span class="sk-line"></span><span class="sk-line short"></span></div>').join('');
+
   /* ---------- 사장님 픽 ---------- */
-  const pick = byId(C.pick);
+  let pick = null, looks = [];
+  function renderPick() {
+  $('pick').hidden = false;
+  pick = loading ? null : byId(C.pick);
+  if (loading) { $('pick').innerHTML = '<div class="ph sk-box" aria-hidden="true"></div><div class="pick-txt" aria-hidden="true"><span class="sk-line short"></span><span class="sk-line big"></span><span class="sk-line"></span></div>'; return; }
   if (pick) {
     $('pick').innerHTML = `
       <button type="button" class="ph" data-open="${esc(pick.id)}" style="border:0;padding:0;cursor:pointer">${img(pick.img, pick.name, false)}${tag(pick)}</button>
@@ -77,17 +89,23 @@ window.DorothyApp = function () {
         <button type="button" class="btn dark" data-open="${esc(pick.id)}">자세히 보기${arrow}</button>
       </div>`;
   } else $('pick').hidden = true;
+  }
+  renderPick();
 
   /* ---------- 코디 ---------- */
-  const looks = (C.looks || []).filter(l => l.items.some(id => byId(id)));
+  function renderLooks() {
+  looks = loading ? [] : (C.looks || []).filter(l => l.items.some(id => byId(id)));
+  $('looks').hidden = !loading && !looks.length;
+  if (loading) { $('looksList').innerHTML = skel(2); return; }
   $('looksList').innerHTML = looks.map((l, i) => `
     <button type="button" class="look" data-open="${esc(l.items[0])}">
       <div class="ph">${img(l.img, l.title)}<span class="num">${String(i + 1).padStart(2, '0')}</span></div>
       <h3>${esc(l.title)}</h3>
       <p>${esc(l.note)}</p>
-      <span class="go">${l.items.map(id => esc(byId(id).name)).join(' + ')} 보기${arrow}</span>
+      <span class="go">${l.items.filter(id => byId(id)).map(id => esc(byId(id).name)).join(' + ')} 보기${arrow}</span>
     </button>`).join('');
-  if (!looks.length) $('looks').hidden = true;
+  }
+  renderLooks();
 
   /* ---------- 필터 ---------- */
   let cat = 'all', mySize = 0;
@@ -108,6 +126,8 @@ window.DorothyApp = function () {
   pressGroup($('mySize'), v => { mySize = Number(v); try { localStorage.setItem('dorothy-size', v); } catch (e) { /* 저장 불가 */ } });
 
   function render() {
+    $('grid').setAttribute('aria-busy', String(loading));
+    if (loading) { $('count').textContent = '새 옷을 불러오는 중…'; $('grid').innerHTML = skel(4); return; }
     const list = C.products.filter(p => (cat === 'all' || p.cat === cat) && L.fitsSize(p, mySize));
     $('count').textContent = `${list.length}개의 옷${mySize ? ` · ${mySize} 사이즈 추천` : ''}`;
     $('grid').innerHTML = list.length ? list.map(card).join('')
@@ -120,7 +140,7 @@ window.DorothyApp = function () {
   /* ---------- 쇼핑백 상태 ---------- */
   let cart = [];
   try { cart = JSON.parse(localStorage.getItem(CART_KEY) || '[]') || []; } catch (e) { cart = []; }
-  cart = cart.filter(x => { const p = byId(x.id); return p && !p.soldOut; })
+  if (!loading) cart = cart.filter(x => { const p = byId(x.id); return p && !p.soldOut; })
     .map(x => ({ ...x, price: L.hasPrice(byId(x.id)) ? byId(x.id).price : null }));
   const save = () => { try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch (e) { /* 저장 불가 */ } };
   const pickup = () => $('shipPick').checked;
@@ -140,7 +160,8 @@ window.DorothyApp = function () {
 
   /* ---------- 찜 ---------- */
   function syncWish() {
-    $('wishCount').hidden = !wish.size; $('wishCount').textContent = wish.size;
+    const n = [...wish].filter(id => byId(id)).length;
+    $('wishCount').hidden = !n; $('wishCount').textContent = n;
     document.querySelectorAll('[data-heart]').forEach(b => b.setAttribute('aria-pressed', String(wish.has(b.dataset.heart))));
     if (cur) $('pHeart').setAttribute('aria-pressed', String(wish.has(cur.id)));
   }
@@ -367,13 +388,19 @@ window.DorothyApp = function () {
 
   /* ---------- 스토리 ---------- */
   const groups = [];
+  function buildStories() {
+  groups.length = 0;
+  if (loading) return;
   if (pick) groups.push({ key: 'pick', name: '사장님 픽', cover: pick.img, slides: [{ img: pick.img, title: pick.name, text: pick.tip, open: pick.id }] });
   const fresh = C.products.filter(p => p.badge === 'NEW' && !p.soldOut);
   if (fresh.length) groups.push({ key: 'new', name: '이번 주 신상', cover: fresh[0].img, slides: fresh.map(p => ({ img: p.img, title: p.name, text: p.desc, open: p.id })) });
   looks.forEach((l, i) => groups.push({ key: 'look' + i, name: l.title, cover: l.img, slides: [{ img: l.img, title: l.title, text: l.note, open: l.items[0] }, ...l.items.map(byId).map(p => ({ img: p.img, title: p.name, text: p.tip, open: p.id }))] }));
   if (st) groups.push({ key: 'shop', name: '매장 이야기', cover: 'store.jpg', slides: [{ img: 'store.jpg', title: '내포 메종도로시', text: `${S.address} · ${S.landmark}` }, { img: st.photo, title: st.quote, text: st.text }] });
+  }
+  buildStories();
   const seen = new Set(load('dorothy-seen', []));
   function drawStories() {
+    if (loading) { $('stories').innerHTML = Array.from({ length: 5 }, () => '<span class="st sk" aria-hidden="true"><span class="ring"></span><span class="sk-lines"><span class="sk-line"></span><span class="sk-line short"></span></span></span>').join(''); return; }
     $('stories').innerHTML = groups.map((g, i) => `<button type="button" class="st${seen.has(g.key) ? ' seen' : ''}" data-story="${i}"><span class="ring"><img src="${thumb(g.cover)}" alt="" width="60" height="60"></span><span>${esc(g.name)}</span></button>`).join('');
   }
   drawStories();
@@ -510,26 +537,30 @@ window.DorothyApp = function () {
     history.replaceState(null, '', baseUrl); openProduct(m[1]);
   }
   addEventListener('hashchange', openFromHash);
-  openFromHash();
+  if (!loading) openFromHash();   // 로딩 중이면 상품표가 온 뒤에 열기
 
   render(); bar(); syncWish(); drawRecent(); tabState();
 
   // 시트에서 새 상품표가 오면 목록만 다시 그림 (스토리·사장님 픽은 다음 방문부터 반영)
   return {
-    update(list) {
+    update(list, settings) {
+      if (settings) { Object.assign(S, settings); applyStore(); openNow(); }
+      const wasLoading = loading; loading = false;
       C.products = list;
       if (cat !== 'all' && !list.some(p => p.cat === cat)) cat = 'all';
       $('filters').innerHTML = ['all', ...cats()].map(c => `<button type="button" data-v="${esc(c)}" aria-pressed="${c === cat}">${c === 'all' ? '전체' : esc(c)}</button>`).join('');
       cart = cart.filter(x => byId(x.id) && !byId(x.id).soldOut).map(x => ({ ...x, price: L.hasPrice(byId(x.id)) ? byId(x.id).price : null }));
+      renderPick(); renderLooks(); buildStories(); drawStories();
+      if (wasLoading) openFromHash();
       save(); render(); bar(); syncWish(); drawRecent();
     }
   };
 };
 
-/* ---------- 시작: 구글 시트(상품·설정 탭)를 불러온 뒤 화면 시작 ----------
- * 1) 지난번에 받아 둔 시트 내용이 있으면 바로 그걸로 시작하고, 뒤에서 새로 받아 상품이 바뀌었으면 목록 갱신
- *    (설정 탭의 공지·영업시간·연락처는 다음 방문부터 반영)
- * 2) 처음 온 손님은 최대 2.5초 기다렸다가 시작 (못 받으면 config.js 내용으로 시작) */
+/* ---------- 시작 ----------
+ * 화면은 바로 띄우고 상품은 구글 시트(상품·설정 탭)에서 받아 채움. 시트 응답은 보통 2~3초 걸림
+ * 1) 지난번에 받아 둔 내용이 있으면 그걸로 바로 보여주고, 뒤에서 새로 받아 바뀐 부분만 갱신
+ * 2) 처음 온 손님은 상품 자리에 로딩 카드를 보여주다가 도착하면 교체 (8초 안에 못 받으면 config.js 상품) */
 (function boot() {
   const C = window.DOROTHY, L = window.DLogic, KEY = 'dorothy-sheet';
   if (!C.productsUrl) { window.DorothyApp(); return; }
@@ -543,16 +574,22 @@ window.DorothyApp = function () {
       .catch(() => null).finally(() => clearTimeout(t));
   };
   const keep = v => { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) { /* 저장 불가 */ } };
-  const apply = v => { if (v.products && v.products.length) C.products = v.products; if (v.settings) Object.assign(C.store, v.settings); };
+  const fallback = C.products;
   if (cached && cached.products && cached.products.length) {
-    apply(cached);
+    C.products = cached.products; if (cached.settings) Object.assign(C.store, cached.settings);
     const app = window.DorothyApp();
-    fetchSheet(8000).then(v => {
+    fetchSheet(10000).then(v => {
       if (!v || !v.products) return;
       keep(v);
-      if (JSON.stringify(v.products) !== JSON.stringify(cached.products)) app.update(v.products);
+      const changed = JSON.stringify(v.products) !== JSON.stringify(cached.products);
+      const sChanged = JSON.stringify(v.settings) !== JSON.stringify(cached.settings);
+      if (changed || sChanged) app.update(v.products, v.settings);
     });
   } else {
-    fetchSheet(2500).then(v => { if (v && v.products) { apply(v); keep(v); } window.DorothyApp(); });
+    const app = window.DorothyApp({ loading: true });
+    fetchSheet(8000).then(v => {
+      if (v && v.products) { keep(v); app.update(v.products, v.settings); }
+      else app.update(fallback);
+    });
   }
 })();
