@@ -117,12 +117,17 @@
 
   // ---------- 파일 읽기 ----------
   /** raw deflate 해제. 압축 데이터 뒤 여분 바이트(HWP에서 흔함)로 브라우저가 오류를 내도 풀린 내용은 사용 */
+  const MAX_INFLATE = 80 * 1024 * 1024;
   async function inflateRaw(bytes) {
     const reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader();
     const chunks = []; let total = 0;
     try {
-      for (;;) { const { done, value } = await reader.read(); if (done) break; chunks.push(value); total += value.length; }
-    } catch (e) { if (!total) throw e; }
+      for (;;) {
+        const { done, value } = await reader.read(); if (done) break;
+        chunks.push(value); total += value.length;
+        if (total > MAX_INFLATE) { await reader.cancel().catch(() => {}); throw new Error('size'); } // 압축 폭탄 방지
+      }
+    } catch (e) { if (e && e.message === 'size') throw e; if (!total) throw e; }
     const out = new Uint8Array(total); let o = 0;
     for (const c of chunks) { out.set(c, o); o += c.length; }
     return out;
@@ -170,7 +175,10 @@
   function cfbStreams(bytes, want) {
     const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     if (v.getUint32(0, true) !== 0xe011cfd0 || v.getUint32(4, true) !== 0xe11ab1a1) throw new Error('cfb');
-    const ss = 1 << v.getUint16(30, true), mss = 1 << v.getUint16(32, true);
+    const sh = v.getUint16(30, true), msh = v.getUint16(32, true);
+    if ((sh !== 9 && sh !== 12) || msh !== 6) throw new Error('cfb');
+    const ss = 1 << sh, mss = 1 << msh;
+    const maxSecs = Math.ceil(bytes.length / ss) + 1;
     const cutoff = v.getUint32(56, true);
     const sec = (n) => 512 + n * ss;
     const difat = [];
@@ -182,7 +190,8 @@
     }
     const fat = [];
     for (const d of difat) for (let i = 0; i < ss / 4; i++) fat.push(v.getUint32(sec(d) + i * 4, true));
-    const chain = (start, table) => { const out = []; let c = start, g = 0; while (c < 0xfffffffa && g++ < 1e6) { out.push(c); c = table[c]; } return out; };
+    // 순환·과도한 길이 방지(파일 크기 이상의 체인은 손상 파일)
+    const chain = (start, table) => { const out = [], seen = new Set(); let c = start; while (c < 0xfffffffa) { if (seen.has(c) || out.length > maxSecs || c >= table.length) throw new Error('cfb'); seen.add(c); out.push(c); c = table[c]; } return out; };
     const readChain = (start, size) => {
       const out = new Uint8Array(chain(start, fat).length * ss); let o = 0;
       for (const c of chain(start, fat)) { out.set(bytes.subarray(sec(c), sec(c) + ss), o); o += ss; }
@@ -206,8 +215,10 @@
       return readChain(e.start, e.size);
     };
     const out = [];
+    const visited = new Set();
     const walk = (idx, prefix, depth) => {
-      if (idx >= ents.length || idx === 0xffffffff || depth > 64) return;
+      if (idx >= ents.length || idx === 0xffffffff || depth > 64 || visited.has(idx)) return;
+      visited.add(idx);
       const e = ents[idx];
       walk(e.left, prefix, depth + 1); walk(e.right, prefix, depth + 1);
       const path = prefix ? `${prefix}/${e.name}` : e.name;

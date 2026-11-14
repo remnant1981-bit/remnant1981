@@ -58,9 +58,16 @@
   const save = () => { store.set('rb.current', S); store.set('rb.cur', C); };
   // 새로고침 없이 교체(저장소를 못 쓰는 환경에서도 내용 유지)
   const replaceProject = (p, mode) => {
-    S = RB.normalizeProject(p); C = { i: 0, y: 0, mode: mode || C.mode || 'plan' }; save();
-    titleIn.value = S.title; xKeys = ''; nameEdited = false;
-    updateDemoNote(); renderAll(); setMode(C.mode);
+    const prevS = S, prevC = C;
+    try {
+      S = RB.normalizeProject(p); C = { i: 0, y: 0, mode: mode || C.mode || 'plan' };
+      titleIn.value = S.title; xKeys = ''; nameEdited = false;
+      updateDemoNote(); renderAll(); setMode(C.mode);
+    } catch (e) {
+      S = prevS; C = prevC; titleIn.value = S.title; xKeys = ''; updateDemoNote(); renderAll(); setMode(C.mode);
+      throw e;
+    }
+    save();
     window.scrollTo(0, 0);
   };
 
@@ -107,7 +114,7 @@
         el('td', { 'data-label': '기관 유형' }, el('select', { 'aria-label': `기관 ${i + 1} 유형`, onchange: (e) => setRuleset(i, e.target.value) }, ...rulesetOptions(inst.ruleset))),
         el('td', { class: 'del' }, S.insts.length > 1 ? el('button', { type: 'button', class: 'icon', 'aria-label': `${inst.name} 삭제`, text: '✕', onclick: async () => {
           if (!(await ask(`'${inst.name}'과 이 기관의 모든 연차 편성을 삭제할까요?`))) return;
-          S.insts.splice(i, 1); clampCur(); renderAll();
+          S.insts.splice(i, 1); if (i < C.i) C.i--; clampCur(); renderAll();
         } }) : ''),
       ));
     });
@@ -130,7 +137,7 @@
       const errs = it.years.reduce((a, r) => a + r.errors, 0);
       return chip(`${it.role === 'lead' ? '주관 · ' : ''}${it.name}`, i === C.i, errs, () => go(i, C.y), `${it.name} 편집${errs ? `, 오류 ${errs}건` : ''}`);
     }));
-    $('yearTabs').replaceChildren(...Array.from({ length: S.years }, (_, y) => {
+    $('yearTabs').replaceChildren(...Array.from({ length: P.project.years }, (_, y) => {
       const errs = P.insts[C.i].years[y].errors;
       return chip(yl(y), y === C.y, errs, () => go(C.i, y), `${yl(y)} 편집${errs ? `, 오류 ${errs}건` : ''}`);
     }));
@@ -142,7 +149,8 @@
   $('copyPrev').addEventListener('click', async () => {
     if (C.y === 0) return;
     if (!(await ask(`${yl(C.y - 1)}의 정부출연금·인건비·비목을 ${yl(C.y)}에 복사할까요? 현재 ${yl(C.y)} 입력은 바뀝니다.`))) return;
-    I().data[C.y] = JSON.parse(JSON.stringify(I().data[C.y - 1]));
+    const src = JSON.parse(JSON.stringify(I().data[C.y - 1])), cur = I().data[C.y];
+    cur.gov = src.gov; cur.people = src.people; cur.items = src.items; // 집행 기록(exec)은 유지
     renderAll();
   });
 
@@ -318,8 +326,8 @@
   function updateSummary() {
     const P = RB.calcProject(single(S));
     renderTabs(P);
-    const multi = S.years > 1;
-    const head = el('tr', {}, el('th', { text: '기관' }), ...Array.from({ length: S.years }, (_, y) => el('th', { text: yl(y) })), ...(multi ? [el('th', { text: '합계' })] : []));
+    const multi = P.project.years > 1;
+    const head = el('tr', {}, el('th', { text: '기관' }), ...Array.from({ length: P.project.years }, (_, y) => el('th', { text: yl(y) })), ...(multi ? [el('th', { text: '합계' })] : []));
     const cell = (s, errs, onclick, label) => el('td', {}, el('button', { type: 'button', class: `sumcell${errs ? ' bad' : ''}`, onclick, 'aria-label': label },
       el('strong', { text: fmt(s.total) }), el('small', { text: `정부 ${fmt(s.gov)} · 현금 ${fmt(s.orgCash)} · 현물 ${fmt(s.inkind)}` }), errs ? el('span', { class: 'cnt', text: `✖ 오류 ${errs}` }) : ''));
     const plain = (s, strong) => el('td', {}, el(strong ? 'strong' : 'span', { text: fmt(s.total) }), el('small', { text: `정부 ${fmt(s.gov)}${s.total ? ` (${((s.gov / s.total) * 100).toFixed(1)}%)` : ''}` }));
@@ -412,7 +420,7 @@
   });
 
   // ---------- 집행 현황판(features.execution) ----------
-  const X = () => { const d = Y(); d.exec = RB.normalizeExec(d.exec); return d.exec; };
+  const X = () => { const d = Y(); if (!d.exec || !Array.isArray(d.exec.paid) || !d.exec.monthly || !d.exec.agreed) d.exec = RB.normalizeExec(d.exec); return d.exec; };
   const projEnd = () => I().data.slice(0, S.years).map((d) => d.exec && d.exec.end).filter(RB.isYmd).sort().pop() || '';
   const ST = { ok: ['ok', '정상'], over: ['bad', '✖ 초과'], slow: ['warn', '⚠ 부진'], fast: ['warn', '⚠ 과속'] };
   let xKeys = '';
@@ -454,7 +462,7 @@
     const rows = ex.paid.map((x, k) => el('tr', {},
       el('td', {}, el('input', { type: 'date', value: x.date || '', 'aria-label': `납부 ${k + 1} 날짜`, onchange: (e) => { x.date = e.target.value; updateExec(); } })),
       el('td', {}, el('input', { value: groupDigits(x.amount ?? ''), inputmode: 'numeric', maxlength: 12, 'aria-label': `납부 ${k + 1} 금액(천원)`, oninput: (e) => { x.amount = e.target.value; e.target.value = groupDigits(e.target.value); updateExec(); } })),
-      el('td', { class: 'del' }, el('button', { type: 'button', class: 'icon', 'aria-label': `납부 ${k + 1} 삭제`, text: '✕', onclick: () => { ex.paid.splice(k, 1); renderExecPaid(); updateExec(); } }))));
+      el('td', { class: 'del' }, el('button', { type: 'button', class: 'icon', 'aria-label': `납부 ${k + 1} 삭제`, text: '✕', onclick: () => { X().paid.splice(k, 1); renderExecPaid(); updateExec(); } }))));
     $('xPaid').replaceChildren(el('thead', {}, el('tr', {}, el('th', { text: '납부일' }), el('th', { text: '금액(천원)' }), el('th', {}, el('span', { class: 'sr', text: '삭제' })))), el('tbody', {}, ...rows), el('tfoot', {}, el('tr', {}, el('td', { text: '납부 누계 / 계획' }), el('td', { id: 'xPaidSum' }), el('td'))));
   }
   $('xAddPaid').addEventListener('click', () => { const ex = X(); if (ex.paid.length >= 100) return; ex.paid.push({ date: today(), amount: '' }); renderExecPaid(); updateExec(); $('xPaid').querySelector('tbody tr:last-child input:not([type=date])').focus(); });
@@ -543,7 +551,7 @@
   });
 
   // ---------- 공고문에서 기준 가져오기(features.noticeImport) ----------
-  const NERR = { hwp: 'HWP 파일을 읽지 못했습니다. 한글에서 PDF 또는 HWPX로 저장해 올려 주세요.', 'hwp-locked': '암호가 설정된 HWP 문서입니다. 암호를 해제하거나 PDF로 저장해 올려 주세요.', 'hwp-dist': '배포용(복사 방지) HWP 문서라 읽을 수 없습니다. PDF로 저장해 올려 주세요.', type: 'HWP·HWPX·PDF·TXT 파일만 지원합니다.', size: '30MB 이하 파일만 올릴 수 있습니다.', empty: '글자를 찾지 못했습니다. 스캔 이미지 PDF는 읽을 수 없습니다.' };
+  const NERR = { hwp: 'HWP 파일을 읽지 못했습니다. 한글에서 PDF 또는 HWPX로 저장해 올려 주세요.', 'hwp-locked': '암호가 설정된 HWP 문서입니다. 암호를 해제하거나 PDF로 저장해 올려 주세요.', 'hwp-dist': '배포용(복사 방지) HWP 문서라 읽을 수 없습니다. PDF로 저장해 올려 주세요.', type: 'HWP·HWPX·PDF·TXT 파일만 지원합니다.', size: '파일이 너무 크거나(30MB 초과) 압축이 비정상입니다.', empty: '글자를 찾지 못했습니다. 스캔 이미지 PDF는 읽을 수 없습니다.' };
   const RATE_FIELDS = { govMaxPct: 'govMaxPct', cashMinPct: 'cashMinPct', indirectPct: 'indirectPct', allowanceMaxPct: 'allowanceMaxPct', outsourceMaxPct: 'outsourceMaxPct' };
   const nBox = $('noticeResult');
   async function importNotice(file) {

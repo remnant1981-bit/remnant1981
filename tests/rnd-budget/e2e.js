@@ -322,6 +322,39 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   check('[제한 화면] 새로 작성 → 빈 화면', (await fr.locator('#gov').inputValue()) === '');
   await sc.close();
 
+  // ⑦ 코드 검토 회귀
+  const rc = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await rc.addInitScript(() => { if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', '1'); localStorage.setItem('rb.current', JSON.stringify({ v: 2, title: 'T', years: 2, insts: [{ name: 'A', role: 'lead', ruleset: 'sme', data: [{ gov: '100000', people: [], items: {} }, { gov: '200000', people: [], items: {} }] }] })); } });
+  const r = await rc.newPage(); const rerr = [];
+  r.on('pageerror', (e) => rerr.push(e.message));
+  await r.goto(base); // 운영 설정(project 끔) + 2개 연차 저장값
+  check('[회귀] 운영 설정에서 2개 연차 저장값 → 오류 없이 표시', rerr.length === 0 && (await r.inputValue('#gov')) === '100,000', rerr.join('|'));
+  await r.route('**/config.js', (rt) => rt.fulfill({ contentType: 'text/javascript', body: 'window.RB_CONFIG={features:{examples:true,project:true,execution:true}};' }));
+  await r.reload();
+  // 집행 납부 행 삭제
+  await r.click('#modeBar [data-mode="exec"]');
+  await r.click('#xAddPaid'); await r.click('#xAddPaid');
+  await r.getByLabel('납부 1 삭제').click();
+  check('[회귀] 기관부담 납부 행 삭제', (await r.locator('#xPaid tbody tr').count()) === 1);
+  await r.fill('#xStart', '2026-04-01');
+  // 이전 연차 복사가 집행 기록을 지우지 않음
+  await r.click('#yearTabs .chip >> nth=1'); await r.fill('#xStart', '2027-04-01');
+  await r.click('#modeBar [data-mode="plan"]'); await r.click('#copyPrev');
+  await r.click('#modeBar [data-mode="exec"]');
+  check('[회귀] 이전 연차 복사 후 2차년도 집행 기간 유지', (await r.inputValue('#xStart')) === '2027-04-01');
+  await r.click('#modeBar [data-mode="plan"]');
+  // 기관 삭제 후 편집 대상 유지
+  await r.click('#addInst'); await r.click('#addInst'); // 기관 3개, 편집 = 3번째
+  await r.getByLabel('공동기관 1 삭제').click();
+  check('[회귀] 앞 기관 삭제 후 편집 대상 유지', (await r.textContent('#curLabel')).includes('공동기관 2'), await r.textContent('#curLabel'));
+  // 손상 백업 불러오기 → 기존 유지, 새로고침 후에도 정상
+  await r.click('#modeBar [data-mode="exec"]');
+  const badBackup = JSON.stringify({ app: 'rnd-budget', v: 3, project: { v: 2, years: 1, insts: [{ name: 'X', role: 'lead', ruleset: 'sme', data: [{ gov: '1', people: [null, 'x'], items: { material: 5 }, exec: { monthly: { material: 5 }, paid: [null] } }] }] } });
+  await r.setInputFiles('#backupLoad', { name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from(badBackup) });
+  await r.waitForTimeout(400); await r.reload(); await r.waitForTimeout(300);
+  check('[회귀] 손상 백업 후에도 앱 정상(새로고침)', rerr.length === 0 && ((await r.locator('#planView').isVisible()) || (await r.locator('#execView').isVisible())), rerr.join('|'));
+  await rc.close();
+
   check('콘솔·스크립트 오류 없음', errors.length === 0, errors.join(' | '));
   await browser.close(); server.close();
   const fail = results.filter((x) => !x).length;

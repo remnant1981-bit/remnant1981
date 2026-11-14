@@ -91,3 +91,27 @@ test('형식 오류', async () => {
   await assert.rejects(N.readHwp(new Uint8Array(512)), /cfb/);
   await assert.rejects(N.readHwpx(new Uint8Array(100)), /zip/);
 });
+
+test('[회귀] 손상 HWP(OLE 디렉터리 순환)·압축 폭탄 → 멈추지 않고 오류', async () => {
+  // 최소 CFB: 헤더 + FAT 섹터 + 디렉터리 섹터(루트가 자기 자신을 left/right/child로 가리킴)
+  const ss = 512, buf = Buffer.alloc(512 + ss * 2);
+  buf.writeUInt32LE(0xe011cfd0, 0); buf.writeUInt32LE(0xe11ab1a1, 4); buf.writeUInt16LE(9, 30); buf.writeUInt16LE(6, 32);
+  buf.writeUInt32LE(1, 44); buf.writeUInt32LE(1, 48); buf.writeUInt32LE(4096, 56); buf.writeUInt32LE(0xfffffffe, 60); buf.writeUInt32LE(0xfffffffe, 68);
+  for (let i = 0; i < 109; i++) buf.writeUInt32LE(0xffffffff, 76 + i * 4);
+  buf.writeUInt32LE(0, 76); // FAT 섹터 = 0
+  const fat = 512; buf.writeUInt32LE(0xfffffffd, fat); buf.writeUInt32LE(0xfffffffe, fat + 4); for (let i = 2; i < 128; i++) buf.writeUInt32LE(0xffffffff, fat + i * 4);
+  const dir = 512 + ss; const nm = Buffer.from('R\0o\0o\0t\0\0\0'); nm.copy(buf, dir); buf.writeUInt16LE(10, dir + 64); buf[dir + 66] = 5;
+  buf.writeUInt32LE(0, dir + 68); buf.writeUInt32LE(0, dir + 72); buf.writeUInt32LE(0, dir + 76); buf.writeUInt32LE(0xfffffffe, dir + 116);
+  const t0 = Date.now();
+  await assert.rejects(N.readHwp(new Uint8Array(buf)));
+  assert.ok(Date.now() - t0 < 2000);
+  // 압축 폭탄: 200MB 0바이트를 deflate → HWPX 섹션
+  const bomb = makeHwpx([' '.repeat(10)]);
+  const big = zlib.deflateRawSync(Buffer.alloc(200 * 1024 * 1024));
+  const nm2 = Buffer.from('Contents/section0.xml');
+  const h = Buffer.alloc(30); h.writeUInt32LE(0x04034b50, 0); h.writeUInt16LE(8, 8); h.writeUInt32LE(big.length, 18); h.writeUInt16LE(nm2.length, 26);
+  const c = Buffer.alloc(46); c.writeUInt32LE(0x02014b50, 0); c.writeUInt16LE(8, 10); c.writeUInt32LE(big.length, 20); c.writeUInt16LE(nm2.length, 28);
+  const cd = Buffer.concat([c, nm2]); const e = Buffer.alloc(22); e.writeUInt32LE(0x06054b50, 0); e.writeUInt16LE(1, 8); e.writeUInt16LE(1, 10); e.writeUInt32LE(cd.length, 12); e.writeUInt32LE(30 + nm2.length + big.length, 16);
+  await assert.rejects(N.readHwpx(new Uint8Array(Buffer.concat([h, nm2, big, cd, e]))), /size/);
+  assert.ok(bomb.length > 0);
+});

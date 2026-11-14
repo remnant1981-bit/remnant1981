@@ -288,3 +288,36 @@ test('한 번에 고치기: 오류 0, 주의 항목은 유지', () => {
   assert.equal(r.sheet.people[1].kind, 'existingCash'); // 주의(warn) 항목은 사용자가 판단
   assert.equal(RB.calcBudget(r.sheet).checks.filter((c) => c.level === 'error').length, 0);
 });
+
+// ---------- 코드 검토 회귀 테스트 ----------
+test('[회귀] 손상된 저장값 정리(사람·연차·기관·집행)', () => {
+  const p = RB.normalizeProject({ v: 2, years: 2, insts: [null, 'x', { name: 'A', role: 'lead', ruleset: 'sme', data: [null, { gov: '1000', people: [null, 'x', { name: 'P', salary: '1000', months: 12, rate: 10 }], items: { material: 5, equipment: { cash: '10' } }, exec: { monthly: { material: 5, equipment: 'abc', activity: [1, 2] }, paid: [null, 'x', { date: '2026-01-01', amount: '5' }], agreed: [1] } }] }] });
+  assert.equal(p.insts.length, 1);
+  const d = p.insts[0].data[0];
+  assert.equal(d.people.length, 1); assert.deepEqual(Object.keys(d.items), ['equipment']);
+  assert.deepEqual(Object.keys(d.exec.monthly), ['activity']); assert.equal(d.exec.paid.length, 1); assert.deepEqual(d.exec.agreed, {});
+  assert.doesNotThrow(() => RB.calcProject(p)); assert.doesNotThrow(() => RB.calcExecution(p, 0, 0, '2026-11-14'));
+});
+
+test('[회귀] 공고문 기준 직접 입력에서 정부지원 비율 0·빈칸 → 오류', () => {
+  for (const v of ['', 0, '0']) {
+    const r = RB.calcBudget({ ruleset: 'custom', govMaxPct: v, gov: '100000', items: { material: { cash: '110000' } } });
+    assert.ok(r.checks.some((c) => c.code === 'govmax' && c.level === 'error'), String(v));
+    assert.ok(!r.checks.some((c) => c.level === 'ok'));
+  }
+});
+
+test('[회귀] 다른 과제 참여율 100% 이상이면 참여율 고치기 제안 안 함·autoFix 반복 중단', () => {
+  const sh = { ruleset: 'sme', gov: '100000', people: [{ name: 'A', salary: '60000', months: 12, rate: 30, otherRate: 120, kind: 'existing' }], items: { material: { cash: '200000' } } };
+  assert.ok(!RB.suggestFixes(sh).some((f) => f.code === 'rate'));
+  const r = RB.autoFix(sh);
+  assert.ok(r.applied.length < 5); assert.equal(r.remaining, 1);
+});
+
+test('[회귀] 엑셀: 제어문자 제거·시트명 따옴표·집행 기간 없을 때 월 머리글', () => {
+  const files = unzip(RB.buildXlsx({ v: 2, title: 'A\x01B', years: 1, insts: [{ name: "ABC'", role: 'lead', ruleset: 'sme', data: [{ gov: '1000', people: [{ name: 'x\x07y', salary: '1000', months: 12, rate: 10 }], items: {} }] }] }));
+  for (const [n, x] of Object.entries(files)) assert.ok(!/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(x), n);
+  assert.match(files['xl/workbook.xml'], /name="1\.ABC"/);
+  const ex = unzip(RB.buildExecXlsx(RB.normalizeProject(RB.EXAMPLES.ok.state), 0, 0, '2026-11-14'));
+  assert.match(ex['xl/worksheets/sheet2.xml'], /12개월/);
+});

@@ -156,6 +156,7 @@
     const add = (level, msg, basis, code, ref) => out.push({ level, msg, basis: basis || '', code: code || '', ref }); // code: 도우미 '고치기' 연결용
     const fmt = (n) => n.toLocaleString('ko-KR');
     const gov = funding.gov;
+    if (rules.custom && !(rules.govMaxPct > 0)) { add('error', '공고문 기준 직접 입력: 정부지원 비율 상한(%)을 입력하세요. 0이거나 비어 있으면 점검할 수 없습니다.', '', 'govmax'); return out; }
     if (!gov) { add('info', '정부출연금(정부지원연구개발비)을 입력하면 기관부담금과 편성 점검 결과가 표시됩니다.'); return out; }
     if (!total.total) { add('info', `최소 총사업비 ${fmt(funding.total)}천원에 맞춰 비목을 편성하세요.`); return out; }
 
@@ -220,15 +221,20 @@
     }
     p.title = String(p.title || '').slice(0, 80);
     p.years = Math.min(MAX_YEARS, Math.max(1, Math.floor(Number(p.years) || 1)));
-    p.insts = (p.insts || []).slice(0, MAX_INSTS);
+    const isObj = (o) => o && typeof o === 'object' && !Array.isArray(o);
+    p.insts = (Array.isArray(p.insts) ? p.insts : []).filter(isObj).slice(0, MAX_INSTS);
     if (!p.insts.length) p.insts = [newInst('lead')];
     for (const inst of p.insts) {
       if (!RULESETS[inst.ruleset]) inst.ruleset = 'sme';
       if (!ROLES[inst.role]) inst.role = 'joint';
       inst.name = String(inst.name || '').slice(0, 40) || '기관';
-      inst.data = Array.isArray(inst.data) ? inst.data.slice(0, MAX_YEARS) : [];
+      inst.data = Array.isArray(inst.data) ? inst.data.filter(isObj).slice(0, MAX_YEARS) : [];
       while (inst.data.length < p.years) inst.data.push(blankYear());
-      for (const d of inst.data) { d.people = Array.isArray(d.people) ? d.people : []; d.items = d.items && typeof d.items === 'object' ? d.items : {}; d.exec = normalizeExec(d.exec); }
+      for (const d of inst.data) {
+        d.people = Array.isArray(d.people) ? d.people.filter(isObj).slice(0, 50) : [];
+        d.items = isObj(d.items) ? Object.fromEntries(Object.entries(d.items).filter(([, v]) => isObj(v))) : {};
+        d.exec = normalizeExec(d.exec);
+      }
     }
     return p;
   }
@@ -313,7 +319,7 @@
     return out;
   }
 
-  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const esc = (s) => String(s).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const colName = (i) => String.fromCharCode(65 + i);
   /** rows: 셀 배열의 배열. 셀: 문자열 | 숫자 | {f:'수식'} | {v, s:스타일번호} */
   function sheetXml(rows, widths) {
@@ -337,7 +343,7 @@
   const STYLES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="맑은 고딕"/></font><font><b/><sz val="11"/><name val="맑은 고딕"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE8EFFF"/></patternFill></fill></fills><borders count="2"><border/><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/></border></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="6"><xf/><xf numFmtId="3" applyNumberFormat="1"/><xf fontId="1" applyFont="1"/><xf borderId="1" applyBorder="1"/><xf numFmtId="3" borderId="1" applyNumberFormat="1" applyBorder="1"/><xf fontId="1" fillId="2" borderId="1" applyFont="1" applyFill="1" applyBorder="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
   // 스타일 번호: 1 숫자, 2 굵게, 3 테두리, 4 테두리+숫자, 5 표 머리(굵게·배경·테두리)
   const sheetName = (s, used) => {
-    let n = String(s).replace(/[\[\]:*?\/\\]/g, ' ').trim().slice(0, 28) || '시트';
+    let n = String(s).replace(/[\[\]:*?\/\\\x00-\x1F]/g, ' ').trim().replace(/^'+|'+$/g, '').trim().slice(0, 28).replace(/'+$/, '') || '시트';
     let k = n, i = 2;
     while (used.has(k)) k = `${n.slice(0, 26)}(${i++})`;
     used.add(k);
@@ -484,9 +490,9 @@
     const x = e && typeof e === 'object' ? e : {};
     return {
       start: isYmd(x.start) ? x.start : '', end: isYmd(x.end) ? x.end : '', cashDue: isYmd(x.cashDue) ? x.cashDue : '',
-      agreed: x.agreed && typeof x.agreed === 'object' ? x.agreed : {},
-      monthly: x.monthly && typeof x.monthly === 'object' ? x.monthly : {},
-      paid: Array.isArray(x.paid) ? x.paid.slice(0, 100) : [],
+      agreed: x.agreed && typeof x.agreed === 'object' && !Array.isArray(x.agreed) ? x.agreed : {},
+      monthly: x.monthly && typeof x.monthly === 'object' && !Array.isArray(x.monthly) ? Object.fromEntries(Object.entries(x.monthly).filter(([, v]) => Array.isArray(v)).map(([k, v]) => [k, v.slice(0, 12)])) : {},
+      paid: Array.isArray(x.paid) ? x.paid.filter((q) => q && typeof q === 'object').slice(0, 100) : [],
     };
   }
   /** 연차 시작월부터 12개월 라벨(예: '2026-04') */
@@ -573,7 +579,8 @@
     const e0 = t1.length, tn = e0 + 1;
     t1.push([{ v: '합계', s: H }, f(`SUM(B${s0}:B${e0})`), f(`SUM(C${s0}:C${e0})`), f(`SUM(D${s0}:D${e0})`), f(`IF(B${tn}=0,0,ROUND(C${tn}/B${tn}*100,1))`), txt('')]);
     t1.push([], [`현물 ${E.inkind.toLocaleString('ko-KR')}천원은 편성액 기준(집행 관리 대상 아님). 부진·과속 기준: 경과율 ±${LIMITS.execDeviationPct}%p.`]);
-    const t2 = [[{ v: '월별 집행(현금)', s: B }], ['단위: 천원'], [], head('비목', ...E.months, '합계')];
+    const mlabels = E.months.length ? E.months : Array.from({ length: 12 }, (_, k) => `${k + 1}개월`);
+    const t2 = [[{ v: '월별 집행(현금)', s: B }], ['단위: 천원'], [], head('비목', ...mlabels, '합계')];
     const m0 = t2.length + 1;
     E.rows.forEach((r) => {
       const n = t2.length + 1, vals = (ex.monthly[r.key] || []);
@@ -673,7 +680,7 @@
       fixes.push({ code: 'outsource', label: `위탁연구개발비 ${fmt(o - max)}천원을 연구재료비로 옮기기(위탁 ${fmt(max)}천원)`, ops: [{ t: 'item', key: 'outsource', side: 'cash', value: max }, { t: 'item', key: 'material', side: 'cash', value: mat }] });
     }
     for (const c of r.checks) {
-      if (c.code === 'rate' && Number.isInteger(c.ref)) { const p = state.people[c.ref]; const v = Math.max(0, 100 - pct(p.otherRate, 1000)); fixes.push({ code: 'rate', ref: c.ref, label: `${p.name || '연구원'} 참여율을 ${v}%로 낮추기`, ops: [{ t: 'person', index: c.ref, field: 'rate', value: v }] }); }
+      if (c.code === 'rate' && Number.isInteger(c.ref) && pct(state.people[c.ref].otherRate, 1000) < 100) { const p = state.people[c.ref]; const v = Math.max(0, 100 - pct(p.otherRate, 1000)); fixes.push({ code: 'rate', ref: c.ref, label: `${p.name || '연구원'} 참여율을 ${v}%로 낮추기`, ops: [{ t: 'person', index: c.ref, field: 'rate', value: v }] }); }
       if (c.code === 'kindcash' && Number.isInteger(c.ref)) { const p = state.people[c.ref]; fixes.push({ code: 'kindcash', ref: c.ref, label: `${p.name || '연구원'}을 기존 인력(현물)로 바꾸기`, ops: [{ t: 'person', index: c.ref, field: 'kind', value: 'existing' }] }); }
     }
     return fixes;
@@ -681,15 +688,17 @@
   /** 오류(error) 고치기를 오류가 없어질 때까지 반복 적용. 주의(warn) 항목은 그대로 둠 */
   function autoFix(sheet) {
     const ERR = new Set(['total', 'cash', 'allowance', 'outsource', 'rate']);
-    let s = sheet; const applied = [];
+    let s = sheet; const applied = [], labels = [];
     for (let k = 0; k < 30; k++) {
       const errs = calcBudget(s).checks.filter((c) => c.level === 'error');
       if (!errs.length) break;
       const fx = suggestFixes(s).filter((f) => ERR.has(f.code));
       if (!fx.length) break;
-      s = { ...s, ...applyFix(s, fx[0]) }; applied.push(fx[0].label);
+      const key = JSON.stringify(fx[0].ops);
+      if (applied.includes(key)) break; // 같은 수정 반복 → 중단
+      s = { ...s, ...applyFix(s, fx[0]) }; applied.push(key); labels.push(fx[0].label);
     }
-    return { sheet: s, applied, remaining: calcBudget(s).checks.filter((c) => c.level === 'error').length };
+    return { sheet: s, applied: labels, remaining: calcBudget(s).checks.filter((c) => c.level === 'error').length };
   }
   /** 고치기 적용(원본 변경 없이 새 시트 반환) */
   function applyFix(sheet, fix) {
