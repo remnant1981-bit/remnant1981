@@ -19,7 +19,7 @@ const PHOTO_FOLDER = '메종도로시 상품사진';
 const STATUSES = ['입금대기', '입금확인', '발송완료', '픽업완료', '취소'];
 const PKEY = { show: '노출', id: '아이디', cat: '분류', name: '상품명', price: '가격', badge: '배지', img: '사진', gallery: '추가사진',
   colors: '컬러', sizes: '사이즈', fit: '추천사이즈', desc: '설명', tip: '코디팁', post: '인스타링크', pair: '함께입기', soldOut: '품절' };
-const SETTING_KEYS = ['공지', '영업시간안내', '영업요일', '오픈', '마감', '전화', '카톡채널', '밴드', '입금계좌'];
+const SETTING_KEYS = ['공지', '영업시간안내', '영업요일', '오픈', '마감', '전화', '카톡채널', '밴드', '입금계좌', '입금기한', '자동취소', '보관기간'];
 
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('Index')

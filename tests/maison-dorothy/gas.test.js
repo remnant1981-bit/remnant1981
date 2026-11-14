@@ -182,3 +182,96 @@ test('공개: 시트 준비하기 → 빈 기본 탭(시트1·Sheet2)만 정리,
   pub.setupSheets();                                             // 다시 눌러도 같음
   assert.equal(env.sheets.size, 6);
 });
+
+/* ---------- 자동화 ---------- */
+const DAY = 86400000;
+function addOrder(env, { daysAgo, status, no, name = '손님', method = '택배', all = 50000, items = '니트 후드 가디건(아이보리/평소 66)×1' }) {
+  env.sheets.get('주문').appendRow([new Date(Date.now() - daysAgo * DAY), no, status, name, "'010-1111-2222", method, '주소', items, all, 0, all, '', '', '']);
+}
+
+test('자동화: 켜기·끄기 — 예약 2개, 여러 번 눌러도 중복 없음', () => {
+  const { env, pub } = setup();
+  pub.enableAutomation(); pub.enableAutomation();
+  assert.deepEqual(env.triggers.map(t => t.getHandlerFunction()).sort(), ['dailyJob', 'weeklyBackup']);
+  const daily = env.triggers.find(t => t.getHandlerFunction() === 'dailyJob').spec;
+  assert.deepEqual(daily.atHour, [8]);
+  assert.deepEqual(daily.inTimezone, ['Asia/Seoul']);
+  pub.disableAutomation();
+  assert.equal(env.triggers.length, 0);
+});
+
+test('자동화: 예전 설정 탭에 자동화 항목 추가(기존 값 유지)', () => {
+  const env = makeEnv();
+  const s = env.ss.insertSheet('설정');
+  s.appendRow(['항목', '값', '설명']); s.appendRow(['입금계좌', '농협 1-2-3', '']);
+  const pub = env.load('order-apps-script.gs');
+  pub.setupSheets();
+  const rows = s.getDataRange().getDisplayValues();
+  assert.ok(rows.some(r => r[0] === '입금계좌' && r[1] === '농협 1-2-3'));
+  assert.ok(['입금기한', '자동취소', '보관기간', '공지'].every(k => rows.some(r => r[0] === k)));
+  pub.setupSheets();
+  assert.equal(s.getDataRange().getDisplayValues().filter(r => r[0] === '입금기한').length, 1);
+});
+
+test('자동화: 아침 요약 — 입금기한 알림, 오래된 완료 주문 보관, 메일 내용', () => {
+  const { env, pub, adm } = setup();
+  env.clock.weekday = 3;   // 수요일
+  addOrder(env, { daysAgo: 0.2, status: '입금대기', no: 'NEW', name: '새손님' });
+  addOrder(env, { daysAgo: 3, status: '입금대기', no: 'LATE', name: '늦은손님' });
+  addOrder(env, { daysAgo: 1.5, status: '입금확인', no: 'SHIP', name: '택배손님' });
+  addOrder(env, { daysAgo: 2, status: '입금확인', no: 'PICK', name: '픽업손님', method: '매장 픽업' });
+  addOrder(env, { daysAgo: 120, status: '발송완료', no: 'OLD1' });
+  addOrder(env, { daysAgo: 100, status: '취소', no: 'OLD2' });
+  addOrder(env, { daysAgo: 30, status: '발송완료', no: 'KEEP' });
+  const r = pub.dailyJob();
+  assert.equal(r.sent, true);
+  const mail = env.mails.at(-1);
+  assert.match(mail.subject, /입금확인 2 · 택배 1 · 새 주문 1/);
+  assert.match(mail.body, /입금기한 지난 주문 1건/);
+  assert.match(mail.body, /늦은손님 \(LATE\)/);
+  assert.match(mail.body, /"보관" 탭으로 옮김/);
+  assert.match(mail.body, /픽업 대기 1건/);
+  const nos = adm.loadAll().orders.map(o => o.no);
+  assert.deepEqual(nos.sort(), ['KEEP', 'LATE', 'NEW', 'PICK', 'SHIP']);           // 오래된 2건은 주문 탭에서 빠짐
+  const arch = env.sheets.get('보관').getDataRange().getDisplayValues();
+  assert.deepEqual(arch.slice(1).map(x => x[1]).sort(), ['OLD1', 'OLD2']);         // 보관 탭으로 이동
+  assert.equal(arch[0][1], '주문번호');
+  const late = adm.loadAll().orders.find(o => o.no === 'LATE');
+  assert.equal(late.status, '입금대기');                                           // 자동취소 N: 상태 유지
+  assert.equal(late.note, '입금기한 지남');
+  pub.dailyJob();
+  assert.equal(adm.loadAll().orders.find(o => o.no === 'LATE').note, '입금기한 지남');   // 메모 중복 없음
+  assert.doesNotMatch(pub.doGet({}).text, /늦은손님|OLD1|LATE/);                    // 주문·보관 내용은 공개 안 됨
+});
+
+test('자동화: 자동취소 Y, 할 일 없는 날은 메일 안 보냄, 월요일은 주간 리포트', () => {
+  const { env, pub, adm } = setup();
+  env.clock.weekday = 3;
+  adm.saveSettings({ 자동취소: 'Y', 입금기한: '1' });
+  addOrder(env, { daysAgo: 1.2, status: '입금대기', no: 'LATE' });
+  pub.dailyJob();
+  const o = adm.loadAll().orders.find(x => x.no === 'LATE');
+  assert.equal(o.status, '취소');
+  assert.equal(o.note, '입금기한 지나 자동 취소');
+  assert.match(env.mails.at(-1).body, /자동 취소함/);
+  const { env: e2, pub: p2 } = setup();
+  e2.clock.weekday = 4;
+  assert.equal(p2.dailyJob().sent, false);                                       // 할 일 없음 → 안 보냄
+  assert.equal(e2.mails.length, 0);
+  e2.clock.weekday = 1;
+  addOrder(e2, { daysAgo: 3, status: '발송완료', no: 'W1', items: '니트 후드 가디건(아이보리/평소 66)×2\n숏 퀼팅 조끼(네이비/평소 88)×1', all: 87000 });
+  assert.equal(p2.dailyJob().sent, true);
+  assert.match(e2.mails.at(-1).body, /지난주 리포트/);
+  assert.match(e2.mails.at(-1).body, /입금 확인된 금액 87,000원/);
+  assert.match(e2.mails.at(-1).body, /많이 주문된 옷: 니트 후드 가디건 2벌/);
+});
+
+test('자동화: 주간 백업 — 복사본 생성, 최근 8개만 남김', () => {
+  const { env, pub } = setup();
+  for (let i = 0; i < 10; i++) pub.weeklyBackup();
+  assert.equal(env.copies.length, 10);
+  assert.equal(env.copies.filter(c => !c.trashed).length, 8);
+  assert.ok(env.copies.slice(0, 2).every(c => c.trashed));                          // 가장 오래된 2개가 휴지통
+  assert.match(env.copies[0].name, /^메종도로시 운영 백업 \d{4}-\d{2}-\d{2}$/);
+  assert.equal(env.folders.filter(f => f.name === '메종도로시 백업').length, 1);
+});

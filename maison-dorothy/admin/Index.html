@@ -513,11 +513,12 @@ textarea.txt{min-height:76px;resize:vertical}
     ['영업요일', '영업 요일', '예) 월~토, 화~일, 월,수,금, 매일', 'text'],
     ['오픈', '오픈 시간', '10:00', 'time'], ['마감', '마감 시간', '20:00', 'time'],
     ['전화', '매장 전화', '010-1234-5678', 'tel'], ['카톡채널', '카톡채널 주소', 'https://pf.kakao.com/...', 'url'],
-    ['밴드', '밴드 주소', 'https://band.us/...', 'url'], ['입금계좌', '입금 계좌', '농협 123-4567-8901 (예금주 홍길동)', 'text']
+    ['밴드', '밴드 주소', 'https://band.us/...', 'url'], ['입금계좌', '입금 계좌', '농협 123-4567-8901 (예금주 홍길동)', 'text'],
+    ['입금기한', '입금 기한 (일) · 자동화', '2', 'number'], ['자동취소', '기한 지나면 자동 취소 (Y/N) · 자동화', 'N', 'text'], ['보관기간', '완료 주문 보관 탭으로 옮기기 (일) · 자동화', '90', 'number']
   ];
   function renderShop() {
     const s = D.settings || {};
-    $('setForm').innerHTML = SET.map(([k, l, ph, ty]) => `<label class="f"><span>${l}</span><input class="txt" name="${k}" type="${ty === 'time' ? 'time' : ty === 'url' ? 'url' : ty === 'tel' ? 'tel' : 'text'}" value="${esc(s[k] || '')}" placeholder="${esc(ph)}" maxlength="120"></label>`).join('') +
+    $('setForm').innerHTML = SET.map(([k, l, ph, ty]) => `<label class="f"><span>${l}</span><input class="txt" name="${k}" type="${ty === 'time' ? 'time' : ty === 'url' ? 'url' : ty === 'tel' ? 'tel' : ty === 'number' ? 'number' : 'text'}"${ty === 'number' ? ' inputmode="numeric" min="1" max="365"' : ''} value="${esc(s[k] || '')}" placeholder="${esc(ph)}" maxlength="120"></label>`).join('') +
       '<button type="submit" class="btn main">저장</button>';
   }
   $('setForm').addEventListener('submit', async e => {
@@ -526,6 +527,8 @@ textarea.txt{min-height:76px;resize:vertical}
     if (o.오픈 && o.마감 && o.오픈 >= o.마감) { toast('마감 시간이 오픈보다 늦어야 해요', true); return; }
     if (o.카톡채널 && !/^https:\/\/(pf|open)\.kakao\.com\//.test(o.카톡채널)) { toast('카톡채널 주소는 https://pf.kakao.com/ 으로 시작해요', true); return; }
     if (o.밴드 && !/^https:\/\/(www\.)?band\.us\//.test(o.밴드)) { toast('밴드 주소는 https://band.us/ 로 시작해요', true); return; }
+    if (o.자동취소 && !/^[YN]$/i.test(o.자동취소)) { toast('자동취소는 Y 또는 N 으로 적어 주세요', true); return; }
+    if (o.자동취소) o.자동취소 = o.자동취소.toUpperCase();
     try { await busy('저장 중…', () => api('saveSettings', o)); D.settings = { ...D.settings, ...o }; toast('매장 정보를 저장했어요'); } catch (err) { /* 안내됨 */ }
   });
 

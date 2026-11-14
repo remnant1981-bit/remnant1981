@@ -1,0 +1,23 @@
+name: 메종도로시 상태 점검
+
+# 매일 오전 9시 17분(한국) 손님 페이지·구글 시트·상품 사진을 확인
+# 문제가 있으면 이 작업이 실패로 끝나고, GitHub 이 저장소 주인에게 메일로 알림
+# 결과는 Actions → 이 작업 → 실행 기록의 Summary 에서 볼 수 있음
+on:
+  schedule:
+    - cron: "17 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node tests/maison-dorothy/health.js

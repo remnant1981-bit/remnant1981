@@ -12,6 +12,8 @@
  * 5. 배포 → 새 배포 → 유형 "웹 앱" / 실행 사용자: 나 / 액세스 권한: 모든 사용자 → 배포 → 권한 허용
  * 6. 나온 웹 앱 URL(https://script.google.com/macros/s/.../exec)을 config.js 의 orderEndpoint 와 productsUrl 에 넣기
  *
+ * 7. (선택) 메뉴 "메종도로시 → 자동화 켜기" — 아침 요약 메일·입금기한 알림·주문 보관·주간 백업
+ *
  * 밖으로 보여주는 것은 "상품"·"설정" 탭뿐이며, 손님 정보가 있는 "주문" 탭은 보이지 않습니다.
  * 스크립트를 고친 뒤에는 배포 → 배포 관리 → 수정 → 새 버전으로 다시 배포해야 반영됩니다.
  */
@@ -31,7 +33,10 @@ const SETTING_ROWS = [
   ['전화', '', '예) 010-1234-5678'],
   ['카톡채널', '', 'https://pf.kakao.com/... 주소'],
   ['밴드', '', 'https://band.us/... 주소'],
-  ['입금계좌', '', '예) 농협 123-4567-8901 (예금주 홍길동)']
+  ['입금계좌', '', '예) 농협 123-4567-8901 (예금주 홍길동)'],
+  ['입금기한', '2', '입금대기 주문을 며칠 지나면 알릴지 (일) — 자동화'],
+  ['자동취소', 'N', 'Y 로 바꾸면 입금기한이 지난 주문을 자동 취소 — 자동화'],
+  ['보관기간', '90', '완료·취소 주문을 며칠 뒤 "보관" 탭으로 옮길지 (일) — 자동화']
 ];
 
 // 손님 페이지가 상품표·설정을 읽어 감 (상품·설정 탭만 공개)
@@ -49,6 +54,10 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('메종도로시')
     .addItem('시트 준비하기', 'setupSheets')
     .addItem('보기 좋게 꾸미기', 'styleSheets')
+    .addSeparator()
+    .addItem('자동화 켜기', 'enableAutomation')
+    .addItem('자동화 끄기', 'disableAutomation')
+    .addItem('지금 아침 요약 받아보기', 'dailyJob')
     .addToUi();
 }
 
@@ -67,6 +76,7 @@ function setupSheets() {
   let s = ss.getSheetByName(SETTING_SHEET);
   if (!s) s = ss.insertSheet(SETTING_SHEET);
   if (s.getLastRow() === 0) s.getRange(1, 1, SETTING_ROWS.length, 3).setValues(SETTING_ROWS);
+  ensureSettingRows_(s);
   s.setFrozenRows(1);
   s.getRange(1, 1, 1, 3).setFontWeight('bold').setBackground('#efe9e4');
   removeEmptyDefaultSheets_(ss);
@@ -288,4 +298,151 @@ function styleDashboard_(ss) {
   d.getRange(5, 2, items.length, 1).setBackground(THEME.band);
   d.setColumnWidth(1, 24).setColumnWidth(2, 170).setColumnWidth(3, 150);
   d.getRange(5 + items.length + 1, 2).setValue('주문 처리·상품 등록은 관리자 앱에서 하면 편해요. 이 탭은 보기 전용이에요.').setFontColor(THEME.muted).setFontSize(9);
+}
+
+
+/* ================================================================
+ * 자동화 — 메뉴 "메종도로시 → 자동화 켜기"
+ * 매일 오전 8:40  dailyJob    : 입금기한 확인(알림·선택 시 자동 취소) → 오래된 완료 주문 보관 → 아침 요약 메일(월요일은 주간 리포트 포함)
+ * 매주 월 오전 6시 weeklyBackup: 시트 전체를 드라이브 "메종도로시 백업" 폴더에 복사, 최근 8개만 남김(오래된 것은 휴지통)
+ * 설정 탭의 입금기한·자동취소·보관기간으로 조절. 켜고 끄는 것은 몇 번을 눌러도 같음.
+ * ================================================================ */
+const AUTO_TZ = 'Asia/Seoul';
+const ARCHIVE_SHEET = '보관';
+const BACKUP_FOLDER = '메종도로시 백업';
+const BACKUP_KEEP = 8;
+const AUTO_HANDLERS = ['dailyJob', 'weeklyBackup'];
+
+function enableAutomation() {
+  disableAutomation(true);
+  ScriptApp.newTrigger('dailyJob').timeBased().everyDays(1).atHour(8).nearMinute(40).inTimezone(AUTO_TZ).create();
+  ScriptApp.newTrigger('weeklyBackup').timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(6).inTimezone(AUTO_TZ).create();
+  const s = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SETTING_SHEET);
+  if (s) ensureSettingRows_(s);
+  toast_('자동화를 켰어요. 매일 아침 요약 메일과 매주 월요일 백업이 진행돼요.');
+}
+function disableAutomation(quiet) {
+  ScriptApp.getProjectTriggers().forEach(t => { if (AUTO_HANDLERS.indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t); });
+  if (quiet !== true) toast_('자동화를 껐어요.');
+}
+function toast_(msg) { try { SpreadsheetApp.getActiveSpreadsheet().toast(msg, '메종도로시', 5); } catch (e) { /* 예약 실행 중 */ } }
+
+// 설정 탭에 자동화 항목이 없으면 추가 (기존 값은 그대로)
+function ensureSettingRows_(sh) {
+  const have = sh.getDataRange().getDisplayValues().map(r => String(r[0]).replace(/\s/g, ''));
+  SETTING_ROWS.slice(1).forEach(r => { if (have.indexOf(r[0]) < 0) sh.appendRow(r); });
+}
+function setting_(key, def) {
+  const s = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SETTING_SHEET);
+  if (!s) return def;
+  const row = s.getDataRange().getDisplayValues().find(r => String(r[0]).replace(/\s/g, '') === key);
+  return row && String(row[1]).trim() !== '' ? String(row[1]).trim() : def;
+}
+function ordersTable_() {
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  if (!sh || sh.getLastRow() < 2) return { sh, head: [], rows: [] };
+  const vals = sh.getDataRange().getValues(), disp = sh.getDataRange().getDisplayValues();
+  const head = disp[0].map(h => String(h).replace(/\s/g, ''));
+  const i = n => head.indexOf(n);
+  const rows = vals.slice(1).map((r, k) => ({
+    row: k + 2, at: r[i('접수시각')] instanceof Date ? r[i('접수시각')] : new Date(disp[k + 1][i('접수시각')]),
+    no: disp[k + 1][i('주문번호')], status: disp[k + 1][i('상태')], name: disp[k + 1][i('받는분')],
+    method: disp[k + 1][i('받는방법')], items: disp[k + 1][i('상품')], all: r[i('입금액')], note: i('관리메모') >= 0 ? disp[k + 1][i('관리메모')] : ''
+  })).filter(o => o.no);
+  return { sh, head, rows };
+}
+const days_ = d => (Date.now() - d.getTime()) / 86400000;
+const won_ = n => (Number(n) > 0 ? Number(n).toLocaleString('ko-KR') + '원' : '확인 후 안내');
+
+// 1) 입금기한 확인: 지난 주문에 관리메모 표시, 자동취소가 Y 면 취소
+function checkOverdue_() {
+  const limit = Number(setting_('입금기한', '2')) || 2;
+  const cancel = /^y/i.test(setting_('자동취소', 'N'));
+  const t = ordersTable_(); if (!t.sh) return [];
+  const sc = t.head.indexOf('상태') + 1, nc = t.head.indexOf('관리메모') + 1;
+  const late = t.rows.filter(o => o.status === '입금대기' && days_(o.at) >= limit);
+  late.forEach(o => {
+    if (cancel && sc) { t.sh.getRange(o.row, sc).setValue('취소'); o.status = '취소'; }
+    const memo = cancel ? '입금기한 지나 자동 취소' : '입금기한 지남';
+    if (nc && o.note.indexOf(memo) < 0) t.sh.getRange(o.row, nc).setValue(o.note ? o.note + ' / ' + memo : memo);
+  });
+  return late.map(o => ({ ...o, cancelled: cancel }));
+}
+
+// 2) 오래된 완료·취소 주문을 보관 탭으로 (아래 줄부터 지워서 줄 번호가 밀리지 않게)
+function archiveOld_() {
+  const keep = Number(setting_('보관기간', '90')) || 90;
+  const t = ordersTable_(); if (!t.sh) return 0;
+  const old = t.rows.filter(o => /발송완료|픽업완료|취소/.test(o.status) && days_(o.at) >= keep);
+  if (!old.length) return 0;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let a = ss.getSheetByName(ARCHIVE_SHEET);
+  if (!a) { a = ss.insertSheet(ARCHIVE_SHEET); a.appendRow(t.sh.getRange(1, 1, 1, t.sh.getLastColumn()).getValues()[0]); a.setFrozenRows(1); a.setTabColor('#8a8085'); }
+  const w = t.sh.getLastColumn();
+  old.forEach(o => a.appendRow(t.sh.getRange(o.row, 1, 1, w).getValues()[0]));
+  old.map(o => o.row).sort((x, y) => y - x).forEach(r => t.sh.deleteRow(r));
+  return old.length;
+}
+
+// 3) 아침 요약 메일
+function dailyJob() {
+  const late = checkOverdue_();
+  const archived = archiveOld_();
+  const t = ordersTable_();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const p = ss.getSheetByName(PRODUCT_SHEET);
+  const pv = p ? p.getDataRange().getDisplayValues() : [[]];
+  const ph = pv[0].map(h => String(h).replace(/\s/g, ''));
+  const prod = pv.slice(1).filter(r => r[ph.indexOf('상품명')] && r[ph.indexOf('노출')] !== 'N');
+  const noPrice = prod.filter(r => !String(r[ph.indexOf('가격')]).replace(/[^\d]/g, ''));
+  const sold = prod.filter(r => r[ph.indexOf('품절')] === 'Y');
+  const recent = t.rows.filter(o => days_(o.at) < 1);
+  const wait = t.rows.filter(o => o.status === '입금대기');
+  const ship = t.rows.filter(o => o.status === '입금확인' && !/픽업/.test(o.method));
+  const pick = t.rows.filter(o => o.status === '입금확인' && /픽업/.test(o.method));
+  const monday = Utilities.formatDate(new Date(), AUTO_TZ, 'u') === '1';
+  const line = o => `· ${o.name} (${o.no}) ${won_(o.all)}`;
+  const parts = [
+    `메종도로시 ${Utilities.formatDate(new Date(), AUTO_TZ, 'M월 d일')} 아침 요약`, '',
+    `■ 지난 24시간 새 주문 ${recent.length}건`, ...recent.map(line), '',
+    `■ 입금 확인할 주문 ${wait.length}건`, ...wait.map(line), '',
+    `■ 보낼 택배 ${ship.length}건`, ...ship.map(line), '',
+    `■ 픽업 대기 ${pick.length}건`, ...pick.map(line)
+  ];
+  if (late.length) parts.push('', `■ 입금기한 지난 주문 ${late.length}건${late[0].cancelled ? ' (자동 취소함)' : ''}`, ...late.map(line));
+  if (archived) parts.push('', `■ 오래된 완료 주문 ${archived}건을 "보관" 탭으로 옮김`);
+  if (noPrice.length) parts.push('', `■ 가격이 비어 있는 옷 ${noPrice.length}벌 — 손님 화면에 "가격 문의"로 보여요`, ...noPrice.slice(0, 10).map(r => '· ' + r[ph.indexOf('상품명')]));
+  if (sold.length) parts.push('', `■ 품절 표시 ${sold.length}벌`);
+  if (monday) parts.push('', ...weeklyReport_(t.rows));
+  parts.push('', '— 주문 처리는 관리자 앱에서, 자세한 숫자는 시트 "현황" 탭에서 볼 수 있어요.');
+  const todo = recent.length + wait.length + ship.length + pick.length + late.length + archived;
+  if (!todo && !monday) return { sent: false };   // 할 일이 없는 날은 메일 안 보냄 (월요일 주간 리포트는 항상)
+  const to = NOTIFY_EMAIL || Session.getEffectiveUser().getEmail();
+  const subject = `[메종도로시] 아침 요약 · 입금확인 ${wait.length} · 택배 ${ship.length} · 새 주문 ${recent.length}`;
+  if (to) MailApp.sendEmail(to, subject, parts.join('\n'));
+  return { sent: !!to, subject };
+}
+
+// 월요일: 지난 7일 주문·입금액·많이 주문된 옷
+function weeklyReport_(rows) {
+  const week = rows.filter(o => days_(o.at) < 7 && o.status !== '취소');
+  const sum = week.filter(o => /입금확인|발송완료|픽업완료/.test(o.status)).reduce((s, o) => s + (Number(o.all) || 0), 0);
+  const count = {};
+  week.forEach(o => String(o.items).split('\n').forEach(l => { const m = l.match(/^([^(]+)\(.*\)×(\d+)/); if (m) count[m[1].trim()] = (count[m[1].trim()] || 0) + Number(m[2]); }));
+  const top = Object.keys(count).sort((a, b) => count[b] - count[a]).slice(0, 3);
+  return [`■ 지난주 리포트`, `· 주문 ${week.length}건 · 입금 확인된 금액 ${sum.toLocaleString('ko-KR')}원`,
+    ...(top.length ? ['· 많이 주문된 옷: ' + top.map(n => `${n} ${count[n]}벌`).join(', ')] : [])];
+}
+
+// 4) 주간 백업 — 시트 전체 복사, 최근 BACKUP_KEEP 개만 남김
+function weeklyBackup() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const it = DriveApp.getFoldersByName(BACKUP_FOLDER);
+  const folder = it.hasNext() ? it.next() : DriveApp.createFolder(BACKUP_FOLDER);
+  const name = `${ss.getName()} 백업 ${Utilities.formatDate(new Date(), AUTO_TZ, 'yyyy-MM-dd')}`;
+  DriveApp.getFileById(ss.getId()).makeCopy(name, folder);
+  const files = []; const f = folder.getFiles();
+  while (f.hasNext()) files.push(f.next());
+  files.sort((a, b) => b.getDateCreated() - a.getDateCreated()).slice(BACKUP_KEEP).forEach(x => x.setTrashed(true));
+  return name;
 }

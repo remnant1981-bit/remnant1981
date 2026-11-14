@@ -73,10 +73,13 @@ function makeEnv(opts = {}) {
     getSheets: () => [...sheets.values()],
     deleteSheet: sh => { sheets.delete(sh.getName()); },
     insertSheet: n => { const s = new Sheet(n); sheets.set(n, s); return s; },
-    toast: () => {}
+    toast: () => {},
+    getId: () => 'SHEETID',
+    getName: () => '메종도로시 운영'
   };
   const user = { active: opts.active === undefined ? 'owner@example.com' : opts.active, owner: 'owner@example.com' };
-  const mails = [], files = [], folders = [];
+  const mails = [], files = [], folders = [], triggers = [], copies = [];
+  const clock = { weekday: null };   // 'u' 요일(1=월) 고정용
   const base = () => ({
     SpreadsheetApp: { BandingTheme: { LIGHT_GREY: 'lg' }, BorderStyle: { SOLID: 'solid' }, newConditionalFormatRule: () => chain({ build: () => ({ rule: 1 }) }, 'Rule'), newDataValidation: () => chain({ build: () => ({ dv: 1 }) }, 'DV'), getActiveSpreadsheet: () => ss, openById: () => ss, getUi: () => ({ createMenu: () => ({ addItem() { return this; }, addToUi() {} }) }) },
     Session: { getActiveUser: () => ({ getEmail: () => user.active }), getEffectiveUser: () => ({ getEmail: () => user.owner }) },
@@ -86,12 +89,21 @@ function makeEnv(opts = {}) {
     Utilities: {
       base64Decode: b => [...Buffer.from(b, 'base64')],
       newBlob: (bytes, type, name) => ({ bytes, type, name }),
-      formatDate: d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+      formatDate: (d, tz, f) => f === 'u' ? String(clock.weekday || ((d.getDay() + 6) % 7) + 1)
+        : f === 'M월 d일' ? `${d.getMonth() + 1}월 ${d.getDate()}일`
+        : `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
     },
     DriveApp: {
       Access: { ANYONE_WITH_LINK: 'anyone' }, Permission: { VIEW: 'view' },
       getFoldersByName: n => { const f = folders.filter(x => x.name === n); let i = 0; return { hasNext: () => i < f.length, next: () => f[i++] }; },
-      createFolder: name => { const f = { name, createFile: blob => { const file = { id: 'FILE' + (files.length + 1) + 'abcdefghij', blob, sharing: null, getId() { return this.id; }, setSharing(a, p) { this.sharing = [a, p]; } }; files.push(file); return file; } }; folders.push(f); return f; }
+      getFileById: () => ({ makeCopy: (name, folder) => { const c = { name, folder, trashed: false, created: new Date(Date.now() + copies.length), getDateCreated() { return this.created; }, setTrashed(v) { this.trashed = v; } }; copies.push(c); folder.items.push(c); return c; } }),
+      createFolder: name => { const f = { name, items: [], getFiles() { const l = this.items.filter(x => !x.trashed); let i = 0; return { hasNext: () => i < l.length, next: () => l[i++] }; }, createFile: blob => { const file = { id: 'FILE' + (files.length + 1) + 'abcdefghij', blob, sharing: null, getId() { return this.id; }, setSharing(a, p) { this.sharing = [a, p]; } }; files.push(file); return file; } }; folders.push(f); return f; }
+    },
+    ScriptApp: {
+      WeekDay: { MONDAY: 'MONDAY' },
+      getProjectTriggers: () => triggers.slice(),
+      deleteTrigger: t => { const i = triggers.indexOf(t); if (i >= 0) triggers.splice(i, 1); },
+      newTrigger: fn => { const spec = { fn }; const b = new Proxy({}, { get: (_, k) => k === 'create' ? () => { const t = { spec, getHandlerFunction: () => fn }; triggers.push(t); return t; } : (...a) => { spec[k] = a; return b; } }); return b; }
     },
     console, Date, JSON, Math, Number, String, Object, Array, Error, RegExp, Buffer
   });
@@ -101,6 +113,6 @@ function makeEnv(opts = {}) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../../maison-dorothy', rel), 'utf8'), ctx, { filename: rel });
     return ctx;
   };
-  return { ss, sheets, user, mails, files, load };
+  return { ss, sheets, user, mails, files, load, triggers, copies, folders, clock };
 }
 module.exports = { makeEnv, Sheet, styleLog };
