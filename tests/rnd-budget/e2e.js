@@ -30,6 +30,7 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   await p.goto(base);
   check('기본: 과제 구성·안 저장·FAQ·단계 메뉴 숨김', (await p.locator('#s0').isHidden()) && (await p.locator('#saveScenario').isHidden()) && (await p.locator('.faq').isHidden()) && (await p.locator('.steps').isHidden()));
   check('기본: 집행 전환 표시(공개)', await p.locator('#modeBar').isVisible());
+  check('기본: 공고문 가져오기 표시(베타)', (await p.locator('#noticeDrop').isVisible()) && (await p.textContent('#noticeDrop')).includes('베타'));
   check('기본: 예시·엑셀·점검 표시', (await p.locator('.demo-bar').isVisible()) && (await p.locator('#xlsx').isVisible()) && (await p.locator('#s4').isVisible()));
   await p.click('[data-example="ok"]'); await p.waitForLoadState();
   check('기본: 예시는 첫 기관·1차년도만', (await p.locator('#summary').isHidden()) && (await p.inputValue('#gov')) === '300,000' && (await p.locator('#checks .error').count()) === 0);
