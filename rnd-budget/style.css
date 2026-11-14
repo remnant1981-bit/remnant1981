@@ -225,3 +225,14 @@ dialog.helper legend{font-weight:700;font-size:.9rem;padding:0 4px}
 .hd-preview .live-grid{grid-template-columns:repeat(2,1fr)}@media (min-width:640px){.hd-preview .live-grid{grid-template-columns:repeat(4,1fr)}}
 .hd-notes{font-size:.82rem;color:var(--muted);margin:6px 0 0;padding-left:18px}
 .btn.fixall{width:100%;margin-bottom:10px;background:var(--err);border-color:var(--err);color:#fff}
+/* 페이지 안 확인창 */
+dialog.ask{border:0;border-radius:12px;padding:0;max-width:440px;width:calc(100% - 32px);background:var(--card);color:var(--ink);box-shadow:0 20px 60px rgba(0,0,0,.3)}
+dialog.ask::backdrop{background:rgba(15,23,42,.45)}
+.ask-body{padding:18px 20px;display:grid;gap:12px}.ask-body p{margin:0;line-height:1.6}
+/* 큰 금액 줄바꿈(화면 넘침 방지) */
+.kpis div,.live-grid div{min-width:0}
+.kpis dd,.live-grid dd,.tbl td{overflow-wrap:anywhere}
+/* Q&A */
+.faq-tools{display:grid;gap:8px;margin-bottom:6px}
+.faq-tools input{max-width:520px}
+.faq p .cite{display:block;margin-top:4px;font-size:.78rem;color:var(--muted)}

@@ -19,7 +19,9 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
 (async () => {
   await new Promise((r) => server.listen(0, r));
   const base = `http://localhost:${server.address().port}/`;
-  const browser = await chromium.launch();
+  const browser0 = await chromium.launch();
+  // 확인창 자동 승인(페이지 안 확인창). 확인창 자체는 ⑥에서 별도 검증
+  const browser = { newContext: async (o) => { const c = await browser0.newContext(o); await c.addInitScript(() => { window.__rbAutoConfirm = true; window.__rbAutoInput = '1안'; }); return c; }, close: () => browser0.close() };
   const errors = [];
   const ctx = await browser.newContext({ viewport: { width: 390, height: 800 }, acceptDownloads: true });
   const p = await ctx.newPage();
@@ -28,7 +30,17 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   p.on('dialog', (d) => d.accept(d.type() === 'prompt' ? '1안' : undefined));
   // ① 기본 설정(1단계 공개 범위): 꺼진 기능은 숨김
   await p.goto(base);
-  check('기본: 과제 구성·안 저장·FAQ·단계 메뉴 숨김', (await p.locator('#s0').isHidden()) && (await p.locator('#saveScenario').isHidden()) && (await p.locator('.faq').isHidden()) && (await p.locator('.steps').isHidden()));
+  check('기본: 과제 구성·안 저장·단계 메뉴 숨김, Q&A 표시', (await p.locator('#s0').isHidden()) && (await p.locator('#saveScenario').isHidden()) && (await p.locator('.faq').isVisible()) && (await p.locator('.steps').isHidden()));
+  check('Q&A 21개', (await p.locator('#faq details').count()) === 21);
+  await p.fill('#faqSearch', '현물');
+  const shownQ = await p.locator('#faq details:not([hidden])').count();
+  check('Q&A 검색(현물)', shownQ >= 3 && shownQ < 21 && (await p.locator('#faq details:not([hidden])').first().getAttribute('open')) !== null, String(shownQ));
+  await p.fill('#faqSearch', 'zzzz');
+  check('Q&A 검색 결과 없음 안내', await p.locator('#faqEmpty').isVisible());
+  await p.fill('#faqSearch', '');
+  await p.click('#faqCats [data-qcat="비목"]');
+  check('Q&A 분류(비목 5개)', (await p.locator('#faq details:not([hidden])').count()) === 5);
+  await p.click('#faqCats [data-qcat=""]');
   check('기본: 집행 전환 표시(공개)', await p.locator('#modeBar').isVisible());
   check('기본: 공고문 가져오기 표시(베타)', (await p.locator('#noticeDrop').isVisible()) && (await p.textContent('#noticeDrop')).includes('베타'));
   check('기본: 예시·엑셀·점검 표시', (await p.locator('.demo-bar').isVisible()) && (await p.locator('#xlsx').isVisible()) && (await p.locator('#s4').isVisible()));
@@ -278,6 +290,37 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   check('고치기 반복 → 오류 0', (await h.locator('#checks .error').count()) === 0, await h.textContent('#checks'));
   console.log('   (고치기 클릭 ' + clicks + '회)');
   await hc.close();
+
+  // ⑥ 보안 제한 화면(sandbox iframe, 우측 패널 미리보기와 동일 조건): 페이지 안 확인창·닫기
+  const sc = await browser0.newContext({ viewport: { width: 1440, height: 900 } });
+  const sp = await sc.newPage();
+  sp.on('pageerror', (e) => errors.push('[sandbox] ' + e.message));
+  await sp.route('**/__host.html', (r) => r.fulfill({ contentType: 'text/html; charset=utf-8', body: `<!doctype html><iframe id="f" src="${base}" sandbox="allow-scripts" style="width:1400px;height:880px;border:0"></iframe>` }));
+  await sp.route('**/config.js', (r) => r.fulfill({ contentType: 'text/javascript', body: 'window.RB_CONFIG={features:{examples:true,helper:true}};' }));
+  await sp.goto(base + '__host.html');
+  const fr = sp.frameLocator('#f');
+  await fr.locator('#helperOpen').click();
+  check('[제한 화면] 도우미 열림', await fr.locator('#helperDlg').isVisible());
+  await fr.locator('#hdClose').click();
+  check('[제한 화면] 닫기 버튼으로 닫힘', await fr.locator('#helperDlg').isHidden());
+  await fr.locator('#helperOpen').click(); await sp.keyboard.press('Escape');
+  check('[제한 화면] Esc로 닫힘', await fr.locator('#helperDlg').isHidden());
+  await fr.locator('#helperOpen').click(); await fr.locator('#helperDlg').click({ position: { x: 3, y: 3 } }).catch(() => {});
+  await sp.mouse.click(10, 10);
+  check('[제한 화면] 바깥 클릭으로 닫힘', await fr.locator('#helperDlg').isHidden());
+  await fr.locator('#gov').fill('100000');
+  await fr.locator('[data-example="ok"]').click();
+  check('[제한 화면] 입력 있을 때 예시 → 페이지 안 확인창', (await fr.locator('#askDlg').isVisible()) && (await fr.locator('#askMsg').textContent()).includes('바꿀까요'));
+  await fr.locator('#askCancel').click();
+  check('[제한 화면] 취소 → 입력 유지', (await fr.locator('#askDlg').isHidden()) && (await fr.locator('#gov').inputValue()) === '100,000');
+  await fr.locator('[data-example="ok"]').click(); await fr.locator('#askOk').click();
+  await sp.waitForTimeout(500);
+  check('[제한 화면] 확인 → 예시 적용', (await fr.locator('#gov').inputValue()) === '300,000');
+  await fr.locator('#reset').click();
+  check('[제한 화면] 새로 작성 확인창', await fr.locator('#askDlg').isVisible());
+  await fr.locator('#askOk').click(); await sp.waitForTimeout(500);
+  check('[제한 화면] 새로 작성 → 빈 화면', (await fr.locator('#gov').inputValue()) === '');
+  await sc.close();
 
   check('콘솔·스크립트 오류 없음', errors.length === 0, errors.join(' | '));
   await browser.close(); server.close();
