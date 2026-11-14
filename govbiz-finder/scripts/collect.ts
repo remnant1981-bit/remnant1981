@@ -5,6 +5,7 @@ import { createSqliteDb, migrate } from "../src/server/db";
 import { runAll } from "../src/collector/runner";
 import { configuredAdapters } from "../src/collector/registry";
 import { generateNotifications } from "../src/server/userdata";
+import { runAiCycle } from "../src/server/ai-extract";
 
 const db = await createSqliteDb(process.env.DATABASE_PATH || "./data/dev.sqlite");
 await migrate(db);
@@ -15,4 +16,11 @@ for (const r of results) {
 }
 if (results.length === 0) console.log(`[${stamp}] 실행할 원천이 없습니다(관리자 화면에서 원천을 활성화하고 필요한 키를 설정하세요).`);
 console.log(`[${stamp}] notifications created: ${await generateNotifications(db)}`);
+// AI 추출(기본 꺼짐). 실패해도 수집 결과에는 영향 없음
+try {
+  const ai = await runAiCycle(db);
+  if (!("skipped" in ai)) console.log(`[${stamp}] ai: ${JSON.stringify(ai)}`);
+} catch (e) {
+  console.log(`[${stamp}] ai: 실패 ${e instanceof Error ? `${e.name} ${e.message.slice(0, 200)}` : "unknown"}`);
+}
 process.exit(results.some((r) => r.status !== "success") ? 1 : 0);

@@ -29,6 +29,7 @@ import { runSource } from "@/collector/runner";
 import { getAdapter } from "@/collector/registry";
 import { seoulToday } from "@/lib/time";
 import { redactString } from "@/lib/log";
+import { aiStatus } from "./ai-extract";
 
 type RouteCtx = { params: Promise<{ id?: string; format?: string }> };
 const searchOf = (req: Request) => parseSearchParams(Object.fromEntries(new URL(req.url).searchParams.entries()));
@@ -219,7 +220,7 @@ export const handlers: Record<string, (req: Request, ...a: any[]) => Promise<Res
   "GET /api/admin/overview": route({ auth: "admin" }, async (_req, c) => {
     const sources = await c.db.all("SELECT id,name,source_type,enabled,integration_status,collection_frequency,quota_note,last_success_at,last_error,next_run_at FROM data_sources ORDER BY name");
     const runs = await c.db.all("SELECT id,source_id,started_at,finished_at,status,fetched_count,inserted_count,updated_count,skipped_count,error_summary FROM collection_runs ORDER BY started_at DESC LIMIT 30");
-    return { sources, runs };
+    return { sources, runs, ai: await aiStatus(c.db) };
   }),
   "POST /api/admin/collect": route({ auth: "admin" }, async (req, c) => {
     const b = await readJson<{ sourceId?: string }>(req);

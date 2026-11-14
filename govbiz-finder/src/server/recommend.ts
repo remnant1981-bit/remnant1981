@@ -5,6 +5,7 @@ import { isDeadlineSoon } from "@/domain/status";
 import { newId } from "@/lib/crypto";
 import { nowIso } from "@/lib/time";
 import type { Db } from "./db";
+import { aiRulesActive, aiRulesFor } from "./ai-extract";
 import { SIDO, techFieldsIn } from "@/domain/taxonomy";
 
 /**
@@ -120,8 +121,21 @@ const ruleCache = new WeakMap<Db, { stamp: string; rules: Map<string, Rule[]> }>
 async function rulesStamp(db: Db): Promise<string> {
   const r = await db.get<{ s: string }>(
     `SELECT (SELECT COUNT(*) || ':' || COALESCE(MAX(updated_at), '') FROM announcements) || '|' ||
-            (SELECT COUNT(*) || ':' || COALESCE(MAX(rowid), 0) FROM eligibility_rules) AS s`);
-  return r?.s ?? "";
+            (SELECT COUNT(*) || ':' || COALESCE(MAX(rowid), 0) FROM eligibility_rules) || '|' ||
+            (SELECT COUNT(*) || ':' || COALESCE(MAX(updated_at), '') FROM ai_extractions WHERE status='ok') AS s`);
+  // AI 규칙 사용 여부(기능 플래그)가 바뀌면 캐시를 새로 만든다
+  return `${r?.s ?? ""}|ai:${aiRulesActive() ? 1 : 0}`;
+}
+
+/** 같은 항목(field_key)은 신뢰도가 높은 규칙 하나만 남김(동률이면 base 우선) */
+export function mergeByConfidence(base: Rule[], extra: Rule[]): Rule[] {
+  const out = [...base];
+  for (const r of extra) {
+    const i = out.findIndex((x) => x.field_key === r.field_key);
+    if (i < 0) out.push(r);
+    else if ((r.confidence ?? 1) > (out[i].confidence ?? 1)) out[i] = r;
+  }
+  return out;
 }
 
 export async function loadRules(db: Db, ids: string[]): Promise<Map<string, Rule[]>> {
@@ -142,10 +156,12 @@ export async function loadRules(db: Db, ids: string[]): Promise<Map<string, Rule
     const rows = await db.all<Rule & { announcement_id: string }>(
       `SELECT announcement_id, field_key, operator, expected_value, source_excerpt, confidence FROM eligibility_rules WHERE announcement_id IN (${chunk.map(() => "?").join(",")})`, chunk);
     for (const r of rows) (map.get(r.announcement_id) ?? map.set(r.announcement_id, []).get(r.announcement_id)!).push(r);
-    // 공고가 지역 조건을 직접 갖고 있지 않으면 지역 표기에서 자동 생성
+    const ai = await aiRulesFor(db, chunk);
+    // 공고가 지역 조건을 직접 갖고 있지 않으면 지역 표기·문구 추정·AI 추출(참고)에서 보충.
+    // 등록 규칙(eligibility_rules)이 항상 우선, 나머지는 같은 항목이면 신뢰도 높은 쪽(동률이면 지역 표기·문구 규칙)
     for (const g of regions) {
       const cur = map.get(g.id) ?? [];
-      const extra = [...regionRulesFor(g.region_scope), ...textRulesFor(g)].filter((r) => !cur.some((x) => x.field_key === r.field_key));
+      const extra = mergeByConfidence([...regionRulesFor(g.region_scope), ...textRulesFor(g)], ai.get(g.id) ?? []).filter((r) => !cur.some((x) => x.field_key === r.field_key));
       if (extra.length) map.set(g.id, [...cur, ...extra]);
     }
     for (const id of chunk) store.set(id, map.get(id) ?? map.set(id, []).get(id)!);
