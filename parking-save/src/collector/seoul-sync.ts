@@ -100,12 +100,14 @@ export async function syncSeoulOccupancy(db: Db, fetchPage: PageFetcher, now = n
       }
       lotIds.push(lotId); sum.lots++;
       if (occ.status === "OK") {
+        // 같은 관측 시각이 이전 수집에서 이미 들어왔으면(원천 갱신 주기가 수집 주기보다 길 때) 혼잡 경향에 다시 더하지 않음
+        const seen = await db.get("SELECT 1 AS x FROM occupancy_snapshots WHERE parking_lot_id=? AND observed_at=? LIMIT 1", [lotId, occ.observedAt]);
         await db.run("INSERT INTO occupancy_snapshots(parking_lot_id,total_spaces,available_spaces,occupied_spaces,observed_at,collected_at,source_name,validity_status) VALUES (?,?,?,?,?,?,?,'OK')",
           [lotId, occ.totalSpaces, occ.availableSpaces, occ.occupiedSpaces, occ.observedAt, startedAt, SEOUL_SOURCE]);
         sum.snapshots++;
-        // 혼잡 경향 집계: 수집 시점 기준 10분 이내 관측만(같은 오래된 값이 5분마다 반복 집계되지 않게)
+        // 혼잡 경향 집계: 새 관측이면서 수집 시점 기준 10분 이내인 것만
         const obsMs = Date.parse(occ.observedAt);
-        if (occ.totalSpaces > 0 && Number.isFinite(obsMs) && Math.abs(now.getTime() - obsMs) <= 10 * 60_000) {
+        if (!seen && occ.totalSpaces > 0 && Number.isFinite(obsMs) && Math.abs(now.getTime() - obsMs) <= 10 * 60_000) {
           const kst = new Date(obsMs + 9 * 3600_000);
           await db.run(`INSERT INTO occupancy_hourly(parking_lot_id, ymd, hour, ratio_sum, samples) VALUES (?,?,?,?,1)
             ON CONFLICT(parking_lot_id, ymd, hour) DO UPDATE SET ratio_sum = ratio_sum + excluded.ratio_sum, samples = samples + 1`,

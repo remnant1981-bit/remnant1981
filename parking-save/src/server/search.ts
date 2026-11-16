@@ -21,7 +21,8 @@ export type TypeFilter = "on_street" | "off_street" | "all";
 // 임시 운영값(OPEN_ISSUES #6): 기본 1km, 상한 5km. 확정 전.
 export const DEFAULT_RADIUS = 1000;
 export const MAX_RADIUS = 5000;
-export const MAX_STAY_DAYS = 31;
+export { MAX_STAY_DAYS } from "@/lib/time";
+import { MAX_STAY_DAYS } from "@/lib/time";
 import { staleDaysFor } from "./freshness";
 import { dayKind, occupancyTrend, TREND_WINDOW_DAYS, type Trend } from "@/domain/occupancy-trend";
 import type { ResolvedPlace } from "./place";
@@ -45,7 +46,8 @@ export function parseSearchParams(q: URLSearchParams, resolved?: ResolvedPlace |
   let center: LatLng, label: string, kind: SearchParams["centerKind"], place: ResolvedPlace | undefined;
   if (lat != null && lat !== "" || lng != null && lng !== "") {
     center = { lat: Number(lat), lng: Number(lng) };
-    if (lat === "" || lng === "" || lat == null || lng == null || !isValidCoord(center)) return bad("INVALID_COORDINATES", "위치 좌표가 올바르지 않습니다.");
+    const NUM = /^\s*-?\d+(\.\d+)?\s*$/;
+    if (lat == null || lng == null || !NUM.test(lat) || !NUM.test(lng) || !isValidCoord(center)) return bad("INVALID_COORDINATES", "위치 좌표가 올바르지 않습니다.");
     label = "현재 위치"; kind = "current_location";
   } else if (dest) {
     if (dest.length > 100) return bad("INVALID_DESTINATION", "목적지가 너무 깁니다.");
@@ -100,7 +102,7 @@ export const toSchedules = (rows: SchedRow[]): ScheduleRow[] =>
 
 /** 기간이 공휴일 데이터 보장 범위 안일 때만 공휴일 집합 반환, 아니면 null(판정 불가) */
 export async function loadHolidays(db: Db, start: Date, end: Date, now = new Date()): Promise<Set<string> | null> {
-  const from = kstYmd(start.getTime()), to = kstYmd(end.getTime());
+  const from = kstYmd(start.getTime()), to = kstYmd(end.getTime() - 1); // 종료 시각은 구간에 포함하지 않음(1/1 00:00 종료면 12/31까지만 필요)
   // 커버리지가 기간을 덮고, 마지막 성공 수집이 오래되지 않았을 때만(임시공휴일 누락 위험) 판정 가능
   const cutoff = new Date(now.getTime() - HOLIDAY_COVERAGE_MAX_AGE_DAYS * 86400_000).toISOString();
   const cov = await db.get("SELECT 1 AS ok FROM holiday_coverage WHERE from_date <= ? AND to_date >= ? AND collected_at >= ? LIMIT 1", [from, to, cutoff]);
@@ -202,7 +204,7 @@ export interface SearchResponse {
   searchCenter: { lat: number; lng: number; label: string; kind: SearchParams["centerKind"]; place: { region: string; matches: number; otherRegions: string[] } | null };
   picks: Picks;
   requestedPeriod: { startAt: string; endAt: string; timezone: "Asia/Seoul" };
-  dataCoverage: { candidates: number; returned: number; feeCalculable: number; feeUnknown: number; withValidRealtime: number; holidayDataAvailable: boolean; isMockData: boolean; excludedNoCoordinates: number };
+  dataCoverage: { candidates: number; /** 필터·묶기 후, 표시 개수 제한 전 */ matched: number; returned: number; feeCalculable: number; feeUnknown: number; withValidRealtime: number; holidayDataAvailable: boolean; isMockData: boolean; excludedNoCoordinates: number };
   warnings: string[];
 }
 
@@ -261,6 +263,7 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
   items.sort(comparator(p.sort));
   items = await groupSimilar(db, items);
   const picks = pickHighlights(items);
+  const matched = items.length;
   items = items.slice(0, p.limit);
   const why = explainAll(items, p.lang ?? "ko"); // 표시되는 시설 집합 기준 설명(정렬에는 영향 없음)
   for (const i of items) i.explanation = why.get(i.id)!;
@@ -278,7 +281,7 @@ export async function searchLots(db: Db, p: SearchParams, now = new Date()): Pro
     picks,
     requestedPeriod: { startAt: p.startAt.toISOString(), endAt: p.endAt.toISOString(), timezone: "Asia/Seoul" },
     dataCoverage: {
-      candidates, returned: items.length,
+      candidates, matched, returned: items.length,
       feeCalculable: items.filter((i) => i.fee.status === "OK").length, feeUnknown: items.filter((i) => i.fee.status !== "OK").length,
       withValidRealtime: items.filter((i) => i.occupancy.status === "AVAILABLE").length,
       holidayDataAvailable: holidays !== null, isMockData: items.some((i) => i.isMock), excludedNoCoordinates: noCoord,

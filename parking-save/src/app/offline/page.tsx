@@ -11,6 +11,13 @@ export default function Offline() {
       {/* 전체 새로고침으로 네트워크를 다시 시도해야 하므로 클라이언트 이동(Link) 대신 일반 링크 사용 */}
       {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
       <p className="mt-4"><a href="/" className="underline">다시 시도</a></p>
+      {/* 정적 화면이라 언어 쿠키를 읽을 수 없어 영어 안내를 함께 표시 */}
+      <section lang="en" className="mt-8 border-t border-gray-300 pt-4" aria-label="English">
+        <p className="font-semibold">You are offline</p>
+        <p className="mt-1 text-gray-700">Fees and opening status must be calculated from the latest data, so search is unavailable offline. Please try again once connected.</p>
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+        <p className="mt-2"><a href="/" className="underline">Try again</a></p>
+      </section>
     </>
   );
 }

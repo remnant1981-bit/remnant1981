@@ -10,7 +10,7 @@ import { getLang } from "@/i18n/server";
 import { dict } from "@/i18n/dict";
 import { lotSummary } from "@/server/area";
 import type { Metadata } from "next";
-import { formatKst, parseOffsetIso } from "@/lib/time";
+import { formatKst, parsePeriod } from "@/lib/time";
 import { headers } from "next/headers";
 import { clientKey, searchLimiter } from "@/server/rate-limit";
 import { TooManyRequests } from "@/components/TooManyRequests";
@@ -47,8 +47,7 @@ export default async function LotPage({ params, searchParams }: { params: Promis
   const rl = searchLimiter.check(clientKey(await headers()));
   if (!rl.ok) return <TooManyRequests lang={lang} retryAfterSec={rl.retryAfterSec} />;
   const sp = await searchParams;
-  const s = parseOffsetIso(one(sp.startAt)), e = parseOffsetIso(one(sp.endAt));
-  const period = s && e && e > s ? { startAt: s, endAt: e } : null;
+  const period = parsePeriod(one(sp.startAt), one(sp.endAt)); // 31일 초과·역순은 기간 없음으로 처리
   countUsage("lot_view");
   const d = await getLotDetail(await getAppDb(), Number(id), period);
   if (!d) notFound();

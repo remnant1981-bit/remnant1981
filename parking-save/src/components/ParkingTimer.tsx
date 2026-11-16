@@ -80,7 +80,10 @@ function TimerAlerts({ timer, now, lang }: { timer: ParkingTimer; now: number; l
   const toggle = async () => {
     if (on) { setAlertsOn(false); return; }
     setAlertsOn(true);
-    if (perm === "default") setPerm(await Notification.requestPermission().catch(() => "denied" as const));
+    // 옛 iOS Safari는 Promise 대신 콜백 방식(반환값 undefined) → 두 방식 모두 처리
+    if (perm === "default") setPerm(await new Promise<NotificationPermission>((res) => {
+      try { const p = Notification.requestPermission(res); if (p && typeof p.then === "function") p.then(res, () => res("denied")); } catch { res("denied"); }
+    }));
   };
   const imminent = plan.filter((a) => now >= a.notifyAt);
   return (

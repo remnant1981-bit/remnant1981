@@ -47,3 +47,12 @@ export function defaultStayInputs(nowMs: number = Date.now()): { start: string; 
 
 /** 종료 시각 = 주입된 시작 시각 + 실제 경과. 시계를 주입한 테스트에서 결정적이고, 운영(now=현재)에서는 실제 시각과 같다. */
 export const finishedIso = (start: Date, t0: number): string => new Date(start.getTime() + Math.round(performance.now() - t0)).toISOString();
+
+/** 주차 기간 최대 일수(검색·상세·비교 공통). 지나치게 긴 기간은 요금 계산이 서버를 오래 붙잡으므로 거부 */
+export const MAX_STAY_DAYS = 31;
+/** 시작·종료 문자열 → 유효한 기간(종료 > 시작, 최대 31일) 또는 null */
+export function parsePeriod(a: unknown, b: unknown): { startAt: Date; endAt: Date } | null {
+  const s = parseOffsetIso(a), e = parseOffsetIso(b);
+  if (!s || !e || e <= s || e.getTime() - s.getTime() > MAX_STAY_DAYS * 86400_000) return null;
+  return { startAt: s, endAt: e };
+}

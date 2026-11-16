@@ -13,6 +13,16 @@ const KEY = "parkingsave:timer:v1";
 const listeners = new Set<() => void>();
 let cache: { raw: string | null; value: ParkingTimer | null } = { raw: null, value: null };
 
+const isObj = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
+const isStrArr = (x: unknown) => Array.isArray(x) && x.every((d) => typeof d === "string");
+/** 기기에 저장된 값 검증. 손상·옛 형식이면 타이머 없음으로 취급(화면 오류 방지) */
+function validTimer(v: unknown): v is ParkingTimer {
+  if (!isObj(v) || typeof v.lotId !== "number" || typeof v.name !== "string" || typeof v.startedAt !== "string" || Number.isNaN(Date.parse(v.startedAt))) return false;
+  if (!Array.isArray(v.rules) || !v.rules.every((r) => isObj(r) && typeof r.ruleType === "string" && typeof r.dayType === "string")) return false;
+  if (v.holidays !== null && !(isObj(v.holidays) && typeof v.holidays.from === "string" && typeof v.holidays.to === "string" && isStrArr(v.holidays.dates))) return false;
+  if (v.schedules !== undefined && !(Array.isArray(v.schedules) && v.schedules.every((r) => isObj(r) && typeof r.dayType === "string"))) return false;
+  return true;
+}
 function readRaw(): string | null { try { return window.localStorage.getItem(KEY); } catch { return null; } }
 export function getTimer(): ParkingTimer | null {
   const raw = readRaw();
@@ -20,7 +30,7 @@ export function getTimer(): ParkingTimer | null {
   let value: ParkingTimer | null = null;
   try {
     const v = raw ? JSON.parse(raw) : null;
-    if (v && typeof v.lotId === "number" && typeof v.name === "string" && !Number.isNaN(Date.parse(v.startedAt)) && Array.isArray(v.rules)) value = v;
+    if (validTimer(v)) value = v;
   } catch { value = null; }
   cache = { raw, value };
   return value;

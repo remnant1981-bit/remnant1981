@@ -75,7 +75,7 @@ export function SearchForm({ defaults = {}, places = PLACES, lang = "ko" }: { de
         <legend className="font-semibold">{f.options}</legend>
         <div><label htmlFor="radiusMeters" className="block text-sm">{f.radius}</label>
           <select id="radiusMeters" name="radiusMeters" defaultValue={defaults.radiusMeters ?? "1000"} className={field}>
-            {[500, 1000, 2000, 3000, 5000].map((r) => <option key={r} value={r}>{r >= 1000 ? `${r / 1000}km` : `${r}m`}</option>)}
+            {[...new Set([500, 1000, 2000, 3000, 5000, Number(defaults.radiusMeters)].filter((r) => Number.isInteger(r) && r >= 100 && r <= 5000))].sort((x, y) => x - y).map((r) => <option key={r} value={r}>{r >= 1000 ? `${r / 1000}km` : `${r}m`}</option>)}
           </select></div>
         <div><label htmlFor="type" className="block text-sm">{f.type}</label>
           <select id="type" name="type" defaultValue={defaults.type ?? "all"} className={field}>

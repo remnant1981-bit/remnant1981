@@ -47,6 +47,10 @@ describe("혼잡 경향", () => {
     const rows = await db.all<{ ymd: string; hour: number; samples: number }>("SELECT ymd, hour, samples FROM occupancy_hourly");
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((r) => r.ymd === "2026-11-08" && r.hour === 10 && r.samples === 1)).toBe(true);
+    // 5분 뒤 같은 관측 시각이 다시 오면(원천 미갱신) 중복 집계하지 않음
+    const once = (await db.get<{ n: number }>("SELECT SUM(samples) n FROM occupancy_hourly"))!.n;
+    await syncSeoulOccupancy(db, async () => BODY, new Date("2026-11-08T10:38:30+09:00"));
+    expect((await db.get<{ n: number }>("SELECT SUM(samples) n FROM occupancy_hourly"))!.n).toBe(once);
     // 오래된 관측(수집 시점과 1시간 차이)은 집계하지 않음
     const before = (await db.get<{ n: number }>("SELECT SUM(samples) n FROM occupancy_hourly"))!.n;
     await syncSeoulOccupancy(db, async () => BODY, new Date("2026-11-08T11:40:00+09:00"));

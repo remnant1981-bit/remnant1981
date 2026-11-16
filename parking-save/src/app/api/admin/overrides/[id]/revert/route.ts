@@ -11,7 +11,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (isGuardError(g)) return g;
   const { id } = await ctx.params;
   if (!/^\d{1,9}$/.test(id)) return apiError(400, "INVALID_ID", "ID가 올바르지 않습니다.");
-  const by = parseActor(((await req.json().catch(() => ({}))) as { by?: unknown }).by);
+  const by = parseActor((((await req.json().catch(() => null)) ?? {}) as { by?: unknown }).by);
   if (!by) return apiError(400, "ACTOR_REQUIRED", "처리자 이름을 입력하세요.");
   try {
     return (await revertOverride(g.db, Number(id), by, new Date(), g.key)) ? NextResponse.json({ ok: true }) : apiError(409, "NOT_ACTIVE", "적용 중인 보정이 아닙니다.");

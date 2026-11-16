@@ -59,7 +59,7 @@ export function LotCard({ item, query, lang = "ko" }: { item: LotItem; query: st
         </p>
       )}
       <p className="mt-3 text-xs text-gray-600">
-        {c.source} {sourceLabel(item.source.name)} · {c.asOf} {formatKst(item.source.updatedAt ?? item.source.collectedAt, lang)}
+        {c.source} {sourceLabel(item.source.name)} · {c.asOf} {item.source.updatedAt ? formatKst(item.source.updatedAt, lang) : t.detail.unverified}
         {item.source.freshness === "STALE" && <strong className="ml-1 text-amber-800">{c.stale}</strong>}
         {item.source.notInLatestSync && <strong className="ml-1 text-amber-800">{c.notInSync}</strong>}
       </p>

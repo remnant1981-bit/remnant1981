@@ -9,7 +9,7 @@ import { distanceMeters, isValidCoord } from "@/domain/geo";
 import { labelsFor } from "@/lib/labels";
 import { getLang } from "@/i18n/server";
 import { dict } from "@/i18n/dict";
-import { formatKst, parseOffsetIso } from "@/lib/time";
+import { formatKst, parsePeriod } from "@/lib/time";
 
 export async function generateMetadata(): Promise<Metadata> { return { title: dict(await getLang()).compare.title }; }
 export const dynamic = "force-dynamic";
@@ -26,8 +26,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
   if (!rl.ok) return <TooManyRequests lang={lang} retryAfterSec={rl.retryAfterSec} />;
   const sp = await searchParams;
   const ids = [...new Set((one(sp.ids) ?? "").split(",").filter((x) => /^\d{1,9}$/.test(x)).map(Number))].slice(0, 3);
-  const s = parseOffsetIso(one(sp.startAt)), e = parseOffsetIso(one(sp.endAt));
-  const period = s && e && e > s ? { startAt: s, endAt: e } : null;
+  const period = parsePeriod(one(sp.startAt), one(sp.endAt));
   const cLat = Number(one(sp.destLat) ?? one(sp.lat)), cLng = Number(one(sp.destLng) ?? one(sp.lng));
   const center = isValidCoord({ lat: cLat, lng: cLng }) ? { lat: cLat, lng: cLng } : null;
   if (ids.length < 2) {
@@ -53,7 +52,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
             {row(C.fee, (d) => { if (!d.fee) return "-"; const f = feeText(d.fee); return <><b>{f.main}</b>{f.sub && <span className="block text-xs text-gray-600">{f.sub}</span>}</>; })}
             {row(C.operating, (d) => (d.operating ? t.operating[d.operating] + (d.operatingAssumed ? C.assumed : "") : "-"))}
             {HOURS.map((h) => row(C.stay(h), (d) => { const p = d.feeCurve?.find((x) => x.hours === h); return p ? (p.fee == null ? t.fee.notCalculable : won(p.fee) + (p.capped ? C.capped : "")) : "-"; }, `h${h}`))}
-            {center && row(C.dist, (d) => (d.lot.latitude != null && d.lot.longitude != null ? `${Math.round(distanceMeters(center, { lat: d.lot.latitude, lng: d.lot.longitude }))}m` : "-"))}
+            {center && row(C.dist, (d) => (d.lot.latitude != null && d.lot.longitude != null ? t.dist(Math.round(distanceMeters(center, { lat: d.lot.latitude, lng: d.lot.longitude }))) : "-"))}
             {row(C.typeSpaces, (d) => `${t.type[d.lot.parkingType]} · ${d.lot.totalSpaces != null ? t.spaces(d.lot.totalSpaces) : C.noSpaces}`)}
             {row(C.pass, (d) => (d.monthlyPass != null ? won(d.monthlyPass) : "-"))}
             {row(C.disc, (d) => (d.discounts.length ? d.discounts.map(discountLabel).join(lang === "ko" ? "·" : ", ") : "-"))}

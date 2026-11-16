@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     if (!verifyBearer(req.headers.get("authorization"), token)) { await audit(db, "sync", "DENIED", key, "BAD_TOKEN"); return apiError(401, "UNAUTHORIZED", "인증이 필요합니다."); }
 
     let body: { job?: unknown } = {};
-    try { body = await req.json(); } catch { /* 빈 본문 */ }
+    try { const j: unknown = await req.json(); if (j && typeof j === "object") body = j as typeof body; } catch { /* 빈 본문 */ }
     if (typeof body.job === "string" && KNOWN_JOBS.includes(body.job)) {
       if (running.has(body.job)) { await audit(db, `sync:${body.job}`, "REJECTED", key, "ALREADY_RUNNING"); return apiError(409, "ALREADY_RUNNING", "같은 수집이 이미 실행 중입니다."); }
       running.add(body.job); acquired = body.job;

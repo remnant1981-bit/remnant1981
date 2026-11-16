@@ -3,7 +3,7 @@ import { getAppDb } from "@/server/app-db";
 import { getLotDetail } from "@/server/search";
 import { apiError, internalError, limited } from "@/server/http";
 import { searchLimiter } from "@/server/rate-limit";
-import { parseOffsetIso } from "@/lib/time";
+import { parsePeriod } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -15,9 +15,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const sp = req.nextUrl.searchParams;
   let period: { startAt: Date; endAt: Date } | null = null;
   if (sp.get("startAt") || sp.get("endAt")) {
-    const s = parseOffsetIso(sp.get("startAt")), e = parseOffsetIso(sp.get("endAt"));
-    if (!s || !e || e <= s) return apiError(400, "INVALID_PERIOD", "주차 시작·종료 일시가 올바르지 않습니다.");
-    period = { startAt: s, endAt: e };
+    period = parsePeriod(sp.get("startAt"), sp.get("endAt"));
+    if (!period) return apiError(400, "INVALID_PERIOD", "주차 시작·종료 일시가 올바르지 않습니다(종료가 시작보다 늦고 최대 31일).");
   }
   try {
     const d = await getLotDetail(await getAppDb(), Number(id), period);

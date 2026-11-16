@@ -25,10 +25,11 @@ import { walkMinutesEstimate } from "@/domain/geo";
 import { countUsage } from "@/server/usage";
 
 export async function generateMetadata(): Promise<Metadata> { return { title: dict(await getLang()).search.title }; }
-const FIRST_LIMIT = 20, MORE_LIMIT = 50;
+const LIMIT_STEPS = [20, 50, 100] as const;
 export const dynamic = "force-dynamic";
 type SP = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+const on = (v: string | undefined) => v === "true" || v === "1" || v === "on"; // 서버(parseSearchParams)와 같은 판정
 
 export default async function SearchPage({ searchParams }: { searchParams: Promise<SP> }) {
   // 화면 경로도 API와 같은 한도(분당 60회/클라이언트)로 제한 — DB 조회 전에 차단
@@ -45,9 +46,10 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   if (sIso) qs.set("startAt", sIso);
   if (eIso) qs.set("endAt", eIso);
 
-  const defaults = { destination: g("destination"), lat: g("lat"), lng: g("lng"), start: g("start"), end: g("end"), radiusMeters: g("radiusMeters"), sort: g("sort"), type: g("type"), freeOnly: !!g("freeOnly"), realtimeOnly: !!g("realtimeOnly"), operatingOnly: !!g("operatingOnly") };
+  const defaults = { destination: g("destination"), lat: g("lat"), lng: g("lng"), start: g("start"), end: g("end"), radiusMeters: g("radiusMeters"), sort: g("sort"), type: g("type"), freeOnly: on(g("freeOnly")), realtimeOnly: on(g("realtimeOnly")), operatingOnly: on(g("operatingOnly")) };
   // 첫 화면은 20곳(화면 렌더링·전송량이 카드 수에 비례 — 부하 측정 기준), '더 보기'로 50곳
-  const pageLimit = g("limit") === String(MORE_LIMIT) ? MORE_LIMIT : FIRST_LIMIT;
+  const pageLimit: number = LIMIT_STEPS.find((n) => g("limit") === String(n)) ?? LIMIT_STEPS[0];
+  const nextLimit = LIMIT_STEPS.find((n) => n > pageLimit);
   qs.set("limit", String(pageLimit));
   if (lang === "en") qs.set("lang", "en");
   // 목적지 문자열 → 보유 주차장 주소 데이터로 대략 위치 찾기(외부 지오코딩 없음). DB 오류면 찾지 못한 것으로 처리
@@ -149,9 +151,10 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       ) : (
         <>
           <ul className="mt-4 space-y-3">{res.items.map((i) => <LotCard lang={lang} key={i.id} item={i} query={detailQuery} />)}</ul>
-          {pageLimit === FIRST_LIMIT && cov.candidates > cov.returned && (
-            <p className="mt-4 text-center"><Link href={`/search?${(() => { const q = new URLSearchParams(pageQs); q.set("limit", String(MORE_LIMIT)); if (view === "map") q.set("view", "map"); return q.toString(); })()}`} className="inline-block rounded border border-gray-500 px-4 py-2 text-sm">{S.more(MORE_LIMIT)}</Link></p>
+          {nextLimit && cov.matched > cov.returned && (
+            <p className="mt-4 text-center"><Link href={`/search?${(() => { const q = new URLSearchParams(pageQs); q.set("limit", String(nextLimit)); if (view === "map") q.set("view", "map"); return q.toString(); })()}`} className="inline-block min-h-11 rounded border border-gray-500 px-4 py-2 text-sm">{S.more(nextLimit)}</Link></p>
           )}
+          {!nextLimit && cov.matched > cov.returned && <p className="mt-4 text-center text-sm text-gray-700">{S.capped(cov.returned)}</p>}
         </>
       )}
       <CompareTray lang={lang} query={`${detailQuery}&lat=${res.searchCenter.lat.toFixed(4)}&lng=${res.searchCenter.lng.toFixed(4)}`} />

@@ -11,7 +11,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (isGuardError(g)) return g;
   const { id } = await ctx.params;
   if (!/^\d{1,9}$/.test(id)) return apiError(400, "INVALID_ID", "ID가 올바르지 않습니다.");
-  const body = await req.json().catch(() => ({})) as { status?: unknown; by?: unknown };
+  const body = ((await req.json().catch(() => null)) ?? {}) as { status?: unknown; by?: unknown };
   const by = parseActor(body.by);
   if (body.status !== "REVIEWED" && body.status !== "DISMISSED") return apiError(400, "INVALID_STATUS", "처리 상태가 올바르지 않습니다.");
   if (!by) return apiError(400, "ACTOR_REQUIRED", "처리자 이름을 입력하세요.");

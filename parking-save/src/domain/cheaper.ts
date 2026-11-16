@@ -20,7 +20,7 @@ export function cheaperShifts(input: {
     if (s < now.getTime()) continue;
     const r = calculateFee({ startAt: new Date(s), endAt: new Date(e), rules, holidays });
     if (r.status !== "OK") continue;
-    if (schedules.length > 0 && operatingForStay(schedules, s, e, holidays) !== "OPERATING") continue;
+    if (operatingForStay(schedules, s, e, holidays) !== "OPERATING") continue; // 운영시간 미확인이면 제안하지 않음
     const saving = baseFee - r.amount;
     if (saving >= MIN_SAVING_WON) out.push({ shiftMinutes: m, startAt: new Date(s).toISOString(), endAt: new Date(e).toISOString(), fee: r.amount, saving });
   }
