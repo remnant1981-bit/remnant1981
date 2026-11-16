@@ -88,6 +88,33 @@
     const n = Number(String(v ?? '').replace(/[,%\s]/g, ''));
     return Number.isFinite(n) && n > 0 ? Math.min(n, max) : 0;
   };
+  /** 금액 입력 해석 → 천원. "5억", "1억 5천만원", "300백만", "500,000,000원"(원 단위 표기) 지원. 단위 글자가 없으면 천원으로 봄 */
+  function parseAmount(v) {
+    const t = String(v ?? '').replace(/[\s,]/g, '');
+    if (!t) return 0;
+    if (/[억만천백]|원$/.test(t)) {
+      let total = 0, m; const U = { 억: 100000, 천만: 10000, 백만: 1000, 만: 10 };
+      const re = /(\d+(?:\.\d+)?)(억|천만|백만|만)/g; let last = 0, hit = false;
+      while ((m = re.exec(t))) { total += Number(m[1]) * U[m[2]]; last = re.lastIndex; hit = true; }
+      const rest = t.slice(last);
+      const thou = rest.match(/^(\d+)천원$/); const won = rest.match(/^(\d+)원$/);
+      if (thou) total += Number(thou[1]); else if (won) total += Number(won[1]) / 1000; else if (!hit) return int(t);
+      return Math.max(0, Math.round(total));
+    }
+    return int(t);
+  }
+  /** 천원 → 읽기 쉬운 원 단위 표기(예: 300000 → "3억 원", 1250 → "125만 원") */
+  function wonText(k) {
+    const won = int(k) * 1000;
+    if (!won) return '';
+    const jo = Math.floor(won / 1e12), eok = Math.floor((won % 1e12) / 1e8), man = Math.floor((won % 1e8) / 1e4), rest = won % 1e4;
+    const parts = [];
+    if (jo) parts.push(`${jo.toLocaleString('ko-KR')}조`);
+    if (eok) parts.push(`${eok.toLocaleString('ko-KR')}억`);
+    if (man) parts.push(`${man.toLocaleString('ko-KR')}만`);
+    if (rest) parts.push(`${rest.toLocaleString('ko-KR')}`);
+    return parts.join(' ') + ' 원';
+  }
   const personKind = (p) => (p.kind && PERSON_KINDS[p.kind] ? p.kind : p.inkind ? 'existing' : 'new');
 
   /** 적용 비율: 법령 유형이면 고정값(간접비만 상한 내 조정), 직접 입력이면 사용자 값 */
@@ -255,7 +282,9 @@
       for (let y = 0; y < p.years; y++) {
         const r = calcBudget(sheetState(p, i, y));
         const gov = r.funding.gov;
-        r.sum = { gov, orgCash: Math.max(0, r.total.cash - gov), inkind: r.total.inkind, total: r.total.total };
+        // 정부지원은 현금 편성액 범위까지만 집계(현금이 정부출연금보다 적게 편성된 경우 합계가 실제 편성액과 어긋나지 않게)
+        const govIn = Math.min(gov, r.total.cash);
+        r.sum = { gov: govIn, orgCash: Math.max(0, r.total.cash - gov), inkind: r.total.inkind, total: r.total.total, govPlan: gov };
         r.errors = r.checks.filter((c) => c.level === 'error').length;
         years.push(r);
       }
@@ -398,6 +427,8 @@
     const gt = t1.length + 1;
     const sumOf = (c) => subRows.map((r) => `${c}${r}`).join('+');
     t1.push([{ v: '총 합계', s: H }, txt(''), txt(''), f(sumOf('D')), f(sumOf('E')), f(sumOf('F')), f(sumOf('G')), f(`IF(G${gt}=0,0,ROUND(D${gt}/G${gt}*100,1))`)]);
+    const under = P.insts.some((it) => it.years.some((r) => r.sum.govPlan > r.sum.gov));
+    if (under) t1.push([], ['⚠ 현금 편성액이 정부지원연구개발비보다 적은 기관·연차가 있습니다. 정부지원연구개발비 칸은 편성된 금액만 표시됩니다(미편성분 제외).']);
     t1.push([], ['※ 기관부담 현금 = 현금 편성액 − 정부지원연구개발비. 사업별 공고문·운영요령이 우선합니다.']);
     const sheets = [{ name: sheetName('총괄표', used), rows: t1, widths: [12, 26, 18, 18, 15, 15, 16, 14] }];
 
@@ -652,7 +683,10 @@
     const m = minMaterialCash(state);
     items.material.cash = String(m === null ? 0 : m);
     const result = calcBudget(state);
-    return { sheet: { gov: state.gov, people, items }, result, notes: [
+    const extra = [];
+    if (funding.total > 0 && result.total.total > funding.total * 1.1) extra.push(`기존 인력 현물 등이 많아 총사업비가 최소 기준(${funding.total.toLocaleString('ko-KR')}천원)보다 ${(result.total.total - funding.total).toLocaleString('ko-KR')}천원 큽니다. 문제는 아니지만, 줄이려면 기존 인력의 참여율이나 현물 장비를 낮추세요.`);
+    if (!people.length) extra.push('참여연구원을 입력하지 않았습니다. 인건비가 0으로 계산되니 2단계에서 추가하세요.');
+    return { sheet: { gov: state.gov, people, items }, result, notes: [...extra, 
       `연구재료비 ${int(items.material.cash).toLocaleString('ko-KR')}천원은 최소 총사업비·현금 기준을 맞추기 위해 자동으로 채운 값입니다. 실제 필요 금액으로 나눠 조정하세요.`,
       `연구수당은 인건비의 ${DRAFT.allowancePct}%, 연구활동비는 총사업비의 ${DRAFT.activityPct}%로 넣었습니다.`,
     ] };
@@ -710,7 +744,7 @@
     return s;
   }
 
-  const RB = { ITEM_HELP, DRAFT, minMaterialCash, draftBudget, suggestFixes, applyFix, autoFix, isYmd, ymdAddMonths, blankExec, normalizeExec, execMonths, calcExecution, buildExecXlsx, MAX_YEARS, MAX_INSTS, ROLES, blankYear, newInst, normalizeProject, sheetState, calcProject, splitCash, EXAMPLES, BASIS_DATE, SOURCES, RULESETS, LIMITS, ITEMS, PERSON_KINDS, DEFAULT_RULES, int, pct, effectiveRules, calcFunding, personCost, calcBudget, buildXlsx, crc32 };
+  const RB = { parseAmount, wonText, ITEM_HELP, DRAFT, minMaterialCash, draftBudget, suggestFixes, applyFix, autoFix, isYmd, ymdAddMonths, blankExec, normalizeExec, execMonths, calcExecution, buildExecXlsx, MAX_YEARS, MAX_INSTS, ROLES, blankYear, newInst, normalizeProject, sheetState, calcProject, splitCash, EXAMPLES, BASIS_DATE, SOURCES, RULESETS, LIMITS, ITEMS, PERSON_KINDS, DEFAULT_RULES, int, pct, effectiveRules, calcFunding, personCost, calcBudget, buildXlsx, crc32 };
   if (typeof module !== 'undefined' && module.exports) module.exports = RB;
   else root.RB = RB;
 })(typeof self !== 'undefined' ? self : this);
