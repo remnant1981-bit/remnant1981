@@ -135,7 +135,13 @@ export async function requestCompanyClaim(db: Db, userId: string, bizNoRaw: unkn
   await db.run("INSERT OR IGNORE INTO company_members(id, company_id, user_id, role, verification_status, created_at) VALUES (?,?,?,?, 'pending', ?)",
     [newId(), company.id, userId, "owner", now]);
   if (process.env.DEV_AUTO_APPROVE_COMPANY === "true" && process.env.NODE_ENV !== "production") {
-    await approveClaim(db, userId, company.id, "dev_auto_approve", "dev");
+    try {
+      await approveClaim(db, userId, company.id, "dev_auto_approve", "dev");
+    } catch (e) {
+      // 자동 승인 실패(이미 대표 계정 있음 등): 방금 만든 대기 신청을 지워 다른 번호로 다시 신청할 수 있게 한다
+      await db.run("DELETE FROM company_members WHERE company_id=? AND user_id=? AND verification_status='pending'", [company.id, userId]);
+      throw e;
+    }
     return { status: "verified" };
   }
   return { status: (await membershipState(db, userId)).status };

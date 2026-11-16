@@ -12,7 +12,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
     const r = await api<{ message?: string }>("POST", `/api/auth/${mode}`, { email: f.get("email"), password: f.get("password") });
     setBusy(false);
     resetCsrf();
-    if (r.ok) window.location.href = mode === "register" ? "/company" : "/";
+    if (r.ok) window.location.href = mode === "register" ? "/company?joined=1" : "/";
     else setErr(r.data.message ?? "처리하지 못했습니다.");
   }
   return (

@@ -40,7 +40,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         )}
         <a href="#main" className="skip-link">본문으로 건너뛰기</a>
         {process.env.DEMO_MODE === "true" && process.env.NODE_ENV !== "production" && (
-          <div role="note" className="bg-amber-100 px-4 py-1.5 text-center text-xs text-amber-900">
+          <div role="region" aria-label="데모 안내" className="bg-amber-100 px-4 py-1.5 text-center text-xs text-amber-900">
             <b>데모 모드</b> · 모든 공고는 테스트 데이터
             {!v.session && <> · 기업 계정 <code>demo@demo.test</code> / <code>DemoUser12345</code> · 관리자 <code>admin@demo.test</code> / <code>DemoAdmin12345</code></>}
           </div>
@@ -65,7 +65,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </div>
           </div>
         </header>
-        <main id="main" className="mx-auto max-w-5xl px-4 py-6">{children}</main>
+        <main id="main" tabIndex={-1} className="mx-auto max-w-5xl px-4 py-6">{children}</main>
         <footer className="mx-auto max-w-5xl px-4 pb-10 text-xs text-[var(--muted)]">
           {plansEnabled() && <p className="mb-2"><Link className="underline" href="/pricing">요금 안내</Link></p>}
           <p>본 서비스의 정보는 참고용이며 최종 신청 자격·접수 상태는 공식 원문과 담당기관 확인이 기준입니다. 수집 대상으로 연동된 기관의 공고만 제공되며 모든 기관을 포함한다고 보장하지 않습니다.</p>

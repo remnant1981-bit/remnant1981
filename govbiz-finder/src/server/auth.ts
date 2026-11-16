@@ -132,7 +132,8 @@ export async function login(db: Db, emailRaw: string, password: string, ipKey: s
   const ok = await bcrypt.compare(password, user.password_hash);
   if (user.locked_until && user.locked_until > nowIso()) throw generic; // 잠금 중에는 성공 여부 노출하지 않음
   if (!ok || user.status !== "active") {
-    const fails = user.failed_logins + 1;
+    // 잠금 시간이 지났으면 실패 횟수를 새로 센다(잠금 해제 직후 1회 실패로 다시 잠기지 않게)
+    const fails = (user.locked_until && user.locked_until <= nowIso() ? 0 : user.failed_logins) + 1;
     await db.run("UPDATE users SET failed_logins=?, locked_until=? WHERE id=?",
       [fails, fails >= MAX_FAILED ? new Date(Date.now() + LOCK_MS).toISOString() : null, user.id]);
     throw generic;

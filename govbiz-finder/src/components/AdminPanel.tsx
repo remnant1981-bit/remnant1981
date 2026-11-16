@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/client";
-import { CATEGORIES } from "@/domain/taxonomy";
+import { CATEGORIES, STATUS_LABEL } from "@/domain/taxonomy";
 import { formatSeoul } from "@/lib/time";
 
 type Any = Record<string, any>;
@@ -14,6 +14,7 @@ export function AdminPanel() {
   const [audit, setAudit] = useState<Any[]>([]);
   const [subs, setSubs] = useState<{ items: Any[]; enabled: boolean }>({ items: [], enabled: false });
   const [msg, setMsg] = useState("");
+  const [annQ, setAnnQ] = useState("");
 
   const load = useCallback(async () => {
     const [a, b, c, d, e] = await Promise.all([api<Any>("GET", "/api/admin/overview"), api<Any>("GET", "/api/admin/claims"), api<Any>("GET", "/api/admin/announcements"), api<Any>("GET", "/api/admin/duplicates"), api<Any>("GET", "/api/admin/audit")]);
@@ -25,8 +26,12 @@ export function AdminPanel() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
-  async function act(p: Promise<{ ok: boolean; data: Any }>, ok = "처리했습니다.") {
-    const r = await p;
+  const ST: Record<string, string> = { ...STATUS_LABEL, pending: "승인 대기", verified: "확인됨", rejected: "반려", success: "성공", partial: "일부 실패", failed: "실패", running: "실행 중" };
+  const ACTION: Record<string, string> = { "announcement.create": "공고 등록", "announcement.update": "공고 수정", "announcement.activate": "공고 활성화", "announcement.deactivate": "공고 비활성화", "claim.approve": "기업 신청 승인", "claim.reject": "기업 신청 반려", "collect.run": "수집 실행", "source.toggle": "원천 활성/비활성", "subscription.set": "요금제 설정" };
+  const srcName = (id: string) => ov.sources.find((x: Any) => x.id === id)?.name ?? id;
+  async function act(p: Promise<{ ok: boolean; data: Any }> | (() => Promise<{ ok: boolean; data: Any }>), ok = "처리했습니다.", confirmText?: string) {
+    if (confirmText && !window.confirm(confirmText)) return;
+    const r = await (typeof p === "function" ? p() : p);
     setMsg(r.ok ? ok : r.data.message ?? "실패했습니다.");
     load();
   }
@@ -42,20 +47,21 @@ export function AdminPanel() {
   }
   return (
     <div className="grid gap-8">
-      <p role="status" className="text-sm text-[var(--muted)]">{msg}</p>
+      {/* 처리 결과는 어느 위치에서 눌러도 보이도록 화면 아래에 고정 */}
+      <p role="status" aria-live="polite" className={msg ? "fixed inset-x-0 bottom-4 z-50 mx-auto w-fit max-w-[90vw] rounded-xl bg-gray-900 px-4 py-2 text-sm text-white shadow-lg" : "sr-only"}>{msg}{msg && <button type="button" className="ml-3 underline" onClick={() => setMsg("")}>닫기</button>}</p>
 
       <section aria-labelledby="src"><h2 id="src" className="mb-2 text-lg font-bold">수집 원천·모니터링</h2>
-        <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead><tr className="border-b"><th>원천</th><th>연동</th><th>활성</th><th>마지막 성공</th><th>마지막 오류</th><th>비고</th><th></th></tr></thead>
+        <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead><tr className="border-b"><th>원천</th><th>연동</th><th>활성</th><th>마지막 성공</th><th>마지막 오류</th><th>비고</th><th><span className="sr-only">관리</span></th></tr></thead>
           <tbody>{ov.sources.map((s: Any) => (<tr key={s.id} className="border-b align-top">
             <td className="py-1 pr-2">{s.name}</td><td>{({ not_integrated: "미연동", pending_key: "키 대기", mock: "테스트", manual: "수동", live: "연동" } as Any)[s.integration_status]}</td>
             <td>{s.enabled ? "ON" : "OFF"}</td><td>{formatSeoul(s.last_success_at)}</td><td className="max-w-[200px] break-words text-red-700">{s.last_error ?? "-"}</td><td className="max-w-[240px] text-xs text-[var(--muted)]">{s.quota_note}</td>
             <td className="space-x-1 whitespace-nowrap">
-              <button className="btn btn-ghost" disabled={s.integration_status === "not_integrated"} onClick={() => act(api("PUT", `/api/admin/sources/${s.id}`, { enabled: !s.enabled }))}>{s.enabled ? "비활성화" : "활성화"}</button>
-              {(s.id === "mock" || s.id === "bizinfo") && <button className="btn btn-ghost" onClick={() => act(api("POST", "/api/admin/collect", { sourceId: s.id }), "수집을 실행했습니다.")}>수집 실행</button>}
+              <button className="btn btn-ghost" disabled={s.integration_status === "not_integrated"} onClick={() => act(() => api("PUT", `/api/admin/sources/${s.id}`, { enabled: !s.enabled }), "처리했습니다.", s.enabled ? `${s.name} 수집을 비활성화할까요?` : undefined)}>{s.enabled ? "비활성화" : "활성화"}</button>
+              {(s.id === "mock" || s.id === "bizinfo" || s.id === "k-startup") && s.integration_status !== "not_integrated" && <button className="btn btn-ghost" onClick={() => act(api("POST", "/api/admin/collect", { sourceId: s.id }), "수집을 실행했습니다.")}>수집 실행</button>}
             </td></tr>))}</tbody></table></div>
         <h3 className="mt-4 font-semibold">최근 수집 실행</h3>
         <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-sm"><thead><tr className="border-b"><th>시작</th><th>원천</th><th>상태</th><th>수집/신규/갱신/건너뜀</th><th>오류</th></tr></thead>
-          <tbody>{ov.runs.map((r: Any) => (<tr key={r.id} className="border-b"><td>{formatSeoul(r.started_at)}</td><td>{r.source_id}</td><td>{r.status}</td><td>{r.fetched_count}/{r.inserted_count}/{r.updated_count}/{r.skipped_count}</td><td className="max-w-[260px] break-words">{r.error_summary ?? "-"}</td></tr>))}</tbody></table></div>
+          <tbody>{ov.runs.map((r: Any) => (<tr key={r.id} className="border-b"><td>{formatSeoul(r.started_at)}</td><td>{srcName(r.source_id)}</td><td>{ST[r.status] ?? r.status}</td><td>{r.fetched_count}/{r.inserted_count}/{r.updated_count}/{r.skipped_count}</td><td className="max-w-[260px] break-words">{r.error_summary ?? "-"}</td></tr>))}</tbody></table></div>
         {ov.ai && (<>
           <h3 className="mt-4 font-semibold">AI 자격요건 추출</h3>
           <p className="text-sm">
@@ -70,11 +76,11 @@ export function AdminPanel() {
 
       <section aria-labelledby="cl"><h2 id="cl" className="mb-2 text-lg font-bold">기업 관계 확인 신청</h2>
         <p className="mb-2 text-sm text-[var(--muted)]">사업자등록증 등 증빙은 시스템 외부에서 확인 후 승인하세요. 동일 기업에 복수 신청(충돌)이 있으면 ‘신청 수’가 2 이상으로 표시됩니다.</p>
-        <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-sm"><thead><tr className="border-b"><th>신청자</th><th>사업자번호</th><th>상태</th><th>신청 수</th><th></th></tr></thead>
-          <tbody>{claims.map((c) => (<tr key={c.user_id + c.company_id} className="border-b"><td>{c.email}</td><td>{c.business_number_masked}</td><td>{c.verification_status}</td><td>{c.claim_count}{c.claim_count > 1 ? " ⚠" : ""}</td>
+        <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-sm"><thead><tr className="border-b"><th>신청자</th><th>사업자번호</th><th>상태</th><th>신청 수</th><th><span className="sr-only">관리</span></th></tr></thead>
+          <tbody>{claims.map((c) => (<tr key={c.user_id + c.company_id} className="border-b"><td>{c.email}</td><td>{c.business_number_masked}</td><td>{ST[c.verification_status] ?? c.verification_status}</td><td>{c.claim_count}{c.claim_count > 1 ? " ⚠" : ""}</td>
             <td className="space-x-1">{c.verification_status === "pending" && <>
               <button className="btn" onClick={() => act(api("POST", "/api/admin/claims", { userId: c.user_id, companyId: c.company_id, decision: "approve" }))}>승인</button>
-              <button className="btn btn-danger" onClick={() => act(api("POST", "/api/admin/claims", { userId: c.user_id, companyId: c.company_id, decision: "reject" }))}>반려</button></>}</td></tr>))}</tbody></table></div>
+              <button className="btn btn-danger" onClick={() => act(() => api("POST", "/api/admin/claims", { userId: c.user_id, companyId: c.company_id, decision: "reject" }), "반려했습니다.", "이 신청을 반려할까요? 반려하면 해당 계정은 다시 신청할 수 없습니다.")}>반려</button></>}</td></tr>))}</tbody></table></div>
       </section>
 
       <section aria-labelledby="an"><h2 id="an" className="mb-2 text-lg font-bold">공고 관리</h2>
@@ -93,14 +99,15 @@ export function AdminPanel() {
           <fieldset className="sm:col-span-2"><legend className="label">분야</legend><div className="flex flex-wrap gap-3 text-sm">{CATEGORIES.map((c) => <label key={c.id}><input type="checkbox" name="categories" value={c.id} /> {c.name}</label>)}</div></fieldset>
           <div className="sm:col-span-2"><button className="btn">등록</button></div>
         </form>
-        <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-sm"><thead><tr className="border-b"><th>사업명</th><th>기관</th><th>상태</th><th>원천</th><th>활성</th><th></th></tr></thead>
-          <tbody>{anns.map((a) => (<tr key={a.id} className="border-b"><td className="py-1 pr-2">{a.title}</td><td>{a.organization}</td><td>{a.application_status}</td><td>{a.source_id}</td><td>{a.is_active ? "활성" : "비활성"}</td>
-            <td><button className="btn btn-ghost" onClick={() => act(api("PUT", `/api/admin/announcements/${a.id}`, { isActive: !a.is_active }))}>{a.is_active ? "비활성화" : "활성화"}</button></td></tr>))}</tbody></table></div>
+        <div className="mb-2 mt-4"><label className="label" htmlFor="annq">공고 목록 찾기(사업명·기관, 최근 {anns.length}건 중)</label><input id="annq" className="input sm:max-w-sm" value={annQ} onChange={(e) => setAnnQ(e.target.value)} placeholder="예: 수출" /></div>
+        <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-sm"><thead><tr className="border-b"><th>사업명</th><th>기관</th><th>상태</th><th>원천</th><th>활성</th><th><span className="sr-only">관리</span></th></tr></thead>
+          <tbody>{anns.filter((a) => !annQ.trim() || `${a.title} ${a.organization}`.includes(annQ.trim())).map((a) => (<tr key={a.id} className="border-b"><td className="py-1 pr-2">{a.title}</td><td>{a.organization}</td><td>{ST[a.application_status] ?? a.application_status}</td><td>{srcName(a.source_id)}</td><td>{a.is_active ? "활성" : "비활성"}</td>
+            <td><button className="btn btn-ghost" onClick={() => act(() => api("PUT", `/api/admin/announcements/${a.id}`, { isActive: !a.is_active }), a.is_active ? "비활성화했습니다." : "활성화했습니다.", a.is_active ? `'${String(a.title).slice(0, 40)}' 공고를 비활성화할까요? 검색·추천에서 숨겨집니다.` : undefined)}>{a.is_active ? "비활성화" : "활성화"}</button></td></tr>))}</tbody></table></div>
       </section>
 
       {subs.enabled && <section aria-labelledby="sb"><h2 id="sb" className="mb-2 text-lg font-bold">요금제 관리 <span className="text-sm font-normal text-[var(--muted)]">{subs.enabled ? "한도 적용 중(PLANS_ENABLED=true)" : "한도 미적용(판매 전) — 설정만 저장됨"}</span></h2>
         <p className="mb-2 text-xs text-[var(--muted)]">입금 확인 후 요금제·이용 종료일을 저장합니다. 체험은 체험 종료일만 넣습니다. 종료일이 지나면 자동으로 무료 한도가 적용되고 데이터는 유지됩니다.</p>
-        <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left"><th>기업</th><th>구성원</th><th>현재 적용</th><th>요금제</th><th>인원</th><th>체험 종료</th><th>이용 종료</th><th>메모</th><th></th></tr></thead>
+        <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left"><th>기업</th><th>구성원</th><th>현재 적용</th><th>요금제</th><th>인원</th><th>체험 종료</th><th>이용 종료</th><th>메모</th><th><span className="sr-only">관리</span></th></tr></thead>
           <tbody>{subs.items.map((r) => (
             <tr key={r.company_id} className="border-b align-top">
               <td>{r.company_name ?? "(이름 없음)"}<br /><span className="text-xs text-[var(--muted)]">{r.business_number_masked}</span></td>
@@ -119,7 +126,7 @@ export function AdminPanel() {
       </section>
 
       <section aria-labelledby="au"><h2 id="au" className="mb-2 text-lg font-bold">감사 로그</h2>
-        <ul className="text-sm">{audit.map((a) => <li key={a.id} className="border-b py-1">{formatSeoul(a.created_at)} · {a.action} · {a.target_type ?? ""} {a.target_id ?? ""}</li>)}</ul>
+        {audit.length === 0 ? <p className="text-sm text-[var(--muted)]">기록된 관리자 작업이 없습니다.</p> : <ul className="text-sm">{audit.map((a) => <li key={a.id} className="border-b py-1">{formatSeoul(a.created_at)} · {ACTION[a.action] ?? a.action} · <span className="text-[var(--muted)]">{a.target_type ?? ""} {String(a.target_id ?? "").slice(0, 12)}</span></li>)}</ul>}
       </section>
     </div>
   );

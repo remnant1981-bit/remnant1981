@@ -21,7 +21,7 @@ export async function seedReference(db: Db) {
   for (const s of SOURCES) {
     await db.run(
       "INSERT OR IGNORE INTO data_sources(id, name, source_type, enabled, integration_status, quota_note) VALUES (?,?,?,0,?,?)",
-      [s.id, s.name, s.type, s.status, s.status === "pending_key" ? "어댑터 구현됨. 기업마당 API 인증키(BIZINFO_API_KEY) 발급·설정 후 수집 가능. 재배포·출처표시 범위 확인 필요." : "API 이용조건·쿼터·약관·재배포 범위 확인 전(OPEN_ISSUES #1). 미연동."],
+      [s.id, s.name, s.type, s.status, s.status === "pending_key" ? (s.id === "k-startup" ? "어댑터 구현됨. 공공데이터포털 활용신청 후 DATA_GO_KR_API_KEY 설정 시 수집. 무료·이용허락범위 제한 없음(포털 표기)." : "어댑터 구현됨. 기업마당 API 인증키(BIZINFO_API_KEY) 발급·설정 후 수집 가능. 재배포·출처표시 범위 확인 필요.") : "API 이용조건·쿼터·약관·재배포 범위 확인 전(OPEN_ISSUES #1). 미연동."],
     );
   }
   await db.run(
