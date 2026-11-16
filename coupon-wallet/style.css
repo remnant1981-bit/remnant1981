@@ -169,3 +169,5 @@ button.danger, .ghost.danger { color: var(--bad); }
 h3.sect { font-size: 14px; margin: 16px 0 8px; color: var(--text); }
 label select { display: block; width: 100%; margin-top: 4px; padding: 10px; font-size: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); }
 .row.inline { margin: -4px 0 8px; }
+
+code { font: 12px ui-monospace, monospace; background: var(--chip); padding: 1px 4px; border-radius: 4px; }

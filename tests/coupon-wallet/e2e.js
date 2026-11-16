@@ -2,6 +2,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const { chromium } = require('playwright');
 
 const ROOT = path.join(__dirname, '..', '..', 'coupon-wallet');
@@ -23,7 +24,7 @@ const ICON = path.join(ROOT, 'icon-192.png');
 (async () => {
   await new Promise(r => server.listen(0, r));
   const base = `http://localhost:${server.address().port}/`;
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ channel: 'chromium' }); // 전체 Chromium: 알림 권한이 실제처럼 동작 (headless shell은 거부됨)
   const ctx = await browser.newContext({ viewport: { width: 390, height: 800 }, acceptDownloads: true });
   await ctx.grantPermissions(['notifications']);
   const p = await ctx.newPage();
@@ -33,6 +34,19 @@ const ICON = path.join(ROOT, 'icon-192.png');
     window.__notes = [];
     Object.defineProperty(Notification, 'permission', { get: () => 'granted' });
     // 헤드리스 Chromium에는 BarcodeDetector가 없으므로 스텁 (window.__barcodes로 판독 결과 제어, null이면 판독 실패)
+    // 서버 푸시: 헤드리스 Chromium에는 FCM 연결이 없으므로 구독 객체를 흉내 냄 (sessionStorage로 새로고침 사이 유지)
+    {
+      const mk = ep => ({ endpoint: ep, options: { applicationServerKey: null }, unsubscribe: async () => { sessionStorage.removeItem('fakeSubEp'); window.__unsubscribed = (window.__unsubscribed || 0) + 1; return true; } });
+      PushManager.prototype.getSubscription = async function () { const ep = sessionStorage.getItem('fakeSubEp'); return ep ? mk(ep) : null; };
+      PushManager.prototype.subscribe = async function (opts) {
+        const n = Number(sessionStorage.getItem('fakeSubN') || 0) + 1;
+        sessionStorage.setItem('fakeSubN', n);
+        const ep = `https://fcm.googleapis.com/fcm/send/e2e-${n}`;
+        sessionStorage.setItem('fakeSubEp', ep);
+        window.__subscribeCalls = (window.__subscribeCalls || []).concat([{ userVisibleOnly: opts.userVisibleOnly, keyLen: opts.applicationServerKey.length }]);
+        return mk(ep);
+      };
+    }
     window.BarcodeDetector = class {
       static async getSupportedFormats() { return ['code_128', 'ean_13', 'qr_code']; }
       async detect() { return window.__barcodes === undefined ? [{ format: 'code_128', rawValue: '123456789012' }] : window.__barcodes; }
@@ -43,6 +57,12 @@ const ICON = path.join(ROOT, 'icon-192.png');
   p.on('pageerror', e => errors.push('pageerror: ' + e.message));
   p.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
 
+  // 주의: waitForFunction(async ...)는 Promise가 항상 참이라 조건을 보지 않고 즉시 통과함. 비동기 조건은 evaluate로 반복 확인
+  const waitAsync = async (fn, arg, ms = 9000) => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) { if (await p.evaluate(fn, arg)) return true; await new Promise(r => setTimeout(r, 100)); }
+    throw new Error('waitAsync timeout: ' + String(fn).slice(0, 140));
+  };
   const text = sel => p.locator(sel).first().innerText();
   const gotoTab = t => p.click(`[data-tab=${t}]`);
   const toastVisible = () => p.waitForSelector('#toast:not([hidden])');
@@ -62,7 +82,7 @@ const ICON = path.join(ROOT, 'icon-192.png');
   check('샘플 넣기: 쿠폰 3 · 적립 2', d.coupons.length === 3 && d.loyalty.length === 2);
   const oldIds = d.coupons.map(c => c.id);
   await p.click('[data-action=open-settings]'); await p.click('[data-action=sample]');
-  await p.waitForFunction(async ids => { const x = await CWStore.loadAll(); return x.coupons.length > 0 && x.coupons.every(c => !ids.includes(c.id)); }, oldIds);
+  await waitAsync(async ids => { const x = await CWStore.loadAll(); return x.coupons.length > 0 && x.coupons.every(c => !ids.includes(c.id)); }, oldIds);
   d = await db();
   check('샘플 재실행: 중복 없이 교체', d.coupons.length === 3 && d.loyalty.length === 2);
   await settle();
@@ -114,7 +134,7 @@ const ICON = path.join(ROOT, 'icon-192.png');
   d = await db();
   check('사용 완료: 절약 금액·날짜 기록', d.coupons.some(c => c.usedAt && c.saved === 4500));
   await p.click('#toast [data-action=toast-action]');
-  await p.waitForFunction(async () => (await CWStore.loadAll()).coupons.every(c => !c.usedAt));
+  await waitAsync(async () => (await CWStore.loadAll()).coupons.every(c => !c.usedAt));
   check('사용 완료 실행 취소: 원복', true);
 
   /* --- 삭제 / 실행 취소 --- */
@@ -126,7 +146,7 @@ const ICON = path.join(ROOT, 'icon-192.png');
   d = await db();
   check('삭제: 확인 후 제거', d.coupons.length === 3);
   await p.click('#toast [data-action=toast-action]');
-  await p.waitForFunction(async () => (await CWStore.loadAll()).coupons.length === 4);
+  await waitAsync(async () => (await CWStore.loadAll()).coupons.length === 4);
   check('삭제 실행 취소: 복구', true);
 
   /* --- 뒤로가기 --- */
@@ -154,10 +174,10 @@ const ICON = path.join(ROOT, 'icon-192.png');
   check('적립 추가: 진행 중 섹션', (await text('#view')).includes('테스트샵') && (await text('#view')).includes('진행 중'));
   const card = p.locator('.goal', { hasText: '테스트샵' });
   await card.locator('[data-action=inc]').click();
-  await p.waitForFunction(async () => (await CWStore.loadAll()).loyalty.some(l => l.name === '스탬프' && l.current === 2));
+  await waitAsync(async () => (await CWStore.loadAll()).loyalty.some(l => l.name === '스탬프' && l.current === 2));
   check('+1 → 목표 달성 안내 및 완료 섹션 이동', (await text('#toast')).includes('목표 달성') && (await text('#view')).includes('완료 · 마감 지남'));
   await p.locator('.goal', { hasText: '테스트샵' }).locator('[data-action=dec]').click();
-  await p.waitForFunction(async () => (await CWStore.loadAll()).loyalty.some(l => l.name === '스탬프' && l.current === 1));
+  await waitAsync(async () => (await CWStore.loadAll()).loyalty.some(l => l.name === '스탬프' && l.current === 1));
   check('−1: 진행 중으로 복귀', true);
   await p.locator('.goal', { hasText: '테스트샵' }).locator('.item').click();
   await p.waitForSelector('#dlg-loyalty[open]');
@@ -167,7 +187,7 @@ const ICON = path.join(ROOT, 'icon-192.png');
   d = await db();
   check('적립 삭제', !d.loyalty.some(l => l.name === '스탬프'));
   await p.click('#toast [data-action=toast-action]');
-  await p.waitForFunction(async () => (await CWStore.loadAll()).loyalty.some(l => l.name === '스탬프'));
+  await waitAsync(async () => (await CWStore.loadAll()).loyalty.some(l => l.name === '스탬프'));
   check('적립 삭제 실행 취소', true);
 
   /* --- 적립 연타: 마지막 값까지 정확히 저장 --- */
@@ -175,10 +195,10 @@ const ICON = path.join(ROOT, 'icon-192.png');
   const tapCard = p.locator('.goal', { hasText: '테스트샵' });
   const curBefore = (await db()).loyalty.find(l => l.name === '스탬프').current;
   for (let i = 0; i < 6; i++) await p.locator('.goal', { hasText: '테스트샵' }).locator('[data-action=inc]').click({ delay: 0 });
-  await p.waitForFunction(async n => (await CWStore.loadAll()).loyalty.find(l => l.name === '스탬프').current === n, curBefore + 6);
+  await waitAsync(async n => (await CWStore.loadAll()).loyalty.find(l => l.name === '스탬프').current === n, curBefore + 6);
   check('적립 +1 연타 6회: 화면·DB 값 일치', (await tapCard.locator('b').innerText()).startsWith(String(curBefore + 6)));
   for (let i = 0; i < 6; i++) await p.locator('.goal', { hasText: '테스트샵' }).locator('[data-action=dec]').click();
-  await p.waitForFunction(async n => (await CWStore.loadAll()).loyalty.find(l => l.name === '스탬프').current === n, curBefore);
+  await waitAsync(async n => (await CWStore.loadAll()).loyalty.find(l => l.name === '스탬프').current === n, curBefore);
 
   /* --- 저장 실패: 팝업·입력 유지, 화면 상태 미변경 --- */
   await gotoTab('coupons'); await p.click('#fab'); await p.waitForSelector('#dlg-coupon[open]');
@@ -370,6 +390,122 @@ const ICON = path.join(ROOT, 'icon-192.png');
   check('다른 앱 경로(/rnd-budget/): 응답은 그대로, 서비스워커 캐시에 저장 안 됨', other === 'other-app' && !cachedOther);
   await p.evaluate(() => CWStore.setMeta('apiKey', ''));
 
+  /* --- 서버 푸시 (서버는 push-server/src/core.js 실제 코드를 그대로 연결) --- */
+  const { handle: pushHandle } = await import(pathToFileURL(path.join(__dirname, '..', '..', 'push-server', 'src', 'core.js')).href);
+  const kvStore = new Map();
+  const pushKV = {
+    async get(k, t) { const v = kvStore.get(k); return v === undefined ? null : (t === 'json' ? JSON.parse(v) : v); },
+    async put(k, v) { kvStore.set(k, String(v)); }, async delete(k) { kvStore.delete(k); },
+    async list({ prefix = '', cursor, limit = 1000 } = {}) {
+      const keys = [...kvStore.keys()].filter(k => k.startsWith(prefix)).sort().map(name => ({ name }));
+      const st = cursor ? Number(cursor) : 0;
+      return { keys: keys.slice(st, st + limit), list_complete: st + limit >= keys.length, cursor: String(st + limit) };
+    }
+  };
+  const pushEnv = { SUBS: pushKV, ALLOWED_ORIGIN: new URL(base).origin, REGISTER_CODE: 'open-sesame', VAPID_SUBJECT: 'https://example.com/' };
+  const fcmCalls = []; let pushDown = false;
+  const PUSH_SERVER = 'https://coupon-push.test.workers.dev';
+  await ctx.route(`${PUSH_SERVER}/**`, async route => {
+    if (pushDown) return route.abort();
+    const r = route.request();
+    const hdrs = await r.allHeaders();
+    const request = new Request(r.url(), { method: r.method(), headers: hdrs, body: ['GET', 'HEAD', 'OPTIONS'].includes(r.method()) ? undefined : r.postData() });
+    const res = await pushHandle(request, pushEnv, { fetch: async (u, o) => { fcmCalls.push({ u, o }); return new Response(null, { status: 201 }); } });
+    route.fulfill({ status: res.status, headers: Object.fromEntries(res.headers), body: await res.text() });
+  });
+  const subs = () => [...kvStore.entries()].filter(([k]) => k.startsWith('sub:')).map(([k, v]) => ({ id: k.slice(4), ...JSON.parse(v) }));
+  const until = async (fn, ms = 9000) => { const end = Date.now() + ms; while (Date.now() < end) { if (await fn()) return true; await new Promise(r => setTimeout(r, 100)); } return false; };
+  const notesNow = () => p.evaluate(async () => (await (await navigator.serviceWorker.ready).getNotifications()).map(n => ({ body: n.body, tag: n.tag })));
+  const cdpPush = await ctx.newCDPSession(p);
+  const pushRegs = [];
+  cdpPush.on('ServiceWorker.workerRegistrationUpdated', e => pushRegs.push(...e.registrations));
+  cdpPush.on('ServiceWorker.workerErrorReported', e => console.log('SW_ERROR', String(e.errorMessage && e.errorMessage.errorMessage).slice(0, 300)));
+  await cdpPush.send('ServiceWorker.enable');
+  await p.waitForTimeout(500);
+  const deliverPush = () => cdpPush.send('ServiceWorker.deliverPushMessage', { origin: new URL(base).origin, registrationId: pushRegs[pushRegs.length - 1].registrationId, data: '' });
+  const openSettings = async () => { await p.click('[data-action=open-settings]'); await p.waitForSelector('#dlg-settings[open]'); };
+  const closeSettings = async () => { await p.click('#dlg-settings [data-action=close-dialog]'); await settle(); };
+  const clearNotes = () => p.evaluate(async () => (await (await navigator.serviceWorker.ready).getNotifications()).forEach(n => n.close()));
+
+  // 켜기 실패: 입력은 유지되고 안내가 뜸
+  await openSettings();
+  await p.fill('#push-server', PUSH_SERVER); await p.fill('#push-code', 'wrong');
+  await p.click('[data-action=push-on]');
+  await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('등록 코드가 올바르지 않'));
+  check('서버 푸시: 등록 코드가 틀리면 안내하고 입력값 유지, 서버에 등록 안 됨', await p.inputValue('#push-server') === PUSH_SERVER && await p.inputValue('#push-code') === 'wrong' && subs().length === 0 && (await text('#push-state')).includes('꺼짐'));
+  pushDown = true;
+  await p.fill('#push-code', 'open-sesame'); await p.click('[data-action=push-on]');
+  await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('서버에 연결하지 못함'));
+  check('서버 푸시: 서버에 연결할 수 없으면 안내', await p.inputValue('#push-code') === 'open-sesame' && subs().length === 0);
+  pushDown = false;
+
+  // 켜기 성공
+  await p.selectOption('#push-hour', '9'); await p.click('[data-action=push-on]');
+  await p.waitForFunction(() => document.querySelector('#push-state').textContent.includes('켜짐'));
+  const s1 = subs();
+  check('서버 푸시: 켜면 구독 생성(userVisibleOnly·VAPID 키 65바이트)·서버에 등록', s1.length === 1 && s1[0].endpoint.endsWith('e2e-1') && s1[0].hour === 9 && s1[0].tzOffsetMin === -new Date().getTimezoneOffset());
+  const sc = await p.evaluate(() => window.__subscribeCalls);
+  check('서버 푸시: PushManager.subscribe 인자', sc.length === 1 && sc[0].userVisibleOnly === true && sc[0].keyLen === 65);
+  check('서버 푸시: 상태 표시(켜짐·매일 오전 9시)', (await text('#push-state')).includes('매일 오전 9시'));
+  const mine = await p.evaluate(async () => { const d = await CWStore.loadAll(); return { sched: CW.pushSchedule(d), words: [...d.coupons.flatMap(c => [c.brand, c.title, c.code]), ...d.loyalty.flatMap(l => [l.brand, l.name])].filter(w => w && w.length > 1) }; });
+  check('서버 푸시: 서버의 알림 날짜가 이 기기 데이터의 계산과 일치', JSON.stringify(s1[0].schedule) === JSON.stringify(mine.sched) && mine.sched.length > 0, JSON.stringify(s1[0].schedule));
+  const serverBlob = JSON.stringify([...kvStore.values()]);
+  check('개인정보: 서버 저장 내용에 쿠폰·적립 이름/번호가 없음', mine.words.length > 5 && mine.words.every(w => !serverBlob.includes(w)), mine.words.find(w => serverBlob.includes(w)));
+  await closeSettings();
+
+  // 데이터가 바뀌면 알림 날짜가 서버에 반영됨
+  const tmr = dstr(1);
+  await openCouponForm();
+  await fill('#form-coupon', 'brand', '푸시시험'); await fill('#form-coupon', 'title', '내일 만료'); await fill('#form-coupon', 'expires', tmr);
+  await p.click('#form-coupon button[type=submit]'); await dlgClosed('#dlg-coupon'); await settle();
+  check('동기화: 쿠폰을 추가하면 서버의 알림 날짜가 갱신됨', await until(() => subs()[0] && subs()[0].schedule.includes(tmr) && subs()[0].schedule.includes(dstr(-2) < dstr(0) ? dstr(0) : dstr(0))));
+  check('동기화: 갱신 후에도 이름은 서버에 없음', !JSON.stringify([...kvStore.values()]).includes('푸시시험'));
+  const putsBefore = fcmCalls.length;
+  await p.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await p.waitForTimeout(2600);
+  check('동기화: 바뀐 게 없으면 서버 호출을 하지 않음(화면 복귀)', JSON.stringify(subs()[0].schedule) === JSON.stringify(await p.evaluate(async () => CW.pushSchedule(await CWStore.loadAll()))) && fcmCalls.length === putsBefore);
+
+  // 테스트 푸시: 서버가 VAPID 서명으로 전송 → 기기가 수신
+  await clearNotes();
+  await openSettings(); await p.click('[data-action=push-test]');
+  await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('테스트 푸시를 보냈음'));
+  check('테스트: 서버가 푸시 서비스로 내용 없는 푸시를 VAPID 인증으로 전송', fcmCalls.length === 1 && fcmCalls[0].u.endsWith('e2e-1') && fcmCalls[0].o.method === 'POST' && fcmCalls[0].o.body === undefined && /^vapid t=.+, k=.+$/.test(fcmCalls[0].o.headers.Authorization));
+  await closeSettings();
+  await deliverPush();
+  check('테스트: 푸시가 도착하면 "연결됨" 알림', await until(async () => (await notesNow()).some(n => n.body.includes('서버 푸시가 연결되었음'))));
+
+  // 실제 신호: 기기 데이터로 알림 문구를 만듦
+  await clearNotes(); await deliverPush();
+  const urgent = await until(async () => (await notesNow()).find(n => n.tag === 'daily' && n.body.includes('푸시시험') && n.body.includes('내일 만료')));
+  check('푸시 수신: 오늘 임박한 항목으로 알림 문구 생성(기기에서 계산)', !!urgent, JSON.stringify(await notesNow()));
+  check('푸시 수신: 오늘 알림 기록(lastNotify)', (await db()).meta.lastNotify === dstr(0));
+
+  // 보낼 내용이 없을 때: 브라우저 규칙상 알림은 하나 보여야 하므로 조용히 보였다가 닫힘
+  await clearNotes();
+  await p.evaluate(async () => { window.__bak = await CWStore.loadAll(); await CWStore.clearAll(); });
+  const quiet = deliverPush();
+  const sawQuiet = await until(async () => (await notesNow()).some(n => n.body.includes('확인할 항목이 없음')), 3000);
+  await quiet;
+  const closedAgain = await until(async () => (await notesNow()).every(n => !n.body.includes('확인할 항목이 없음')), 8000); // 서비스워커가 약 4초 뒤 닫음
+  check('푸시 수신(내용 없음): 조용한 알림을 보였다가 닫음', sawQuiet && closedAgain);
+  await p.evaluate(async () => { await CWStore.batch({ putCoupons: window.__bak.coupons, putLoyalty: window.__bak.loyalty }); });
+
+  // 구독이 사라지면 다시 구독하고 서버에 새로 등록 (옛 등록은 정리)
+  await p.evaluate(() => sessionStorage.removeItem('fakeSubEp'));
+  await p.reload(); await p.waitForSelector('#view');
+  check('복구: 구독이 사라지면 재구독·재등록하고 옛 등록은 서버에서 삭제', await until(() => subs().length === 1 && subs()[0].endpoint.endsWith('e2e-2')));
+
+  // 알림 시각 변경
+  await openSettings(); await p.selectOption('#push-hour', '20');
+  check('설정: 알림 시각을 바꾸면 서버에 반영', await until(() => subs()[0] && subs()[0].hour === 20));
+
+  // 끄기
+  await p.click('[data-action=push-off]');
+  await p.waitForFunction(() => document.querySelector('#push-state').textContent.trim() === '꺼짐');
+  check('끄기: 서버 등록 삭제·브라우저 구독 해제·상태 꺼짐', subs().length === 0 && (await p.evaluate(() => window.__unsubscribed)) >= 1 && (await p.evaluate(async () => (await CWStore.getMeta('pushCfg')).enabled)) === false);
+  await closeSettings();
+  await p.evaluate(() => CWStore.setMeta('apiKey', ''));
+
   /* --- 영속성 --- */
   await settle();
   const countBefore = (await db()).coupons.length;
@@ -390,7 +526,7 @@ const ICON = path.join(ROOT, 'icon-192.png');
   const msg = await text('#confirm-msg');
   check('가져오기: 확인창에 개수·제외 건수 표시', msg.includes('쿠폰 2개') && msg.includes('2개는 제외'));
   await p.click('#confirm-ok');
-  await p.waitForFunction(async () => (await CWStore.loadAll()).coupons.some(c => c.brand === '가져옴'));
+  await waitAsync(async () => (await CWStore.loadAll()).coupons.some(c => c.brand === '가져옴'));
   d = await db();
   check('가져오기: 병합(기존 유지) + 외부 이미지 URL 제거', d.coupons.length === countBefore + 2 && d.coupons.find(c => c.brand === '외부이미지').image === '');
   await p.setInputFiles('#import-file', { name: 'x.json', mimeType: 'application/json', buffer: Buffer.from('{not json') });
@@ -402,7 +538,7 @@ const ICON = path.join(ROOT, 'icon-192.png');
   /* --- v1.0 localStorage 이전 --- */
   await p.evaluate(() => localStorage.setItem('coupon-wallet-v1', JSON.stringify({ coupons: [{ id: 'legacy1', brand: '구버전', title: '이전 쿠폰', expires: '', value: 1000 }], loyalty: [], lastNotify: '' })));
   await p.reload(); await p.waitForSelector('#view');
-  await p.waitForFunction(async () => (await CWStore.loadAll()).coupons.some(c => c.id === 'legacy1'));
+  await waitAsync(async () => (await CWStore.loadAll()).coupons.some(c => c.id === 'legacy1'));
   check('마이그레이션: v1.0 데이터 이전 후 원본 삭제', await p.evaluate(() => localStorage.getItem('coupon-wallet-v1') === null));
 
   /* --- 알림 --- */
@@ -415,18 +551,23 @@ const ICON = path.join(ROOT, 'icon-192.png');
   await p.reload(); await p.waitForSelector('#view'); await p.waitForTimeout(800);
   check('알림: 같은 날 재실행 시 중복 호출 없음', (await p.evaluate(() => window.__notes.length)) === 0);
 
-  /* --- 백그라운드 점검(periodicsync) 핸들러 --- */
+  /* --- 백그라운드 점검(periodicsync) 핸들러: 서비스워커가 실제로 알림을 만드는지 --- */
   try {
     const cdp = await ctx.newCDPSession(p);
     const regs = [];
     cdp.on('ServiceWorker.workerRegistrationUpdated', e => regs.push(...e.registrations));
     await cdp.send('ServiceWorker.enable');
     await p.waitForTimeout(500);
-    await p.evaluate(async () => { await CWStore.setMeta('lastNotify', ''); (await (await navigator.serviceWorker.ready).getNotifications()).forEach(n => n.close()); });
+    await p.evaluate(async () => {
+      (await (await navigator.serviceWorker.ready).getNotifications()).forEach(n => n.close());
+      await CWStore.put('coupons', { id: 'periodic1', brand: '정기점검', title: '내일 만료', value: 0, expires: (d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)(new Date(Date.now() + 86400000)), code: '', memo: '', image: '' });
+      await CWStore.setMeta('lastNotify', '');
+    });
+    await p.waitForTimeout(300);
     await cdp.send('ServiceWorker.dispatchPeriodicSyncEvent', { origin: new URL(base).origin, registrationId: regs[regs.length - 1].registrationId, tag: 'expiry-check' });
-    await p.waitForFunction(async () => (await (await navigator.serviceWorker.ready).getNotifications()).length > 0, null, { timeout: 8000 });
-    check('백그라운드 점검: periodicsync가 SW에서 알림 생성', true);
-  } catch (e) { check('백그라운드 점검: periodicsync가 SW에서 알림 생성', false, String(e.message).split('\n')[0]); }
+    const got = await until(async () => (await notesNow()).find(n => n.tag === 'daily' && n.body.includes('정기점검')));
+    check('백그라운드 점검: periodicsync가 SW에서 실제 알림 생성(내용 확인)', !!got, JSON.stringify(await notesNow()));
+  } catch (e) { check('백그라운드 점검: periodicsync가 SW에서 실제 알림 생성(내용 확인)', false, String(e.message).split('\n')[0]); }
 
   /* --- 오프라인 --- */
   await ctx.setOffline(true);
@@ -456,7 +597,7 @@ const ICON = path.join(ROOT, 'icon-192.png');
   await p.goto(base + '?tab=loyalty'); await p.waitForSelector('.tabs button.on');
   check('바로가기(?tab=loyalty): 적립 탭', (await text('.tabs button.on')) === '적립');
 
-  const unexpected = errors.filter(e => !e.includes('QuotaExceededError') && !e.includes('status of 401')); // 저장 실패 테스트에서 의도적으로 주입한 오류는 제외
+  const unexpected = errors.filter(e => !e.includes('QuotaExceededError') && !e.includes('status of 401') && !e.includes('net::ERR_FAILED')); // 저장 실패 테스트에서 의도적으로 주입한 오류는 제외
   check('콘솔 오류·CSP 위반 없음', unexpected.length === 0, unexpected.join(' | '));
 
   await browser.close(); server.close();

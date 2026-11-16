@@ -27,7 +27,7 @@ function toast(msg, action) {
 
 // 저장소 작업 래퍼: 성공 true / 실패 시 안내 후 false (호출부가 화면 상태를 되돌리거나 입력을 유지)
 async function save(op) {
-  try { await op(); return true; }
+  try { await op(); queuePushSync(); return true; }
   catch (e) { console.error(e); toast('저장 실패: 저장 공간이 부족하거나 브라우저가 저장을 막고 있음'); return false; }
 }
 
@@ -493,6 +493,55 @@ async function resumeShare() {
   toast(`처리하지 않은 공유 사진 ${items.length}장`, { label: '이어서 처리', fn: () => whenSettled(startShareItem) });
 }
 
+/* ========== 서버 푸시 ========== */
+// 설정값은 메모리에 두고 화면은 동기적으로만 그림 (비동기 읽기가 입력 중인 값을 덮어쓰지 않도록)
+const pushCfg = { enabled: false, server: '', code: '', hour: 9, syncedAt: 0, supported: true, busy: false };
+let pushTimer = null;
+
+async function loadPushCfg() {
+  try {
+    const s = await CWPush.status();
+    Object.assign(pushCfg, { enabled: s.enabled, server: s.server, code: s.code, hour: s.hour, syncedAt: s.syncedAt, supported: s.supported });
+  } catch (e) { /* 아래 화면에서 꺼짐으로 표시 */ }
+}
+
+function renderPushState() {
+  const sel = $('#push-hour');
+  if (!sel.options.length) for (let h = 0; h < 24; h++) sel.add(new Option(`${h < 12 ? '오전' : '오후'} ${h % 12 === 0 ? 12 : h % 12}시`, String(h)));
+  sel.value = String(pushCfg.hour);
+  $('#push-server').value = pushCfg.server || '';
+  $('#push-code').value = pushCfg.code || '';
+  const el = $('#push-state');
+  el.textContent = !pushCfg.supported ? '이 브라우저는 푸시를 지원하지 않음 (앱을 설치해서 사용)'
+    : pushCfg.enabled ? `켜짐 · 매일 ${$('#push-hour').selectedOptions[0].textContent}${pushCfg.syncedAt ? ` · 마지막 동기화 ${new Date(pushCfg.syncedAt).toLocaleString('ko-KR')}` : ''}`
+    : '꺼짐';
+  document.querySelectorAll('[data-action^="push-"]').forEach(b => { b.disabled = pushCfg.busy; });
+}
+
+// 데이터가 바뀌면 잠시 모았다가 서버의 알림 날짜를 맞춤 (바뀐 게 없으면 네트워크 사용 안 함)
+function queuePushSync() {
+  if (!pushCfg.enabled) return;
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(async () => {
+    try {
+      const r = await CWPush.sync(state);
+      if (r.updated || r.resubscribed || r.reregistered) { pushCfg.syncedAt = Date.now(); renderPushState(); }
+    } catch (e) { console.warn('push sync', e.message); }
+  }, 2000);
+}
+
+// draft: 켜기에 실패해도 사용자가 입력한 주소·코드·시각을 그대로 두기 위한 값
+async function pushAction(fn, okMsg, draft) {
+  pushCfg.busy = true; renderPushState();
+  try { await fn(); if (okMsg) toast(okMsg); }
+  catch (e) { toast(e.message || '서버 푸시 설정에 실패함'); }
+  finally {
+    await loadPushCfg();
+    if (draft && !pushCfg.enabled) Object.assign(pushCfg, draft);
+    pushCfg.busy = false; renderPushState();
+  }
+}
+
 /* ========== 알림 / 설정 정보 ========== */
 async function maybeNotify() {
   if (!('serviceWorker' in navigator)) return;
@@ -535,7 +584,7 @@ document.addEventListener('click', async e => {
     case 'add': ui.tab === 'loyalty' ? openLoyalty() : openCoupon(); break;
     case 'add-coupon': openCoupon(); break;
     case 'close-dialog': el.closest('dialog').close(); break;
-    case 'open-settings': openDlg($('#dlg-settings')); renderKeyState(); refreshSettings(); break;
+    case 'open-settings': openDlg($('#dlg-settings')); renderKeyState(); renderPushState(); refreshSettings(); break;
     case 'detail': openDetail(id); break;
     case 'edit-coupon': { const c = state.coupons.find(x => x.id === id); closeAll(); openCoupon(c); break; }
     case 'edit-loyalty': openLoyalty(state.loyalty.find(x => x.id === id)); break;
@@ -601,6 +650,13 @@ document.addEventListener('click', async e => {
     case 'clear-key':
       if (await askConfirm('저장된 API 키를 이 기기에서 삭제?', '삭제') && await save(() => CWStore.setMeta('apiKey', ''))) { scanCfg.tail = ''; toast('API 키를 삭제함'); renderKeyState(); }
       break;
+    case 'push-on': {
+      const draft = { server: $('#push-server').value, code: $('#push-code').value, hour: Number($('#push-hour').value) };
+      pushAction(() => CWPush.enable(draft, state), '서버 푸시를 켰음. "테스트"로 확인해 보세요', draft);
+      break;
+    }
+    case 'push-off': pushAction(() => CWPush.disable(), '서버 푸시를 껐음'); break;
+    case 'push-test': pushAction(() => CWPush.sendTest(), '테스트 푸시를 보냈음. 곧 알림이 도착함'); break;
     case 'export': exportData(); break;
     case 'sample': await addSamples(); break;
     case 'wipe':
@@ -693,7 +749,12 @@ $('#form-use').addEventListener('submit', async e => {
 $('#import-file').addEventListener('change', e => { if (e.target.files[0]) importData(e.target.files[0]); e.target.value = ''; });
 
 // 앱이 백그라운드에서 돌아오면 D-day를 다시 계산하고 알림 점검
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); maybeNotify(); } });
+$('#push-hour').addEventListener('change', e => {
+  if (!pushCfg.enabled) return;
+  const hour = Number(e.target.value);
+  pushAction(() => CWPush.setHour(hour, state), '알림 시각을 바꿨음');
+});
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); maybeNotify(); queuePushSync(); } });
 window.addEventListener('error', () => toast('예기치 못한 오류가 발생함. 새로고침 후에도 반복되면 알려 주세요'));
 window.addEventListener('unhandledrejection', e => console.error(e.reason));
 
@@ -717,6 +778,7 @@ async function init() {
     await migrateLegacy();
     await reload();
     await loadScanCfg();
+    await loadPushCfg();
   } catch (e) {
     console.error(e);
     toast('이 브라우저에서는 데이터를 저장할 수 없음 (사생활 보호 모드인지 확인)');
@@ -727,6 +789,7 @@ async function init() {
   if (p.get('add') === 'coupon') openCoupon();
   if (p.has('add') || p.has('tab') || p.has('share')) history.replaceState(history.state, '', location.pathname);
   if (p.has('share')) await receiveShare(p.get('share')); else resumeShare();
+  queuePushSync();
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* 무시 */ }
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').then(registerPeriodic).catch(() => {});

@@ -61,6 +61,9 @@
   const setMeta = (k, v) => run(['meta'], 'readwrite', t => { t.objectStore('meta').put(v, k); });
   const getMeta = k => run(['meta'], 'readonly', (t, out) => { const r = t.objectStore('meta').get(k); r.onsuccess = () => out(r.result); });
 
+  const noticeBody = lines => lines.slice(0, 5).join('\n') + (lines.length > 5 ? `\n외 ${lines.length - 5}건` : '');
+  const noticeOpts = (body, extra) => ({ body, icon: 'icon-192.png', badge: 'icon-192.png', ...extra });
+
   // 하루 1회, 임박 항목이 있을 때만 알림. 화면과 백그라운드(periodicsync)가 같이 호출해도 tag로 합쳐짐
   async function checkAndNotify(reg) {
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return false;
@@ -69,11 +72,30 @@
     if (data.meta.lastNotify === t) return false;
     const lines = root.CW.notifyLines(data, t);
     if (!lines.length) return false;
-    const body = lines.slice(0, 5).join('\n') + (lines.length > 5 ? `\n외 ${lines.length - 5}건` : '');
-    await reg.showNotification('쿠폰 지갑', { body, icon: 'icon-192.png', badge: 'icon-192.png', tag: 'daily' });
+    await reg.showNotification('쿠폰 지갑', noticeOpts(noticeBody(lines), { tag: 'daily' }));
     await setMeta('lastNotify', t);
     return true;
   }
 
-  root.CWStore = { open, loadAll, put, remove, batch, clearAll, setMeta, getMeta, checkAndNotify };
+  // 서버 푸시 신호를 받았을 때: 서버는 "오늘 확인할 날"이라는 신호만 보내므로, 알림 문구는 기기 데이터로 만듦
+  async function handlePush(reg) {
+    const testAt = await getMeta('pushTestAt');
+    if (testAt && Date.now() - testAt < 120000) {                 // 설정 화면의 "테스트 알림"
+      await setMeta('pushTestAt', 0);
+      return reg.showNotification('쿠폰 지갑', noticeOpts('✅ 서버 푸시가 연결되었음', { tag: 'push-test' }));
+    }
+    const t = root.CW.today();
+    const lines = root.CW.notifyLines(await loadAll(), t);
+    if (lines.length) {
+      await reg.showNotification('쿠폰 지갑', noticeOpts(noticeBody(lines), { tag: 'daily' }));
+      await setMeta('lastNotify', t);
+      return;
+    }
+    // 푸시를 받으면 반드시 알림을 하나 보여야 하는 브라우저 규칙: 보낼 내용이 없으면 조용히 보였다가 곧 닫음
+    await reg.showNotification('쿠폰 지갑', noticeOpts('오늘 확인할 항목이 없음', { tag: 'daily', silent: true }));
+    await new Promise(r => setTimeout(r, 4000));
+    (await reg.getNotifications({ tag: 'daily' })).forEach(n => n.close());
+  }
+
+  root.CWStore = { open, loadAll, put, remove, batch, clearAll, setMeta, getMeta, checkAndNotify, handlePush };
 })(typeof self !== 'undefined' ? self : this);

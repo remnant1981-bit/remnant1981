@@ -8,3 +8,7 @@ instance/
 # 디버그·로그 파일
 *.log
 page_source_debug.html
+
+# push-server 로컬 개발
+push-server/.dev.vars
+push-server/.wrangler/

@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
 
-  const VERSION = '1.3.0';
+  const VERSION = '1.4.0';
 
   /* ---------- 날짜 ---------- */
   const pad = n => String(n).padStart(2, '0');
@@ -235,12 +235,30 @@
     return rel === '' || !rel.includes('/') || rel.startsWith('vendor/');
   }
 
+  /* ---------- 서버 푸시: 알림이 필요한 날짜 ---------- */
+  // 서버에는 이 날짜 목록만 올림(쿠폰 이름·내용은 올리지 않음). notifyLines와 같은 기준:
+  // 쿠폰은 만료 3일 전~당일, 적립은 마감 7일 전~당일. 오늘부터 horizon일 이내만
+  const addDays = (s, n) => { const d = parse(s); d.setDate(d.getDate() + n); return toStr(d); };
+  function pushSchedule(data, t = today(), horizon = 90) {
+    const dates = new Set();
+    const add = (last, span) => {
+      for (let i = 0; i <= span; i++) {
+        const d = addDays(last, -i);
+        if (d >= t && dayDiff(t, d) <= horizon) dates.add(d);
+      }
+    };
+    for (const c of data.coupons) if (couponStatus(c, t) === 'active' && c.expires) add(c.expires, 3);
+    for (const l of data.loyalty) if (loyaltyState(l, t) === 'active' && l.deadline) add(l.deadline, 7);
+    return [...dates].sort();
+  }
+
   const CW = {
     VERSION, toStr, parse, isDate, today, dayDiff, won, wonCompact, uid,
     couponStatus, daysLeft, ddayLabel, ddayClass, loyaltyState, pace, stats, notifyLines,
     normalizeCoupon, normalizeLoyalty, normalizeBackup,
     SCAN_MODELS, DEFAULT_SCAN_MODEL, SCAN_SCHEMA, SCAN_SYSTEM, parseScan, mergeScan,
-    MAX_SHARE_IMAGES, pickShareImages, shareOriginAllowed, isOwnPath
+    MAX_SHARE_IMAGES, pickShareImages, shareOriginAllowed, isOwnPath,
+    addDays, pushSchedule
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = CW;
   else root.CW = CW;

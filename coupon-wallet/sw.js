@@ -1,7 +1,7 @@
 importScripts('logic.js', 'store.js');
 
 const CACHE = `coupon-wallet-${CW.VERSION}`;
-const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'logic.js', 'store.js', 'scan.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'logic.js', 'store.js', 'scan.js', 'push.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 const NET_TIMEOUT = 3000;
 
 self.addEventListener('install', e => {
@@ -68,6 +68,12 @@ self.addEventListener('fetch', e => {
 // 백그라운드 점검: 설치된 PWA에서 크롬이 허용하는 주기(보통 하루 1회 안팎, 보장되지 않음)로 호출됨
 self.addEventListener('periodicsync', e => {
   if (e.tag === 'expiry-check') e.waitUntil(CWStore.checkAndNotify(self.registration).catch(() => {}));
+});
+
+// 서버 푸시(내용 없는 신호): 기기 데이터로 알림을 만듦
+self.addEventListener('push', e => {
+  e.waitUntil(CWStore.handlePush(self.registration).catch(() =>
+    self.registration.showNotification('쿠폰 지갑', { body: '확인할 쿠폰이 있는지 앱을 열어 보세요', icon: 'icon-192.png', tag: 'daily' })));
 });
 
 self.addEventListener('notificationclick', e => {
