@@ -18,7 +18,7 @@ export default function manifest(): MetadataRoute.Manifest {
       { src: "/icons/maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
     shortcuts: [
-      { name: "우리 기업 공고", url: "/recommend", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
+      { name: "우리 기업 맞춤 공고", url: "/recommend", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
       { name: "공고 검색", url: "/search", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
     ],
   };

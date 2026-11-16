@@ -53,14 +53,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <nav aria-label="주 메뉴" className="order-3 -mx-1 flex w-full items-center gap-1 overflow-x-auto whitespace-nowrap px-1 text-sm sm:order-none sm:mx-0 sm:w-auto sm:px-0">
               <NavLinks items={[
                 { href: "/search", label: "공고 검색" },
-                ...(v.profile ? [{ href: "/recommend", label: "우리 기업 공고", strong: true }] : [{ href: "/recommend", label: "우리 기업 맞춤 공고", strong: true }]),
+                { href: "/recommend", label: "우리 기업 맞춤 공고", strong: true },
                 ...(v.session ? [{ href: "/my", label: "내 공고·알림", ...(v.company ? { badge: await soonBookmarkCount(v.session.user.id, v.company.id) } : { guestDeadlineBadge: true }) }, ...(v.company ? [{ href: "/pipeline", label: "진행 관리" }] : []), { href: "/company", label: "기업정보" }] : [{ href: "/my", label: "관심 공고", guestDeadlineBadge: true }]),
                 ...(v.session?.user.role === "admin" ? [{ href: "/admin", label: "관리자" }] : []),
               ]} />
             </nav>
             <div className="order-2 ml-auto flex items-center gap-3 text-sm sm:order-none">
               {v.session ? (<><span className="hidden text-[var(--muted)] sm:inline" aria-label="로그인 계정">{v.session.user.email}</span><LogoutButton /></>) : (
-                <><span className="hidden sm:inline"><span className="chip bg-gray-100 text-gray-700" title="로그인 없이 사용 중. 입력한 정보·관심 공고는 이 브라우저에만 저장됩니다.">게스트 모드</span></span><Link href="/login" className="hover:underline">로그인</Link><Link href="/register" className="btn">회원가입</Link></>
+                <><span className="hidden sm:inline"><span className="chip bg-gray-100 text-gray-700" title="로그인 없이 사용 중. 입력한 정보·관심 공고는 이 브라우저에만 저장됩니다.">게스트 모드</span></span><Link href="/login" className="inline-block px-1 py-2 hover:underline">로그인</Link><Link href="/register" className="btn">회원가입</Link></>
               )}
             </div>
           </div>

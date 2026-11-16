@@ -39,10 +39,10 @@ export default async function Home() {
       rows = head.filter((r) => r.match!.overall !== "likely_not_met").slice(0, 5);
       if (rows.length < 5 && head.length === 50) rows = (await searchWithMatches(db, { ...q, pageSize: 5, eligible: true }, v.profile)).rows;
     }
-    if (v.profile) { title = `${title} · 우리 기업 해당 가능`; more = `${more}&eligible=1`; }
+    if (v.profile) { title = `${title} · 조건 불일치 제외`; more = `${more}&eligible=1`; }
     return (
       <section aria-labelledby={id} className="mt-8">
-        <div className="mb-2 flex items-baseline justify-between"><h2 id={id} className="text-lg font-bold">{title}</h2><Link href={more} className="text-sm underline">더 보기</Link></div>
+        <div className="mb-2 flex items-baseline justify-between"><h2 id={id} className="text-lg font-bold">{title}</h2><Link href={more} className="inline-block py-2 pl-3 text-sm underline">더 보기</Link></div>
         {rows.length ? <div className="grid gap-3">{rows.map((r) => <AnnouncementCard key={r.id} r={r} canBookmark={!!v.company} stage={stages.get(r.id)} />)}</div> : <Empty title="해당하는 공고가 없습니다." />}
       </section>
     );
@@ -69,6 +69,7 @@ export default async function Home() {
               <Link href="/recommend?tab=all" className="rounded-lg border border-amber-200 bg-amber-50 p-3 hover:underline"><span className="block text-xs text-amber-900">검토 가능 전체</span><span className="text-xl font-bold text-amber-900">{c.likely_met + c.needs_check - c.insufficient}건</span></Link>
               <Link href="/search?soon=1&met=1&sort=deadline" className="rounded-lg border border-red-200 bg-red-50 p-3 hover:underline"><span className="block text-xs text-red-900">조건 충족 중 마감 7일 이내</span><span className="text-xl font-bold text-red-900">{c.soon_met}건</span></Link>
             </div>
+            {c.insufficient > 0 && <p className="mt-2 text-xs text-[var(--muted)]">이 밖에 판정할 정보가 부족한 공고 {c.insufficient}건은 아래 목록에 함께 표시됩니다. <Link href="/recommend?tab=insufficient" className="underline">기업정보를 더 입력하면</Link> 판정됩니다.</p>}
           </section>
         );
       })(v.profile)}

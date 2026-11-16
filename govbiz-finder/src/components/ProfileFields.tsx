@@ -5,8 +5,8 @@ import { SIGUNGU } from "@/domain/regions";
 import { REVENUE_BANDS, EMPLOYEE_BANDS, SIDO, ENTERPRISE_SIZES, CERTIFICATIONS, CATEGORIES, INDUSTRY_GROUPS, TECH_FIELDS } from "@/domain/taxonomy";
 
 type V = Record<string, string | null | undefined>;
-const YN: [string, string][] = [["", "미입력(확인 필요)"], ["yes", "예"], ["no", "아니오"]];
-const opt = (arr: readonly string[]): [string, string][] => [["", "미입력(확인 필요)"], ...arr.map((s): [string, string] => [s, s])];
+const YN: [string, string][] = [["", "선택 안 함"], ["yes", "예"], ["no", "아니오"]];
+const opt = (arr: readonly string[]): [string, string][] => [["", "선택 안 함"], ...arr.map((s): [string, string] => [s, s])];
 
 function Sel({ id, label, v, opts, hint }: { id: string; label: string; v?: string | null; opts: [string, string][]; hint?: string }) {
   return (
@@ -33,12 +33,12 @@ function RegionSelect({ sido, sigungu }: { sido?: string | null; sigungu?: strin
     <>
       <div><label htmlFor="region_sido" className="label">소재지(시/도)</label>
         <select id="region_sido" name="region_sido" value={sd} className="input" onChange={(e) => { setSd(e.target.value); setSg(""); }}>
-          <option value="">미입력(확인 필요)</option>{SIDO.map((s) => <option key={s} value={s}>{s}</option>)}
+          <option value="">선택 안 함</option>{SIDO.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         <p className="mt-1 text-xs text-[var(--muted)]">지역 한정 공고 판정에 가장 중요합니다.</p></div>
       <div><label htmlFor="region_sigungu" className="label">소재지(시/군/구)</label>
         <select id="region_sigungu" name="region_sigungu" value={sg} className="input" disabled={!sd} onChange={(e) => setSg(e.target.value)}>
-          <option value="">{sd ? "미입력(확인 필요)" : "시/도를 먼저 선택"}</option>
+          <option value="">{sd ? "선택 안 함" : "시/도를 먼저 선택"}</option>
           {[...extra, ...list].map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         <p className="mt-1 text-xs text-[var(--muted)]">시·군 단위 공고(예: [경기] 안성시) 판정에 사용</p></div>

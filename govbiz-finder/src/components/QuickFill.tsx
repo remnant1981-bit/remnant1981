@@ -33,9 +33,9 @@ export function QuickFill({ items, member, accuracy }: { items: QuickItem[]; mem
   }
 
   return (
-    <form onSubmit={save} className="no-print card mt-3 border-blue-200 bg-blue-50/60 p-4" aria-label="맞춤 정확도 높이기">
+    <form onSubmit={save} className="no-print card mt-3 border-blue-200 bg-blue-50/60 p-4" aria-label="판정 정확도 높이기">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-bold">🎯 맞춤 정확도 높이기 {accuracy !== null && <span className="ml-1 text-sm font-semibold text-blue-800">현재 {accuracy}%</span>}</h2>
+        <h2 className="font-bold">🎯 판정 정확도 높이기 {accuracy !== null && <span className="ml-1 text-sm font-semibold text-blue-800">현재 평균 {accuracy}%</span>}</h2>
         <span className="text-xs text-[var(--muted)]">아는 항목만 입력(모두 선택) · {member ? "기업정보에 저장" : "이 브라우저에만 저장"}</span>
       </div>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">

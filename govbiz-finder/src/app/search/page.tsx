@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getDb } from "@/server/db";
+import { ExportLinks } from "@/components/ExportLinks";
 import { listFacets, parseSearchParams, toQueryString } from "@/domain/search";
 import { searchWithMatches } from "@/server/recommend";
 import { getViewer } from "@/server/viewer";
@@ -38,13 +39,10 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       {p.metOnly && !v.profile && <div className="mt-3"><Notice tone="warn">‘조건 충족 공고만’은 우리 기업 정보가 있을 때 적용됩니다. 지금은 전체 공고를 표시합니다. <Link href="/recommend" className="underline">로그인 없이 기업정보 입력하기</Link></Notice></div>}
       {p.metOnly && v.profile && <div className="mt-3"><Notice>자동으로 확인할 수 있는 조건(지역·규모·업력·인증 등)을 모두 충족한 공고만 표시합니다. 본문의 기타 조건과 최종 자격은 원문에서 확인하세요.</Notice></div>}
       {p.eligible && !v.profile && <div className="mt-3"><Notice tone="warn">‘해당 가능한 공고만’은 우리 기업 정보가 있을 때 적용됩니다. 지금은 전체 공고를 표시합니다. <Link href="/recommend" className="underline">로그인 없이 기업정보 입력하기</Link></Notice></div>}
-      {p.eligible && v.profile && <div className="mt-3"><Notice>‘미충족 가능성 높음’ 공고를 제외했습니다. 입력하지 않은 항목이 있는 공고는 ‘확인 필요’로 남아 있으니 원문을 확인하세요.</Notice></div>}
+      {p.eligible && v.profile && <div className="mt-3"><Notice>‘조건 불일치’ 공고를 제외했습니다. 입력하지 않은 항목이 있는 공고는 ‘확인 필요’로 남아 있으니 원문을 확인하세요.</Notice></div>}
       {v.profile && p.region === "" && v.profile.region_sido && <div className="mt-3"><Notice>기업 소재지({v.profile.region_sido})의 지역 공고에는 ‘내 지역’ 표시가 붙으며, 전국 공고도 함께 표시됩니다.</Notice></div>}
       <div className="no-print mt-4 flex flex-wrap items-center gap-2 text-sm">
-        <span>현재 조건으로 내보내기:</span>
-        <a className="btn btn-ghost" href={`/api/export/xlsx?${exportQs}`}>XLSX</a>
-        <a className="btn btn-ghost" href={`/api/export/csv?${exportQs}`}>CSV</a>
-        <a className="btn btn-ghost" href={`/api/export/pdf?${exportQs}`}>PDF</a>
+        <ExportLinks qs={exportQs} />
       </div>
       <div className="mt-4 grid gap-3" aria-live="polite">
         {res.rows.length === 0 ? (

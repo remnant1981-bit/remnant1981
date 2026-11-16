@@ -14,7 +14,7 @@ import { GuestProfileClear } from "@/components/GuestProfileActions";
 import { QuickFill } from "@/components/QuickFill";
 import { pipelineStages } from "@/server/pipeline";
 
-export const metadata: Metadata = { title: "맞춤 추천", alternates: { canonical: "/recommend" } };
+export const metadata: Metadata = { title: "우리 기업 맞춤 공고", alternates: { canonical: "/recommend" } };
 
 const TABS = [
   { id: "priority", label: "우선 추천", desc: "자격 조건에 걸리는 것이 없고, 우리 기업과 관련 있다는 근거(기술·업종 일치, 관심 분야, 우리 시·군 공고 등)가 있는 공고입니다. 기술 분야·관심 분야를 선택할수록 정확해집니다." },
@@ -44,7 +44,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
     const comp = profileCompleteness(profile as unknown as Record<string, unknown>);
     return (
       <>
-        <PageTitle sub={`${v.company?.company_name ?? "우리 기업"} 기준 · 접수 중/예정/상시/상태 확인 필요 공고 대상${member ? "" : " · 이 브라우저에 저장한 정보 사용"}`}>맞춤 추천</PageTitle>
+        <PageTitle sub={`${v.company?.company_name ?? "우리 기업"} 기준 · 접수 중/예정/상시/상태 확인 필요 공고 대상${member ? "" : " · 이 브라우저에 저장한 정보 사용"}`}>우리 기업 맞춤 공고</PageTitle>
         {!member && (
           <details id="edit-profile" className="card mb-4 p-4">
             <summary className="cursor-pointer text-sm font-semibold">입력한 기업정보 수정하기</summary>
@@ -53,7 +53,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
           </details>
         )}
         <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
-          <div className="card p-4" title="자동 판정한 조건 비율 × 규칙 신뢰도의 평균(참고 지표)"><p className="text-xs text-[var(--muted)]">맞춤 정확도</p><p className="text-2xl font-bold text-blue-800">{res.accuracy === null ? "-" : `${res.accuracy}%`}</p>
+          <div className="card p-4" title="자동 판정한 조건 비율 × 규칙 신뢰도의 평균(참고 지표)"><p className="text-xs text-[var(--muted)]">평균 판정 정확도</p><p className="text-2xl font-bold text-blue-800">{res.accuracy === null ? "-" : `${res.accuracy}%`}</p>
             <div className="mt-1 h-1.5 rounded bg-gray-200" aria-hidden><div className="h-1.5 rounded bg-blue-600" style={{ width: `${res.accuracy ?? 0}%` }} /></div></div>
           <Link href="/recommend?tab=priority" className="card block p-4 hover:underline"><p className="text-xs text-[var(--muted)]">우선 추천</p><p className="text-2xl font-bold text-green-800">{c.priority.toLocaleString()}건</p>
             <p className="text-xs text-[var(--muted)]">관련성 근거 있음</p></Link>
@@ -95,7 +95,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
   }
   return (
     <>
-      <PageTitle sub="기업정보 입력은 선택입니다. 입력한 항목만으로 추천합니다.">맞춤 추천</PageTitle>
+      <PageTitle sub="기업정보 입력은 선택입니다. 입력한 항목만으로 추천합니다.">우리 기업 맞춤 공고</PageTitle>
       {v.session && v.membership !== "verified" && <div className="mb-4"><Notice tone="warn">기업 관계 확인이 완료되지 않았습니다. 아래 체험은 저장되지 않습니다. <Link className="underline" href="/company">기업 관계 확인 진행</Link></Notice></div>}
       <RecommendPanel loggedIn={!!v.session} />
     </>

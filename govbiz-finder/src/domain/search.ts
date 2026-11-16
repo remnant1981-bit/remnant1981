@@ -17,6 +17,7 @@ export interface SearchParams {
   soon: boolean;        // 마감 임박(7일)
   eligible: boolean;    // 기업정보가 있을 때 미충족 가능성 높은 공고 제외
   metOnly: boolean;     // 확인된 조건을 모두 충족한 공고만(충족 가능성 높음)
+  local?: boolean;      // 지역 선택 시 전국 공고 제외(우리 지역 공고만)
   sort: Sort;
   page: number;
   pageSize: number;
@@ -42,6 +43,7 @@ export function parseSearchParams(sp: Record<string, string | string[] | undefin
     soon: one("soon") === "1",
     eligible: one("eligible") === "1",
     metOnly: one("met") === "1",
+    local: one("local") === "1",
     sort,
     page,
     pageSize,
@@ -60,6 +62,7 @@ export function toQueryString(p: Partial<SearchParams>): string {
   if (p.soon) u.set("soon", "1");
   if (p.eligible) u.set("eligible", "1");
   if (p.metOnly) u.set("met", "1");
+  if (p.local && p.region) u.set("local", "1");
   if (p.sort && p.sort !== "latest") u.set("sort", p.sort);
   if (p.page && p.page > 1) u.set("page", String(p.page));
   return u.toString();
@@ -84,12 +87,12 @@ const SELECT = `SELECT a.id, a.title, a.organization, a.category, a.region_scope
   FROM announcements a JOIN data_sources s ON s.id=a.source_id`;
 
 /** 지역 필터: 선택 지역 공고 + 전국 공고(전국 누락 금지). 시군구 선택 시 해당 시도 전체 공고도 포함. */
-function regionClause(region: string, params: SqlValue[]): string {
+function regionClause(region: string, params: SqlValue[], local = false): string {
   if (!region) return "";
   const [sido] = region.split(" ");
   // 복수 지역 공고는 '서울특별시·경기도'처럼 중점으로 이어져 있다
   params.push(region, sido, sido + " %", sido + "·%", "%·" + sido + "%");
-  return " AND (a.region_scope='전국' OR a.region_scope=? OR a.region_scope=? OR a.region_scope LIKE ? OR a.region_scope LIKE ? OR a.region_scope LIKE ?)";
+  return " AND (" + (local ? "" : "a.region_scope='전국' OR ") + "a.region_scope=? OR a.region_scope=? OR a.region_scope LIKE ? OR a.region_scope LIKE ? OR a.region_scope LIKE ?)";
 }
 
 export function buildWhere(p: SearchParams, today: string): { where: string; params: SqlValue[] } {
@@ -108,7 +111,7 @@ export function buildWhere(p: SearchParams, today: string): { where: string; par
     where += ` AND EXISTS (SELECT 1 FROM announcement_categories ac WHERE ac.announcement_id=a.id AND ac.category_id IN (${p.category.map(() => "?").join(",")}))`;
     params.push(...p.category);
   }
-  where += regionClause(p.region, params);
+  where += regionClause(p.region, params, p.local);
   if (p.org) {
     where += " AND a.organization LIKE ? ESCAPE '\\'";
     params.push("%" + likeEsc(p.org) + "%");

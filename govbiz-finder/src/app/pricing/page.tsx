@@ -39,7 +39,7 @@ export default async function Page() {
         <p>유료 요금제는 <strong>14일 무료 체험</strong> 후 계좌이체(세금계산서 발행)로 이용할 수 있습니다. 카드 정기결제는 준비 중입니다.</p>
         <p>문의: <span className="text-[var(--muted)]">[운영자 연락처 확정 후 표시]</span></p>
         <p className="text-[var(--muted)]">기간이 끝나도 입력한 기업정보·진행 관리·메모는 유지되며, 무료 한도를 넘는 새 항목만 추가가 제한됩니다. 이용약관·환불 규정은 확정 후 게시합니다.</p>
-        <p><Link className="underline" href="/recommend">우리 기업 공고 보기</Link></p>
+        <p><Link className="underline" href="/recommend">우리 기업 맞춤 공고 보기</Link></p>
       </section>
     </>
   );

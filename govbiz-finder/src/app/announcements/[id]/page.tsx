@@ -11,7 +11,8 @@ import { ConditionCheck } from "@/components/ConditionCheck";
 import { PipelinePanel } from "@/components/PipelineControls";
 import { getPipelineItem, listMembers } from "@/server/pipeline";
 import { categoryName } from "@/domain/taxonomy";
-import { CategoryTags, FitChip, AccuracyChip, Notice, Provenance, RuleChip, StatusChip, TestBadge, BackLink } from "@/components/ui";
+import { CategoryTags, FitChip, AccuracyChip, Notice, Provenance, RuleChip, StatusChip, TestBadge } from "@/components/ui";
+import { BackToResults } from "@/components/BackToResults";
 import { BookmarkButton } from "@/components/BookmarkButton";
 import { PrintButton } from "@/components/PrintButton";
 import { seoulToday, formatSeoul } from "@/lib/time";
@@ -63,7 +64,7 @@ export default async function Detail({ params }: Props) {
   const money = a.support_amount_text || (a.support_amount_max ? `최대 ${Number(a.support_amount_max).toLocaleString()}원` : null);
   return (
     <article className="grid gap-4">
-      <BackLink href="/search">← 검색 결과로</BackLink>
+      <BackToResults>← 목록으로</BackToResults>
       <header>
         <div className="flex flex-wrap items-center gap-2">
           <StatusChip status={a.application_status} basis={a.status_basis} />
@@ -78,7 +79,7 @@ export default async function Detail({ params }: Props) {
           <PrintButton />
           <BookmarkButton announcementId={a.id} initial={bookmarked} guest={!v.company} meta={{ title: a.title, organization: a.organization, end: a.application_end }} />
         </div>
-        <div className="mt-3"><Provenance url={a.canonical_url} sourceName={a.source_name} sourceStatus={a.source_status} checkedAt={a.last_checked_at} /></div>
+        <div className="mt-3"><Provenance url={a.canonical_url} sourceName={a.source_name} sourceStatus={a.source_status} checkedAt={a.last_checked_at} link={false} /></div>
       </header>
 
       {v.company && v.session && <PipelinePanel announcementId={a.id} me={v.session.user.email} members={(await companyPlan(db, v.company.id)).limits.assignees ? await listMembers(db, v.company.id) : []} item={await getPipelineItem(db, v.company.id, a.id)} />}

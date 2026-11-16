@@ -11,7 +11,7 @@
   --radius: 14px;
 }
 html { color-scheme: light; }
-body { background: var(--bg); color: var(--ink); font-family: "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+body { background: var(--bg); color: var(--ink); font-family: "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif; -webkit-font-smoothing: antialiased; word-break: keep-all; overflow-wrap: break-word; }
 :focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
 a { text-underline-offset: 3px; }
 
@@ -61,4 +61,11 @@ details > summary.no-caret::before { content: none; display: none; }
   body { background: #fff; }
   .card { border: 1px solid #999; break-inside: avoid; }
   a[href^="http"]::after { content: " (" attr(href) ")"; font-size: .75em; word-break: break-all; }
+}
+
+/* 터치 화면: 체크박스·라디오와 그 라벨을 누르기 쉽게 */
+input[type="checkbox"], input[type="radio"] { width: 1.15rem; height: 1.15rem; flex-shrink: 0; accent-color: var(--brand); }
+@media (pointer: coarse) {
+  label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { min-height: 40px; padding-block: .35rem; }
+  summary { min-height: 40px; display: flex; align-items: center; }
 }

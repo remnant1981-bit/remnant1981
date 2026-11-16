@@ -5,9 +5,8 @@ import { formatSeoul } from "@/lib/time";
 
 export function StatusChip({ status, basis }: { status: string; basis?: string }) {
   return (
-    <span className={`chip chip-${status}`}>
+    <span className={`chip chip-${status}`} title={basis === "estimated" && status !== "unknown" && status !== "always" ? "접수 기간 날짜로 판단한 상태입니다. 정확한 상태는 공식 원문에서 확인하세요." : undefined}>
       {STATUS_LABEL[status] ?? "상태 확인 필요"}
-      {basis === "estimated" && status !== "unknown" && status !== "always" ? " (추정)" : ""}
     </span>
   );
 }
@@ -54,11 +53,11 @@ export function CategoryTags({ ids }: { ids: string | null }) {
   return <>{ids.split(",").map((id) => <span key={id} className="chip bg-[var(--brand-soft)] text-[var(--brand)]">{categoryName(id)}</span>)}</>;
 }
 
-export function Provenance({ url, sourceName, sourceStatus, checkedAt }: { url: string; sourceName: string; sourceStatus: string; checkedAt: string }) {
+export function Provenance({ url, sourceName, sourceStatus, checkedAt, link = true }: { url: string; sourceName: string; sourceStatus: string; checkedAt: string; link?: boolean }) {
   return (
     <p className="text-xs text-[var(--muted)]">
-      출처: {sourceStatus === "mock" ? "테스트(모의) 데이터" : sourceName} · 최종 확인 {formatSeoul(checkedAt)} ·{" "}
-      <a className="underline" href={url} target="_blank" rel="noopener noreferrer nofollow">공식 원문 열기</a>
+      출처: {sourceStatus === "mock" ? "테스트(모의) 데이터" : sourceName} · 최종 확인 {formatSeoul(checkedAt)}
+      {link && <>{" "}· <a className="inline-block py-2 underline" href={url} target="_blank" rel="noopener noreferrer nofollow">공식 원문 열기</a></>}
     </p>
   );
 }
@@ -73,7 +72,7 @@ export function PageTitle({ children, sub }: { children: React.ReactNode; sub?: 
 }
 
 export function BackLink({ href, children }: { href: string; children: React.ReactNode }) {
-  return <Link href={href} className="text-sm text-[var(--brand)] underline">{children}</Link>;
+  return <Link href={href} className="inline-block py-2 text-sm text-[var(--brand)] underline">{children}</Link>;
 }
 
 /** 마감 임박 강조: 3일 이내 빨강(굵게), 7일 이내 주황 */

@@ -23,13 +23,23 @@ class Writer {
   y = 0;
   constructor(private doc: PDFDocument, private reg: PDFFont, private bold: PDFFont) { this.newPage(); }
   newPage() { this.page = this.doc.addPage([PAGE.w, PAGE.h]); this.y = PAGE.h - PAGE.m; }
+  // 글자 폭 캐시(폰트별, 크기 1 기준). 줄마다 전체 폭을 다시 재면 O(n²)이라 글자 폭을 누적한다
+  private widths = new Map<PDFFont, Map<string, number>>();
+  private charWidth(font: PDFFont, ch: string): number {
+    let m = this.widths.get(font);
+    if (!m) this.widths.set(font, (m = new Map()));
+    let w = m.get(ch);
+    if (w === undefined) { w = font.widthOfTextAtSize(ch, 1); m.set(ch, w); }
+    return w;
+  }
   private wrap(text: string, font: PDFFont, size: number, maxW: number): string[] {
     const out: string[] = [];
     for (const para of text.split("\n")) {
       let line = "";
+      let width = 0;
       for (const ch of para) {
-        const t = line + ch;
-        if (font.widthOfTextAtSize(t, size) > maxW && line) { out.push(line); line = ch; } else line = t;
+        const cw = this.charWidth(font, ch) * size;
+        if (width + cw > maxW && line) { out.push(line); line = ch; width = cw; } else { line += ch; width += cw; }
       }
       out.push(line);
     }
