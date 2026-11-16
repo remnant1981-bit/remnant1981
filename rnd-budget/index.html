@@ -32,6 +32,7 @@
 </header>
 
 <main id="main" class="wrap">
+  <p class="print-head" id="printHead"></p>
   <p class="demo-note" id="demoNote" hidden></p>
   <ol class="steps" aria-label="작성 순서" data-feature="steps"><li><a href="#s0">과제 구성</a></li><li><a href="#s1">기관·정부출연금</a></li><li><a href="#s2">인건비</a></li><li><a href="#s3">비목 편성</a></li><li><a href="#s4">점검</a></li><li><a href="#s5">총괄표·엑셀</a></li></ol>
 
@@ -55,9 +56,9 @@
     </details>
   </section>
 
-  <div class="modebar" id="modeBar" role="tablist" aria-label="화면 전환" data-feature="execution">
-    <button type="button" class="chip on" role="tab" data-mode="plan" aria-selected="true">편성</button>
-    <button type="button" class="chip" role="tab" data-mode="exec" aria-selected="false">집행</button>
+  <div class="modebar" id="modeBar" role="group" aria-label="화면 전환" data-feature="execution">
+    <button type="button" class="chip on" data-mode="plan" aria-pressed="true">편성</button>
+    <button type="button" class="chip" data-mode="exec" aria-pressed="false">집행</button>
   </div>
 
   <nav class="edit-bar" id="editBar" aria-label="편집할 기관·연차">
@@ -68,10 +69,10 @@
   <div class="layout" id="planView">
     <div class="col-main">
   <section class="card" id="s1" aria-labelledby="h-fund">
-    <h2 id="h-fund"><span class="no">1</span>기관 유형과 정부출연금 <span class="cur" id="curLabel"></span></h2>
+    <h2 id="h-fund" tabindex="-1"><span class="no">1</span>기관 유형과 정부출연금 <span class="cur" id="curLabel"></span></h2>
     <div class="grid3">
       <label>기관 유형<select id="ruleset"></select></label>
-      <label>정부출연금(천원)<input id="gov" inputmode="numeric" placeholder="예: 300,000" autocomplete="off" maxlength="15"></label>
+      <label>정부출연금(천원)<input id="gov" inputmode="numeric" placeholder="예: 300,000 (= 3억 원)" autocomplete="off" maxlength="18" aria-describedby="govWon"><small class="won" id="govWon" aria-live="polite"></small></label>
       <label>과제명(선택)<input id="title" maxlength="80" placeholder="예: 액체수소 펌프 개발"></label>
     </div>
     <details class="rulebox" id="ruleBox">
@@ -81,14 +82,14 @@
           <tr><th scope="row">정부지원 비율 상한</th><td><input id="govMaxPct" inputmode="decimal" aria-label="정부지원 비율 상한(%)"><span class="unit">% 이하</span></td><td class="basis" data-basis="gov"></td></tr>
           <tr><th scope="row">기관부담금 중 현금</th><td><input id="cashMinPct" inputmode="decimal" aria-label="기관부담금 중 현금 최소 비율(%)"><span class="unit">% 이상</span></td><td class="basis" data-basis="cash"></td></tr>
           <tr><th scope="row">간접비율</th><td><input id="indirectPct" inputmode="decimal" aria-label="간접비율(%)"><span class="unit">%</span></td><td class="basis" data-basis="indirect"></td></tr>
-          <tr><th scope="row">연구수당 한도</th><td><input id="allowanceMaxPct" inputmode="decimal" aria-label="연구수당 한도(인건비의 %)"><span class="unit">% 이내</span></td><td class="basis">사용 기준 제26조①: 수정인건비의 20% 이내</td></tr>
-          <tr><th scope="row">위탁연구개발비</th><td><span class="fixed" id="outsourceFixed">40</span><span class="unit">% 이하</span></td><td class="basis">사용 기준 제27조①: (직접비 − 위탁)의 40% 이하</td></tr>
+          <tr><th scope="row">연구수당 한도</th><td><input id="allowanceMaxPct" inputmode="decimal" aria-label="연구수당 한도(인건비의 %)"><span class="unit">% 이내</span></td><td class="basis" id="allowanceBasis">사용 기준 제26조①: 수정인건비의 20% 이내</td></tr>
+          <tr><th scope="row">위탁연구개발비</th><td><input id="outsourceMaxPct" inputmode="decimal" aria-label="위탁연구개발비 한도(%)"><span class="unit">% 이하</span></td><td class="basis" id="outsourceBasis">사용 기준 제27조①: (직접비 − 위탁)의 40% 이하</td></tr>
         </tbody>
       </table>
       <p class="hint" id="ruleHint"></p>
     </details>
     <div class="import" data-feature="noticeImport">
-      <label class="dropzone" id="noticeDrop">
+      <label class="dropzone" id="noticeDrop" tabindex="0" role="button" data-filebtn>
         <input type="file" id="noticeFile" accept=".hwp,.hwpx,.pdf,.txt" hidden>
         <strong>📄 공고문에서 기준 가져오기 <span class="badge">베타</span></strong>
         <span>HWP·HWPX·PDF 파일을 끌어다 놓거나 눌러서 선택 — 파일은 이 PC 안에서만 읽고 외부로 보내지 않습니다.</span>
@@ -98,7 +99,7 @@
     <dl class="kpis" id="funding" aria-live="polite"></dl>
     <details class="guide"><summary>작성 가이드</summary>
       <ul>
-        <li><strong>정부출연금</strong>은 공고문의 "정부지원연구개발비(연간)" 금액을 천원 단위로 넣습니다. 최소 총사업비 = 정부출연금 ÷ 정부지원 비율 상한.</li>
+        <li><strong>정부출연금</strong>(= 정부지원연구개발비)은 공고문의 연간 금액을 <strong>천원 단위</strong>로 넣습니다(3억 원 → 300,000). ‘3억’, ‘5천만’, ‘300000000원’처럼 써도 천원으로 바꿔 줍니다. 최소 총사업비 = 정부출연금 ÷ 정부지원 비율 상한.</li>
         <li><strong>기관부담금</strong> = 총사업비 − 정부출연금. 이 중 정해진 비율 이상은 <strong>현금</strong>, 나머지는 현물(기존 인력 인건비·보유 장비·재료 등)로 낼 수 있습니다. 현물 비중 상한은 따로 없고 현금 최소 비율이 사실상 상한입니다.</li>
         <li><strong>중견기업</strong>은 평균매출액등 3천억 원 미만이면 현금 10%, 이상이면 13%(시행령 별표 1 제2호 나·다목).</li>
         <li>사업 공고나 부처 운영요령에서 비율을 달리 정했으면 기관 유형에서 <strong>공고문 기준 직접 입력</strong>을 고르세요(부처는 과기정통부 협의로 지원 비율을 높이거나 현금 비율을 낮출 수 있음).</li>
@@ -117,7 +118,8 @@
     <button type="button" class="btn ghost" id="addPerson">＋ 연구원 추가</button>
     <details class="guide"><summary>작성 가이드</summary>
       <ul>
-        <li>인건비 = 연봉 ÷ 12 × 참여개월 × 참여율. 연봉에서 연구수당·능률성과급은 뺍니다(사용 기준 제65조).</li>
+        <li>표 안에서는 <kbd>Enter</kbd>·<kbd>↓</kbd>로 아래 칸, <kbd>↑</kbd>로 위 칸으로 이동합니다.</li>
+        <li>인건비 = 연봉 ÷ 12 × 참여개월 × 참여율(천원 미만 반올림). 연봉에서 연구수당·능률성과급은 뺍니다(사용 기준 제65조).</li>
         <li>인건비를 <strong>현금</strong>으로 넣을 수 있는 경우는 정해져 있습니다: 중소·중견기업의 <strong>신규 채용</strong> 인력(채용일부터 공고일까지 6개월 이내 포함), 부처가 인정한 인력 등(사용 기준 제65조④). 그 밖의 <strong>기존 인력</strong>은 <strong>현물</strong>로 넣습니다.</li>
         <li>연봉에는 4대 보험 기관부담금과 퇴직급여충당금을 포함할 수 있습니다(사용 기준 제6조).</li>
         <li>영리기관 연구자의 <strong>총 참여율은 월 100% 이하</strong>(제65조⑦). 다른 과제 참여율을 함께 넣으면 초과 여부를 확인합니다.</li>
@@ -177,8 +179,11 @@
     <div class="actions sub-actions">
       <button type="button" class="btn ghost sm" id="print">인쇄·PDF</button>
       <button type="button" class="btn ghost sm" id="saveScenario" data-feature="scenarios">현재 안 저장</button>
+      <button type="button" class="btn ghost sm" id="backupSave2">백업 저장</button>
+      <label class="btn ghost sm" tabindex="0" role="button" data-filebtn>백업 불러오기<input type="file" id="backupLoad2" accept=".json,application/json" hidden></label>
       <button type="button" class="btn ghost sm" id="reset">새로 작성</button>
     </div>
+    <p class="save-status" id="saveStatus" role="status"></p>
     <ul id="scenarios" class="scenarios" data-feature="scenarios"></ul>
   </section>
     </aside>
@@ -225,7 +230,7 @@
         <div class="actions">
           <button type="button" class="btn" id="xXlsx">집행 현황 엑셀</button>
           <button type="button" class="btn ghost" id="backupSave">백업 저장</button>
-          <label class="btn ghost" id="backupLoadBtn">백업 불러오기<input type="file" id="backupLoad" accept=".json,application/json" hidden></label>
+          <label class="btn ghost" id="backupLoadBtn" tabindex="0" role="button" data-filebtn>백업 불러오기<input type="file" id="backupLoad" accept=".json,application/json" hidden></label>
         </div>
         <p class="dl-toast" id="xToast" role="status" hidden></p>
         <p class="hint">집행 기록은 이 브라우저에만 저장됩니다. 브라우저 정리·PC 교체 전에 <strong>백업 저장</strong>하세요.</p>
@@ -257,11 +262,15 @@
     <details data-cat="비목"><summary>부가세도 사업비에 넣나요?</summary><p>환급받을 수 있는 부가가치세·관세는 연구개발비로 계상할 수 없습니다. 같은 비용을 현금과 현물로 중복 계상하는 것도 안 됩니다. <small class="cite">근거: 사용 기준 제21조④</small></p></details>
     <details data-cat="집행"><summary>기관부담 현금은 언제까지 내야 하나요?</summary><p>협약에서 정한 기한까지, 정하지 않았으면 연도별 연구개발기간 종료 3개월 전까지 냅니다. 내지 않으면 정부지원금 지급이 중지될 수 있습니다. <small class="cite">근거: 사용 기준 제60조②, 시행령 제19조⑤</small></p></details>
     <details data-cat="집행"><summary>집행 중 비목 금액을 바꿀 수 있나요?</summary><p>가능하지만 비목·금액에 따라 전문기관 사전 승인이 필요합니다(예: 위탁연구개발비 20% 이상 증액, 연구수당 증액, 3천만 원 이상 장비 신규 구입). 사업별 운영요령을 확인하세요. <small class="cite">근거: 사용 기준 제73조</small></p></details>
-    <details data-cat="도구"><summary>입력한 내용은 어디에 저장되나요?</summary><p>이 브라우저에만 저장되고 서버로 보내지 않습니다. 브라우저를 정리하거나 PC를 바꾸기 전에는 집행 화면의 '백업 저장'으로 파일을 받아 두세요.</p></details>
+    <details data-cat="도구"><summary>입력한 내용은 어디에 저장되나요?</summary><p>이 브라우저에만 저장되고 서버로 보내지 않습니다. 브라우저를 정리하거나 PC를 바꾸기 전에는 '백업 저장'으로 파일을 받아 두세요. 다른 PC에서는 '백업 불러오기'로 이어서 작업할 수 있습니다.</p></details>
     <details data-cat="도구"><summary>공고문을 올리면 파일이 외부로 전송되나요?</summary><p>아니요. 파일은 이 PC의 브라우저 안에서만 읽습니다. 찾은 값은 근거 문장과 함께 보여 주고, 확인한 항목만 적용합니다.</p></details>
     <details data-cat="도구"><summary>내려받은 엑셀을 고쳐도 되나요?</summary><p>네. 합계·비율은 수식으로 들어가 있어 금액을 바꾸면 자동으로 다시 계산됩니다. 정부지원·기관 현금 구분은 비례 배분한 값이니 계획서에 맞춰 조정하세요.</p></details>
     <details data-cat="인건비"><summary>인건비에 4대 보험과 퇴직금도 포함되나요?</summary><p>네. 인건비에는 급여(4대 보험 본인부담금 포함)와 4대 보험 기관부담금, 퇴직급여충당금이 포함됩니다. 연봉 칸에 이를 포함한 금액을 넣으세요. <small class="cite">근거: 사용 기준 제6조</small></p></details>
     <details data-cat="기본"><summary>2027년에 바뀌는 기준이 있나요?</summary><p>연구개발비 사용 기준 개정안이 행정예고되어 있습니다(2026.10.15., 시행 예정 2027.1.1., 확정 전). 예고안 기준으로 장비 구입 완료 시기가 종료 2개월 전에서 6개월 전으로, 연구수당은 개인별 인건비 총액의 100% 이내 조건이 추가됩니다. 정부지원·현금 부담 비율은 변동이 없습니다. 확정되면 이 도구에 반영합니다. <small class="cite">근거: 과기정통부 공고 제2026-1017호(행정예고)</small></p></details>
+    <details data-cat="기본" data-kw="용어 뜻 정부지원연구개발비 정부지원금 민간부담금 수정직접비 수정인건비 총연구개발비"><summary>용어가 헷갈려요(정부출연금·기관부담금·현금·현물·수정직접비)</summary><p><strong>정부출연금</strong> = 정부지원연구개발비(정부가 주는 돈). <strong>기관부담금</strong> = 기관부담연구개발비(예전 '민간부담금', 기관이 내는 몫). <strong>총사업비</strong> = 둘의 합(총연구개발비). <strong>현금</strong>은 실제 계좌에 넣어 쓰는 돈, <strong>현물</strong>은 이미 가진 인력·장비·재료를 금액으로 환산해 인정받는 것. <strong>수정직접비</strong> = 직접비 − 현물 − 위탁연구개발비(간접비 계산 기준), <strong>수정인건비</strong> = 인건비(현물 포함) + 학생인건비(연구수당 한도 기준).</p></details>
+    <details data-cat="도구" data-kw="원 단위 억 만 반올림 올림 절사 천원 미만"><summary>금액 단위와 반올림은 어떻게 처리하나요?</summary><p>모든 금액은 <strong>천원</strong> 단위입니다(3억 원 → 300,000). '3억', '5천만', '300000000원'처럼 입력하면 천원으로 바꿔 줍니다. 인건비·간접비는 천원 미만 반올림, 최소 총사업비·최소 현금은 기준을 넘지 않도록 올림으로 계산합니다. 계획서 시스템과 1천 원 차이가 나면 그쪽 값에 맞춰 엑셀에서 조정하세요.</p></details>
+    <details data-cat="도구" data-kw="실수 취소 undo 복구 지움 삭제"><summary>잘못 눌러서 내용이 바뀌었어요. 되돌릴 수 있나요?</summary><p>예시 불러오기·새로 작성·도우미 초안·자동 고치기·삭제 직후에는 화면 아래에 <strong>되돌리기</strong> 버튼이 잠시 나타납니다. 중요한 편성은 '백업 저장'으로 파일을 받아 두면 언제든 복원할 수 있습니다.</p></details>
+    <details data-cat="기본" data-kw="대학 출연연 비영리 자체 부담 초과"><summary>대학·비영리기관인데 총사업비가 정부출연금보다 크게 나와요</summary><p>비영리기관은 기관부담 의무가 없어 보통 총사업비 = 정부출연금으로 편성합니다. 직접비(현금)에 간접비가 자동으로 더해지므로, 직접비를 '정부출연금 ÷ (1 + 간접비율)' 이하로 잡으면 맞습니다. 점검란의 안내 금액을 참고하세요.</p></details>
     <p class="hint" id="faqEmpty" hidden>검색 결과가 없습니다. 다른 단어로 찾아보세요.</p>
     <p class="hint">법령 기준일 2026-11-16. 사업별 공고문·운영요령이 우선합니다.</p>
   </section>
@@ -272,15 +281,15 @@
 <dialog id="helperDlg" class="helper" aria-labelledby="hd-t">
   <form id="helperForm" onsubmit="return false">
     <h2 id="hd-t">편성 도우미 <span class="badge">처음 편성용</span></h2>
-    <p class="hint">몇 가지만 답하면 법령 기준에 맞는 편성 초안을 만들어 드립니다. 모르는 칸은 비워 두세요(0으로 계산).</p>
+    <p class="hint">몇 가지만 답하면 법령 기준에 맞는 편성 초안을 만들어 드립니다. 금액은 천원 단위(‘3억’처럼 써도 됨), 모르는 칸은 비워 두세요(0으로 계산).</p>
     <fieldset><legend>1. 기관·금액</legend>
       <div class="grid2"><label>기관 유형<select id="hdRuleset"></select></label><label>연간 정부출연금(천원)<input id="hdGov" inputmode="numeric" placeholder="예: 300,000" required maxlength="15"></label></div></fieldset>
-    <fieldset><legend>2. 기존 인력(현물)</legend>
+    <fieldset><legend id="hdLegEx">2. 기존 인력(현물)</legend>
       <div class="grid3"><label>인원(명)<input id="hdExN" inputmode="numeric" placeholder="예: 3"></label><label>평균 연봉(천원)<input id="hdExSal" inputmode="numeric" placeholder="예: 60,000"></label><label>평균 참여율(%)<input id="hdExRate" inputmode="numeric" placeholder="예: 40"></label></div></fieldset>
-    <fieldset><legend>3. 신규 채용(현금)</legend>
+    <fieldset><legend id="hdLegHi">3. 신규 채용(현금)</legend>
       <div class="grid3"><label>인원(명)<input id="hdHiN" inputmode="numeric" placeholder="예: 1"></label><label>연봉(천원)<input id="hdHiSal" inputmode="numeric" placeholder="예: 42,000"></label><label>참여개월<input id="hdHiM" inputmode="numeric" placeholder="예: 10"></label></div></fieldset>
     <fieldset><legend>4. 장비·위탁</legend>
-      <div class="grid3"><label>장비 구입(현금, 천원)<input id="hdEq" inputmode="numeric" placeholder="없으면 비움"></label><label>보유 장비 활용(현물, 천원)<input id="hdEqIn" inputmode="numeric" placeholder="구입가의 20% 이내"></label><label>위탁연구개발비(천원)<input id="hdOut" inputmode="numeric" placeholder="없으면 비움"></label></div></fieldset>
+      <div class="grid3"><label>장비 구입(현금, 천원)<input id="hdEq" inputmode="numeric" placeholder="없으면 비움"></label><label id="hdEqInBox">보유 장비 활용(현물, 천원)<input id="hdEqIn" inputmode="numeric" placeholder="구입가의 20% 이내"></label><label id="hdStuBox" hidden>학생인건비(천원)<input id="hdStu" inputmode="numeric" placeholder="없으면 비움"></label><label>위탁연구개발비(천원)<input id="hdOut" inputmode="numeric" placeholder="없으면 비움"></label></div></fieldset>
     <div id="hdPreview" class="hd-preview" aria-live="polite"></div>
     <div class="actions">
       <button type="button" class="btn" id="hdMake">초안 만들기</button>
@@ -296,6 +305,8 @@
     <div class="actions"><button type="button" class="btn" id="askOk">확인</button><button type="button" class="btn ghost" id="askCancel">취소</button></div>
   </div>
 </dialog>
+<div class="undo-bar" id="undoBar" role="status" hidden><span id="undoMsg"></span><button type="button" class="btn sm" id="undoBtn">되돌리기</button><button type="button" class="icon" id="undoClose" aria-label="닫기">✕</button></div>
+<a class="m-bar" id="mBar" href="#s4"><b></b><span></span></a>
 <script src="config.js"></script>
 <script src="logic.js"></script>
 <script src="notice.js"></script>

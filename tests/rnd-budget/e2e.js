@@ -31,7 +31,7 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   // ① 기본 설정(1단계 공개 범위): 꺼진 기능은 숨김
   await p.goto(base);
   check('기본: 과제 구성·안 저장·단계 메뉴 숨김, Q&A 표시', (await p.locator('#s0').isHidden()) && (await p.locator('#saveScenario').isHidden()) && (await p.locator('.faq').isVisible()) && (await p.locator('.steps').isHidden()));
-  check('Q&A 23개', (await p.locator('#faq details').count()) === 23);
+  check('Q&A 27개', (await p.locator('#faq details').count()) === 27);
   await p.fill('#faqSearch', '현물');
   const shownQ = await p.locator('#faq details:not([hidden])').count();
   check('Q&A 검색(현물)', shownQ >= 3 && shownQ < 23 && (await p.locator('#faq details:not([hidden])').first().getAttribute('open')) !== null, String(shownQ));
@@ -226,7 +226,7 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   await n.getByLabel('연구수당 한도 적용').uncheck();
   await n.click('#noticeResult >> text=선택 항목 적용');
   check('적용: 공고문 기준·값 반영', (await n.inputValue('#ruleset')) === 'custom' && (await n.inputValue('#govMaxPct')) === '70' && (await n.inputValue('#cashMinPct')) === '13' && (await n.inputValue('#indirectPct')) === '0' && (await n.inputValue('#gov')) === '300,000');
-  check('적용: 위탁 20%·연구수당 유지 20%·출처 표시', (await n.textContent('#outsourceFixed')) === '20' && (await n.inputValue('#allowanceMaxPct')) === '20' && (await n.textContent('#ruleHint')).includes('출처: notice-rnd.txt'));
+  check('적용: 위탁 20%·연구수당 유지 20%·출처 표시', (await n.inputValue("#outsourceMaxPct")) === '20' && (await n.inputValue('#allowanceMaxPct')) === '20' && (await n.textContent('#ruleHint')).includes('출처: notice-rnd.txt'));
   check('적용 후 최소 총사업비(70%)', (await n.textContent('#funding')).includes('428,572천원'));
   // HWPX
   const zlib = require('zlib');
@@ -275,7 +275,7 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   check('도우미: 초안 미리보기 기준 충족', (await h.textContent('#hdPreview')).includes('초안이 법령 기준을 충족') && (await h.textContent('#hdPreview')).includes('400,000천원'));
   await h.click('#hdApply');
   check('도우미: 초안 반영(오류 0·인원 4명)', (await h.locator('#helperDlg').isHidden()) && (await h.inputValue('#gov')) === '300,000' && (await h.locator('#people tbody tr').count()) === 4 && (await h.locator('#checks .error').count()) === 0);
-  check('다운로드: 점검 통과 표시·시트 목록', (await h.textContent('#dlStatus')).includes('점검 통과') && (await h.locator('#dlSheets li').count()) === 4 && !(await h.isDisabled('#xlsx')));
+  check('다운로드: 점검 통과 표시·시트 목록', (await h.textContent('#dlStatus')).includes('점검 통과') && (await h.locator('#dlSheets li').count()) === 5 && !(await h.isDisabled('#xlsx')));
   await h.fill('#xlsxName', '우리과제_초안');
   const [hd] = await Promise.all([h.waitForEvent('download'), h.click('#xlsx')]);
   check('다운로드: 파일 이름 반영·완료 안내', hd.suggestedFilename() === '우리과제_초안.xlsx' && (await h.textContent('#dlToast')).includes('다운로드됨'), hd.suggestedFilename());
@@ -284,7 +284,7 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   await h.click('[data-example="error"]'); await h.waitForLoadState();
   check('오류 예시: 고치기 버튼 표시', (await h.locator('#checks .fix').count()) >= 4 && (await h.textContent('#fixAll')).includes('한 번에'));
   await h.click('#fixAll');
-  check('한 번에 고치기 → 오류 0', (await h.locator('#checks .error').count()) === 0 && (await h.locator('#fixAll').isHidden()) && (await h.textContent('#dlToast')).includes('모두 고쳤'));
+  check('한 번에 고치기 → 오류 0', (await h.locator('#checks .error').count()) === 0 && (await h.locator('#fixAll').isHidden()) && (await h.textContent('#undoMsg')).includes('모두 고쳤'));
   await h.click('[data-example="error"]'); await h.waitForLoadState();
   check('다운로드: 오류 경고', (await h.textContent('#dlStatus')).includes('점검 오류'));
   let clicks = 0; for (let k = 0; k < 15 && (await h.locator('#checks .fix').count()); k++, clicks++) await h.locator('#checks .fix').first().click();
@@ -355,6 +355,94 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   await r.waitForTimeout(400); await r.reload(); await r.waitForTimeout(300);
   check('[회귀] 손상 백업 후에도 앱 정상(새로고침)', rerr.length === 0 && ((await r.locator('#planView').isVisible()) || (await r.locator('#execView').isVisible())), rerr.join('|'));
   await rc.close();
+
+  // ⑧ 사용자 100명 검토 반영
+  const uc = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+  const u = await uc.newPage(); u.on('pageerror', (e) => errors.push('u:' + e.message));
+  await u.goto(base); await u.waitForLoadState();
+  await u.fill('#gov', '3억'); await u.locator('#gov').blur();
+  check('[검토] ‘3억’ 입력 → 300,000천원 환산·원 단위 표시', (await u.inputValue('#gov')) === '300,000' && (await u.textContent('#govWon')).includes('3억 원'), await u.inputValue('#gov'));
+  check('[검토] 비목 편성 전에는 다운로드 잠금·‘편성 전’ 표시', (await u.isDisabled('#xlsx')) && (await u.textContent('#live')).includes('편성 전') && (await u.textContent('#dlStatus')).includes('비목을 편성'));
+  await u.fill('#gov', '300000000');
+  check('[검토] 원 단위 입력 의심 경고·고치기 버튼', (await u.textContent('#checks')).includes('3,000억 원') && (await u.locator('#checks .fix').filter({ hasText: '천원 단위로 바꾸기' }).count()) === 1);
+  await u.locator('#checks .fix').filter({ hasText: '천원 단위로 바꾸기' }).click();
+  check('[검토] ÷1,000 고치기 → 300,000', (await u.inputValue('#gov')) === '300,000');
+  await u.click('#undoBtn');
+  check('[검토] 되돌리기 → 직전 값 복원', (await u.inputValue('#gov')) === '300,000,000' && (await u.locator('#undoBar').isHidden()));
+  await u.fill('#gov', '300000');
+  // 커서 위치 유지: 가운데에 숫자 삽입
+  await u.locator('#gov').focus(); await u.evaluate(() => document.getElementById('gov').setSelectionRange(1, 1)); await u.keyboard.type('5');
+  check('[검토] 금액 중간 수정 시 커서 유지', (await u.inputValue('#gov')) === '3,500,000' && (await u.evaluate(() => document.getElementById('gov').selectionStart)) === 3, await u.inputValue('#gov'));
+  await u.fill('#gov', '300000');
+  // 표 안 Enter 이동
+  await u.click('#addPerson'); await u.click('#addPerson');
+  await u.getByLabel('연구원 1 연봉(천원)').fill('6천만'); await u.keyboard.press('Enter');
+  check('[검토] Enter → 아래 행 같은 열·‘6천만’ 환산', (await u.evaluate(() => document.activeElement.getAttribute('aria-label'))) === '연구원 2 연봉(천원)' && (await u.getByLabel('연구원 1 연봉(천원)').inputValue()) === '60,000');
+  await u.getByLabel('연구원 1 삭제').click();
+  check('[검토] 연구원 삭제 → 되돌리기 제공·포커스 이동', (await u.locator('#undoBar').isVisible()) && (await u.evaluate(() => document.activeElement.id)) === 'addPerson');
+  await u.click('#undoBtn');
+  check('[검토] 삭제 되돌리기', (await u.locator('#people tbody tr').count()) >= 2 && (await u.getByLabel('연구원 1 연봉(천원)').inputValue()) === '60,000');
+  // 직접 입력: 위탁 한도 수정·유형 왕복 시 입력값 기억
+  await u.selectOption('#ruleset', 'custom'); await u.fill('#govMaxPct', '65'); await u.fill('#outsourceMaxPct', '30');
+  check('[검토] 직접 입력: 요약 즉시 갱신·위탁 한도 수정 가능', (await u.textContent('#ruleSummary')).includes('65%') && !(await u.evaluate(() => document.getElementById('outsourceMaxPct').readOnly)));
+  await u.selectOption('#ruleset', 'sme');
+  check('[검토] 법령 기준 복귀 시 위탁 한도 40 고정', (await u.inputValue('#outsourceMaxPct')) === '40' && (await u.evaluate(() => document.getElementById('outsourceMaxPct').readOnly)));
+  await u.selectOption('#ruleset', 'custom');
+  check('[검토] 직접 입력 재선택 → 입력해 둔 비율 복원', (await u.inputValue('#govMaxPct')) === '65' && (await u.inputValue('#outsourceMaxPct')) === '30');
+  // 비영리: 구분 문구·초과 편성 안내
+  await u.selectOption('#ruleset', 'univ');
+  await u.getByLabel('연구재료비 현금(천원)').fill('300000');
+  check('[검토] 비영리: 출연금 초과분 자체 부담 안내', (await u.textContent('#checks')).includes('자체 부담'));
+  await u.click('#addPerson');
+  check('[검토] 비영리: 인건비 구분 ‘현금(정부출연금)’', (await u.locator('#people tbody tr:last-child select').textContent()).includes('현금(정부출연금)'));
+  // 편성 화면 백업·저장 상태
+  const [bk] = await Promise.all([u.waitForEvent('download'), u.click('#backupSave2')]);
+  check('[검토] 편성 화면에서 백업 저장·자동 저장 표시', bk.suggestedFilename().endsWith('.json') && (await u.textContent('#saveStatus')).includes('자동 저장됨') && (await u.textContent('#dlToast')).includes('백업 저장됨'));
+  const bkPath = await bk.path();
+  await u.click('#reset');
+  check('[검토] 새로 작성 → 되돌리기 제공', (await u.inputValue('#gov')) === '' && (await u.locator('#undoBar').isVisible()));
+  await u.setInputFiles('#backupLoad2', bkPath); await u.waitForTimeout(300);
+  check('[검토] 편성 화면에서 백업 불러오기(화면 유지)', (await u.inputValue('#gov')) === '300,000' && (await u.locator('#planView').isVisible()));
+  // 예시를 고친 뒤 다른 예시: 수정 표시(dirty)
+  await u.click('[data-example="ok"]'); await u.waitForTimeout(100);
+  check('[검토] 예시 직후 수정 전', (await u.evaluate(() => JSON.parse(localStorage.getItem('rb.cur')).dirty)) === false);
+  await u.fill('#gov', '250000');
+  check('[검토] 예시 수정 → 수정됨 표시(덮어쓰기 전 확인 대상)', (await u.evaluate(() => JSON.parse(localStorage.getItem('rb.cur')).dirty)) === true);
+  // 도우미: Enter로 초안·비영리 문구
+  await u.click('#helperOpen'); await u.selectOption('#hdRuleset', 'univ');
+  check('[검토] 도우미 비영리 문구·학생인건비 칸', (await u.textContent('#hdLegEx')).includes('정부출연금') && (await u.locator('#hdStuBox').isVisible()) && (await u.locator('#hdEqInBox').isHidden()));
+  await u.fill('#hdGov', '2억'); await u.keyboard.press('Enter');
+  check('[검토] 도우미 Enter → 초안 미리보기', (await u.locator('#hdApply').isVisible()) && (await u.textContent('#hdPreview')).includes('200,000천원'));
+  await u.click('#hdClose');
+  // 키보드: 파일 버튼·모드 버튼
+  check('[검토] 파일 버튼 키보드 접근·모드 버튼 aria-pressed', (await u.locator('label[data-filebtn][tabindex="0"]').count()) === 3 && (await u.getAttribute('#modeBar [data-mode="plan"]', 'aria-pressed')) === 'true');
+  // 집행: 종료일 오류·시작일 이동·월 수
+  await u.click('#modeBar [data-mode="exec"]');
+  await u.fill('#xStart', '2026-04-01'); await u.fill('#xEnd', '2026-12-31');
+  check('[검토] 집행: 연차 기간만큼 월 표시(9개월)', (await u.locator('#xGrid thead th').count()) === 11);
+  await u.locator('#xGrid tbody tr').first().locator('input').nth(1).fill('5000'); // 26.05
+  await u.fill('#xStart', '2026-05-01');
+  check('[검토] 집행: 시작일 변경 → 금액이 같은 달로 이동', (await u.locator('#xGrid tbody tr').first().locator('input').nth(0).inputValue()) === '5,000' && (await u.locator('#undoBar').isVisible()));
+  await u.fill('#xEnd', '2026-03-01');
+  check('[검토] 집행: 종료일이 시작일보다 빠르면 오류', (await u.textContent('#xChecks')).includes('빠릅니다'));
+  // 인쇄 머리글
+  await u.click('#modeBar [data-mode="plan"]');
+  await u.emulateMedia({ media: 'print' }); await u.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
+  check('[검토] 인쇄: 머리글(과제명·기준일)·버튼 숨김·적용 기준 펼침', (await u.textContent('#printHead')).includes('법령 기준일') && (await u.locator('#printHead').isVisible()) && (await u.locator('#xlsx').isHidden()) && (await u.evaluate(() => document.getElementById('ruleBox').open)));
+  await u.evaluate(() => window.dispatchEvent(new Event('afterprint'))); await u.emulateMedia({ media: 'screen' });
+  // Q&A 검색 키워드
+  await u.fill('#faqSearch', 'undo');
+  check('[검토] Q&A 검색 키워드(undo → 되돌리기)', (await u.locator('#faq details:not([hidden])').count()) === 1);
+  // 엑셀 점검 시트
+  check('[검토] 시트 목록에 점검 결과', (await u.textContent('#dlSheets')).includes('점검 결과'));
+  await uc.close();
+  // 모바일 하단 요약 막대
+  const mc = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const m = await mc.newPage(); m.on('pageerror', (e) => errors.push('m:' + e.message));
+  await m.goto(base); await m.click('[data-example="error"]'); await m.waitForTimeout(150);
+  check('[검토] 모바일: 하단 요약 막대(총사업비·오류)·가로 넘침 없음', (await m.locator('#mBar').isVisible()) && (await m.textContent('#mBar')).includes('오류') && (await m.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)));
+  check('[검토] 모바일: 입력 글자 16px(확대 방지)', (await m.evaluate(() => getComputedStyle(document.getElementById('gov')).fontSize)) === '16px');
+  await mc.close();
 
   check('콘솔·스크립트 오류 없음', errors.length === 0, errors.join(' | '));
   await browser.close(); server.close();
