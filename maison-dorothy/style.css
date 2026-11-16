@@ -243,7 +243,7 @@ details p{padding:0 0 18px;color:var(--ink-2);font-size:14.5px}
 .bline small{display:block;color:var(--ink-3);font-size:12.5px;margin-top:2px}
 .bline .pr{font-size:13.5px;font-variant-numeric:tabular-nums;text-align:right}
 .qty{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;margin-top:10px}
-.qty button{width:40px;height:36px;border:0;background:none;color:var(--ink);font-size:16px;cursor:pointer;line-height:1}
+.qty button{width:44px;height:44px;border:0;background:none;color:var(--ink);font-size:16px;cursor:pointer;line-height:1}
 .qty span{min-width:20px;text-align:center;font-size:13px;font-variant-numeric:tabular-nums}
 form{display:grid;gap:14px;padding-top:8px}
 .f{display:grid;gap:6px;border:0;margin:0;padding:0;min-width:0}

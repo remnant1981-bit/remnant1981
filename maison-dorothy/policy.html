@@ -178,11 +178,12 @@
     var set = function (sel, v) { document.querySelectorAll(sel).forEach(function (el) { el.textContent = v; }); };
     set('[data-addr]', S.address);
     set('[data-ship2]', '(' + window.DLogic.won(C.shipping.fee * 2) + ')');
-    set('[data-officer]', P.officer || '');
-    set('[data-contact]', P.contact || S.phone || '');
-    set('[data-email]', P.email || '');
-    set('[data-effective]', P.effective || '');
-    set('#biz', S.business);
+    var B = window.DLogic.isBlank, v = function (x, alt) { return B(x) ? alt : x; };   // 안 채운 예시 값은 숨김
+    set('[data-officer]', v(P.officer, '메종도로시 대표'));
+    set('[data-contact]', v(P.contact, v(S.phone, '인스타그램 DM (@2026.do.rothy)')));
+    set('[data-email]', v(P.email, '인스타그램 DM으로 문의'));
+    set('[data-effective]', v(P.effective, '게시한 날'));
+    set('#biz', v(S.business, ''));
   })();
 </script>
 </body>

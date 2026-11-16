@@ -24,7 +24,7 @@ window.DorothyApp = function (opt) {
   $('footTag').textContent = S.tagline;
   $('addr').textContent = S.address;
   $('landmark').textContent = S.landmark;
-  $('biz').textContent = S.business;
+  $('biz').textContent = L.isBlank(S.business) ? '' : S.business;   // 안 채운 예시 값은 숨김
   $('shipInfo').textContent = `${L.won(C.shipping.fee)}, ${L.won(C.shipping.freeOver)} 이상 무료예요. 매장 픽업은 택배비가 없어요. 입금 다음 날 발송합니다.`;
   $('shipSmall').textContent = `${L.won(C.shipping.fee)} · ${C.shipping.freeOver / 10000}만원 이상 무료`;
   function link(id, href) { const a = $(id); a.hidden = !href; if (href) a.href = href; }
@@ -297,7 +297,7 @@ window.DorothyApp = function (opt) {
     if (miss.length) { $('oErr').textContent = `확인해 주세요: ${miss.join(', ')}`; $('oErr').hidden = false; return; }
     $('oErr').hidden = true;
     const t = L.totals(cart, C.shipping, o.pickup);
-    const no = L.orderNo();
+    const no = orderNoFor(cart);
     const text = L.orderText(no, cart, t, o);
     let note = '', sent = false;
     if (C.preview) {
@@ -314,19 +314,26 @@ window.DorothyApp = function (opt) {
     $('dTitle').textContent = C.preview ? '주문서 미리보기' : sent ? '주문서를 받았어요' : '주문 내용을 보내주세요';
     $('dSteps').innerHTML = (t.all === null
       ? ['사장님이 사이즈·재고·가격을 확인해 연락드려요', '안내받은 금액을 입금해 주세요', '입금 다음 날 발송 (픽업은 준비되면 연락)']
-      : [`입금하실 금액 <b>${L.won(t.all)}</b>`, `입금 계좌 <b>${esc(S.bank)}</b>`, '사장님이 사이즈 확인 후 연락드리고, 입금 다음 날 발송해요']
+      : [`입금하실 금액 <b>${L.won(t.all)}</b>`, L.isBlank(S.bank) ? '입금 계좌는 사장님이 연락드릴 때 안내해요' : `입금 계좌 <b>${esc(S.bank)}</b>`, '사장님이 사이즈 확인 후 연락드리고, 입금 다음 날 발송해요']
     ).map(s => `<li>${s}</li>`).join('');
     $('dText').textContent = text;
-    if (!C.preview && sent) { cart = []; save(); bar(); }
+    if (!C.preview && sent) { cart = []; save(); bar(); store('dorothy-order', null); }
     swap('cSheet', 'dSheet');
   });
 
-  // Apps Script 웹앱은 CORS 응답을 주지 않으므로 no-cors 로 보냄 (네트워크 실패만 감지 가능)
+  // 같은 쇼핑백으로 다시 보내면 같은 주문번호 → 서버가 중복으로 쌓지 않음 (연결이 끊겨 다시 누른 경우)
+  function orderNoFor(items) {
+    const key = JSON.stringify(items.map(x => [x.id, x.color, x.size, x.q]));
+    const saved = load('dorothy-order', null);
+    if (saved && saved.key === key && Date.now() - saved.at < 3600000) return saved.no;
+    const no = L.orderNo(); store('dorothy-order', { key, no, at: Date.now() }); return no;
+  }
+  // 서버 답(ok)을 직접 확인 — 저장에 실패했는데 "받았어요"로 보이는 일이 없게. text/plain 이라 사전 확인 요청 없이 감
   async function send(payload) {
-    const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 12000);
+    const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 30000);
     try {
-      await fetch(C.orderEndpoint, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload), signal: ctl.signal });
-      return true;
+      const r = await fetch(C.orderEndpoint, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload), signal: ctl.signal });
+      return (await r.json()).ok === true;
     } catch (err) { return false; } finally { clearTimeout(timer); }
   }
 
@@ -554,6 +561,7 @@ window.DorothyApp = function (opt) {
       renderPick(); renderLooks(); buildStories(); drawStories();
       if (wasLoading) openFromHash();
       save(); render(); bar(); syncWish(); drawRecent();
+      if (!$('cSheet').hidden) drawCart();            // 쇼핑백을 연 채로 새 가격·품절이 도착하면 바로 다시 그림
     }
   };
 };

@@ -77,7 +77,7 @@ test('validate: 필수 항목과 픽업 시 주소 생략', () => {
 });
 
 test('orderNo·orderText: 형식, 가격 문의 표기, 빈 컬러 생략', () => {
-  assert.equal(L.orderNo(new Date(2026, 10, 13, 9, 5), 0.07), 'D1113-0905-07');
+  assert.equal(L.orderNo(new Date(2026, 10, 13, 9, 5), 0.07), 'D1113-0905-070');
   const c = L.addLine([], Q, '', '평소 88');
   const t = L.totals(c, SHIP, false);
   const txt = L.orderText('D1', c, t, { name: '김', phone: '010-1-1', pickup: false, address: '내포', memo: '' });
@@ -197,4 +197,12 @@ test('parseSheet 재고: 숫자·빈칸·0(바로 품절)', () => {
   const p = L.parseSheet([H, ['Y', 'a', '상의', 'A', '1000', 'N', '2'], ['Y', 'b', '상의', 'B', '1000', 'N', ''], ['Y', 'c', '상의', 'C', '1000', 'N', '0'], ['Y', 'd', '상의', 'D', '1000', 'N', '5벌']]);
   assert.deepEqual(p.map(x => x.stock), [2, null, 0, 5]);
   assert.deepEqual(p.map(x => x.soldOut), [false, false, true, false]);
+});
+
+test('아직 안 채운 예시 값(○○은행·000-00…)은 빈 값으로 취급 → 손님 화면에 안 나감', () => {
+  assert.equal(L.isBlank('○○은행 000-000-000000 (예금주 ○○○)'), true);
+  assert.equal(L.isBlank('상호 메종도로시 · 대표 ○○○ · 사업자등록번호 000-00-00000'), true);
+  assert.equal(L.isBlank(''), true);
+  assert.equal(L.isBlank('농협 301-1234-5678-01 (예금주 김도로시)'), false);
+  assert.equal(L.isBlank('010-1234-5678'), false);
 });

@@ -192,7 +192,10 @@
 
   const pad = n => String(n).padStart(2, '0');
   const orderNo = (d = new Date(), rnd = Math.random()) =>
-    `D${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}-${pad(Math.floor(rnd * 100))}`;
+    `D${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}-${String(Math.floor(rnd * 1000)).padStart(3, '0')}`;
+
+  // 아직 안 채운 예시 값(○○은행, 000-00-00000 …)인지 — 손님 화면에 그대로 나가지 않게
+  const isBlank = v => !String(v || '').trim() || /[○]|0{3}-0{2,}|제0000/.test(String(v));
 
   function orderText(no, cart, t, o) {
     const opt = x => [x.color, x.size].filter(Boolean).join('/');
@@ -211,7 +214,7 @@
     ].join('\n');
   }
 
-  const api = { won, hasPrice, priceLabel, lineKey, addLine, removeOne, changeQty, totals, freeShipLeft, formatPhone, openStatus, normalizeImg, parseSheet, parseDays, parseSettings, sizeOptions, fitLabel, fitsSize, isPhone, validate, orderNo, orderText };
+  const api = { won, hasPrice, priceLabel, lineKey, addLine, removeOne, changeQty, totals, freeShipLeft, formatPhone, openStatus, normalizeImg, parseSheet, parseDays, parseSettings, sizeOptions, fitLabel, fitsSize, isPhone, validate, orderNo, orderText, isBlank };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.DLogic = api;
 })(typeof self !== 'undefined' ? self : this);

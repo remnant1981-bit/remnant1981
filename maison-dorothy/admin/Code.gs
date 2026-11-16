@@ -33,7 +33,11 @@ function guard_() {
   if (!me || me !== owner) throw new Error('관리자 계정으로만 쓸 수 있어요. 배포 설정의 액세스 권한이 "나만"인지 확인해 주세요.');
   return me;
 }
-function ss_() { return SHEET_ID ? SpreadsheetApp.openById(SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet(); }
+function ss_() {
+  const ss = SHEET_ID ? SpreadsheetApp.openById(SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) throw new Error('운영 시트가 연결되지 않았어요. Code.gs 맨 위 SHEET_ID 에 시트 주소의 /d/ 와 /edit 사이 값을 넣고 다시 배포해 주세요.');
+  return ss;
+}
 function sh_(name) {
   const s = ss_().getSheetByName(name);
   if (!s) throw new Error(`"${name}" 탭이 없어요. 운영 시트에서 메종도로시 → 시트 준비하기를 먼저 눌러 주세요.`);
@@ -97,6 +101,7 @@ function updateOrder(no, patch) {
     if (k === 'status' && STATUSES.indexOf(v) < 0) throw new Error('알 수 없는 상태예요');
     if (k === 'all') { const d = String(v).replace(/[^\d]/g, ''); v = d ? Number(d) : '확인 후 안내'; }
     else v = cell_(v, 200);
+    if (k === 'tracking' && /^\d+$/.test(v)) v = "'" + v;      // 송장번호 앞자리 0 이 사라지지 않게 글자로 저장
     sh.getRange(f.row, ensureCol_(sh, map[k]) + 1).setValue(v);
   });
   return true;
@@ -112,7 +117,7 @@ function productRow_(head, p, old) {
     if (k === 'soldOut') return v === true || v === 'Y' ? 'Y' : 'N';
     if (k === 'price' || k === 'stock') { const d = String(v == null ? '' : v).replace(/[^\d]/g, ''); return d ? Number(d) : ''; }
     if (Array.isArray(v)) v = v.join(', ');
-    return cell_(v, k === 'desc' ? 400 : 300);
+    return cell_(v, k === 'desc' ? 400 : k === 'gallery' ? 700 : 300);   // 추가사진은 드라이브 주소 여러 개라 길게
   });
 }
 function saveProduct(p) {
@@ -135,7 +140,7 @@ function saveProduct(p) {
     sh.getRange(i + 2, 1, 1, row.length).setValues([row]);
   } else {
     const row = productRow_(t.head, p, null);
-    sh.insertRowAfter(1);
+    if (sh.getLastRow() >= 2) sh.insertRowBefore(2); else sh.insertRowAfter(1);
     sh.getRange(2, 1, 1, row.length).setValues([row]);
   }
   return id;
@@ -157,7 +162,7 @@ function moveProduct(id, dir) {
   const w = sh.getLastColumn();
   if (dir === 'top') {
     const v = sh.getRange(f.row, 1, 1, w).getValues();
-    sh.deleteRow(f.row); sh.insertRowAfter(1); sh.getRange(2, 1, 1, w).setValues(v);
+    sh.deleteRow(f.row); if (sh.getLastRow() >= 2) sh.insertRowBefore(2); else sh.insertRowAfter(1); sh.getRange(2, 1, 1, w).setValues(v);
   } else {
     const a = sh.getRange(f.row, 1, 1, w).getValues(), b = sh.getRange(target, 1, 1, w).getValues();
     sh.getRange(f.row, 1, 1, w).setValues(b); sh.getRange(target, 1, 1, w).setValues(a);

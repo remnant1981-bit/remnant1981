@@ -79,6 +79,7 @@ class Sheet {
   }
   getDataRange() { return this.getRange(1, 1, Math.max(1, this.getLastRow()), Math.max(1, this.getLastColumn())); }
   insertRowAfter(n) { this.d.splice(n, 0, []); }
+  insertRowBefore(n) { this.d.splice(n - 1, 0, []); }
   deleteRow(n) { this.d.splice(n - 1, 1); }
   setFrozenRows() {}
 }
@@ -101,7 +102,7 @@ function makeEnv(opts = {}) {
   const base = () => ({
     SpreadsheetApp: { BandingTheme: { LIGHT_GREY: 'lg' }, BorderStyle: { SOLID: 'solid' }, newConditionalFormatRule: () => chain({ build: () => ({ rule: 1 }) }, 'Rule'), newDataValidation: () => chain({ build: () => ({ dv: 1 }) }, 'DV'), getActiveSpreadsheet: () => ss, openById: () => ss, getUi: () => ({ createMenu: () => ({ addItem() { return this; }, addToUi() {} }) }) },
     Session: { getActiveUser: () => ({ getEmail: () => user.active }), getEffectiveUser: () => ({ getEmail: () => user.owner }) },
-    MailApp: { sendEmail: (to, subject, body) => mails.push({ to, subject, body }) },
+    MailApp: { quota: 100, getRemainingDailyQuota() { return this.quota; }, sendEmail: (to, subject, body) => mails.push({ to, subject, body }) },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: s => ({ text: s, setMimeType() { return this; } }) },
     HtmlService: { createHtmlOutputFromFile: () => ({ setTitle() { return this; }, addMetaTag() { return this; } }) },
     Utilities: {
@@ -114,7 +115,7 @@ function makeEnv(opts = {}) {
     DriveApp: {
       Access: { ANYONE_WITH_LINK: 'anyone' }, Permission: { VIEW: 'view' },
       getFoldersByName: n => { const f = folders.filter(x => x.name === n); let i = 0; return { hasNext: () => i < f.length, next: () => f[i++] }; },
-      getFileById: () => ({ makeCopy: (name, folder) => { const c = { name, folder, trashed: false, created: new Date(Date.now() + copies.length), getDateCreated() { return this.created; }, setTrashed(v) { this.trashed = v; } }; copies.push(c); folder.items.push(c); return c; } }),
+      getFileById: () => ({ makeCopy: (name, folder) => { const c = { name, folder, trashed: false, getName() { return this.name; }, created: new Date(Date.now() + copies.length), getDateCreated() { return this.created; }, setTrashed(v) { this.trashed = v; } }; copies.push(c); folder.items.push(c); return c; } }),
       createFolder: name => { const f = { name, items: [], getFiles() { const l = this.items.filter(x => !x.trashed); let i = 0; return { hasNext: () => i < l.length, next: () => l[i++] }; }, createFile: blob => { const file = { id: 'FILE' + (files.length + 1) + 'abcdefghij', blob, sharing: null, getId() { return this.id; }, setSharing(a, p) { this.sharing = [a, p]; } }; files.push(file); return file; } }; folders.push(f); return f; }
     },
     ScriptApp: {

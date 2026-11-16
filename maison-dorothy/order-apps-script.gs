@@ -64,7 +64,7 @@ function onOpen() {
     .addSeparator()
     .addItem('자동화 켜기', 'enableAutomation')
     .addItem('자동화 끄기', 'disableAutomation')
-    .addItem('지금 아침 요약 받아보기', 'dailyJob')
+    .addItem('지금 아침 요약 받아보기', 'previewSummary')
     .addItem('고객·인기상품 새로 계산', 'buildInsights')
     .addSeparator()
     .addItem('예시 넣기', 'insertExamples')
@@ -123,23 +123,52 @@ function doPost(e) {
     if (!items || !clip(d.name, 30) || !clip(d.phone, 20)) return out({ ok: false });
 
     const sh = sheet();
-    // 칸 이름으로 맞춰 넣음 → 칸 순서가 바뀌거나 새 칸(소식수신)이 생겨도 안전
-    HEADER.forEach(h => ensureHeader_(sh, h));
-    const head = sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0].map(h => String(h).replace(/\s/g, ''));
+    // 칸 이름으로 맞춰 넣음 → 칸 순서가 바뀌거나 새 칸(소식수신)이 생겨도 안전 (머리줄은 한 번만 읽음)
+    const readHead = () => sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getDisplayValues()[0].map(h => String(h).replace(/\s/g, ''));
+    let head = readHead();
+    if (HEADER.some(h => head.indexOf(h) < 0)) { HEADER.forEach(h => ensureHeader_(sh, h)); head = readHead(); }
+    // 같은 주문번호가 이미 있으면 다시 쌓지 않음 (손님 쪽 연결이 끊겨 같은 주문서를 다시 보낸 경우)
+    const no = clip(d.no, 30), nc = head.indexOf('주문번호') + 1;
+    if (no && nc && sh.getLastRow() > 1 && sh.getRange(2, nc, sh.getLastRow() - 1, 1).getDisplayValues().some(r => r[0] === no)) return out({ ok: true, dup: true });
+    const check = priceCheck_(d);
     const v = {
       접수시각: new Date(), 주문번호: cell(d.no, 30), 상태: '입금대기', 받는분: cell(d.name, 30), 연락처: "'" + clip(d.phone, 20),
       받는방법: d.pickup ? '매장 픽업' : '택배', 주소: cell(d.address, 140), 상품: cell(items, 2000),
       상품금액: Number(d.sub) || 0, 택배비: d.ship == null ? '확인 후 안내' : Number(d.ship) || 0,
-      입금액: d.all == null ? '확인 후 안내' : Number(d.all) || 0, 메모: cell(d.memo, 300), 소식수신: d.ad === true ? 'Y' : 'N'
+      입금액: d.all == null ? '확인 후 안내' : Number(d.all) || 0, 메모: cell(d.memo, 300), 소식수신: d.ad === true ? 'Y' : 'N',
+      관리메모: check
     };
     sh.appendRow(head.map(h => (h in v ? v[h] : '')));
 
-    const to = NOTIFY_EMAIL || Session.getEffectiveUser().getEmail();
-    if (to) MailApp.sendEmail(to, `[메종도로시] 새 주문 ${clip(d.no, 30)} · ${clip(d.name, 30)}`, clip(d.text, 3000));
+    // 메일은 실패해도 주문은 이미 저장됨 → 손님에게는 접수 완료로 알림 (하루 발송 한도 초과 등)
+    try {
+      const to = NOTIFY_EMAIL || Session.getEffectiveUser().getEmail();
+      if (to && MailApp.getRemainingDailyQuota() > 0) {
+        const body = [`주문번호: ${no}`, `받는 분: ${clip(d.name, 30)} / ${clip(d.phone, 20)}`, `받는 방법: ${v.받는방법}${d.pickup ? '' : ' / ' + clip(d.address, 140)}`,
+          '', items, '', `입금액: ${typeof v.입금액 === 'number' ? v.입금액.toLocaleString('ko-KR') + '원' : v.입금액}`,
+          ...(clip(d.memo, 300) ? [`메모: ${clip(d.memo, 300)}`] : []), ...(check ? [`※ ${check}`] : []), '', '관리자 앱에서 확인해 주세요.'].join('\n');
+        MailApp.sendEmail(to, `[메종도로시] 새 주문 ${no} · ${clip(d.name, 30)}`, body);
+      }
+    } catch (mailErr) { /* 주문은 저장됨 */ }
     return out({ ok: true });
   } catch (err) {
     return out({ ok: false });
   }
+}
+
+// 손님 화면의 금액이 지금 상품 탭 가격과 다르면(예전 가격이 휴대폰에 남아 있던 경우) 관리메모에 알림
+function priceCheck_(d) {
+  try {
+    if (d.sub == null || !Array.isArray(d.items)) return '';
+    const p = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PRODUCT_SHEET);
+    if (!p || p.getLastRow() < 2) return '';
+    const v = p.getDataRange().getDisplayValues(), h = v[0].map(x => String(x).replace(/\s/g, ''));
+    const ic = h.indexOf('아이디'), pc = h.indexOf('가격'); if (ic < 0 || pc < 0) return '';
+    const price = {}; v.slice(1).forEach(r => { price[r[ic]] = Number(String(r[pc]).replace(/[^\d]/g, '')) || 0; });
+    let sum = 0;
+    for (const x of d.items.slice(0, 30)) { const pr = price[String(x.id)]; if (!pr) return ''; sum += pr * (Number(x.q) || 1); }
+    return sum !== Number(d.sub) ? `금액 확인 필요: 지금 상품 가격으로는 ${sum.toLocaleString('ko-KR')}원` : '';
+  } catch (e) { return ''; }
 }
 
 function ensureHeader_(sh, name) {
@@ -182,6 +211,8 @@ const WIDTHS = {
 function styleSheets() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const o = ss.getSheetByName(SHEET_NAME), p = ss.getSheetByName(PRODUCT_SHEET), s = ss.getSheetByName(SETTING_SHEET);
+  if (o) HEADER.forEach(h => ensureHeader_(o, h));           // 예전 시트에 없는 칸(소식수신·재고 등)을 먼저 채움 → 현황 수식이 깨지지 않게
+  if (p) PRODUCT_HEADER.forEach(h => ensureHeader_(p, h));
   if (o) styleOrders_(o);
   if (p) styleProducts_(p);
   if (s) styleSettings_(s);
@@ -206,13 +237,16 @@ function base_(sh, widths) {
   sh.setFrozenRows(1);
   const all = sh.getRange(1, 1, rows, cols);
   all.setFontSize(10).setFontColor(THEME.ink).setVerticalAlignment('middle');
+  sh.getRange(2, 1, rows - 1, cols).setBackground(null).setFontWeight('normal').setHorizontalAlignment(null);   // 머리줄 서식이 번진 줄 되돌림
   const head = sh.getRange(1, 1, 1, cols);
   head.setBackground(THEME.head).setFontColor(THEME.headInk).setFontWeight('bold').setFontSize(10)
     .setHorizontalAlignment('center').setWrap(true);
   sh.setRowHeight(1, 36);
   sh.getBandings().forEach(b => b.remove());
-  sh.getRange(1, 1, rows, cols).applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, true, false)
-    .setHeaderRowColor(THEME.head).setFirstRowColor('#ffffff').setSecondRowColor(THEME.band);
+  try {
+    sh.getRange(1, 1, rows, cols).applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, true, false)
+      .setHeaderRowColor(THEME.head).setFirstRowColor('#ffffff').setSecondRowColor(THEME.band);
+  } catch (e) { /* 시트를 '표'로 바꿔 둔 경우 줄무늬만 건너뜀 */ }
   sh.getRange(2, 1, rows - 1, cols).setBorder(null, null, true, null, null, true, THEME.line, SpreadsheetApp.BorderStyle.SOLID);
   if (widths) Object.keys(widths).forEach(n => { const c = colOf_(sh, n); if (c) sh.setColumnWidth(c, widths[n]); });
   return { rows, cols };
@@ -370,15 +404,15 @@ function styleDashboard_(ss) {
   const sales = `SUMIFS(${col('입금액')},${col('상태')},"<>입금대기",${col('상태')},"<>취소",${col('접수시각')},">="&EOMONTH(TODAY(),-1)+1${NX})`;
   card(11, 2, '이번 달 입금액', `=${sales}`, '#,##0"원"', '입금 확인 이후 주문 합계', 'money');
   card(11, 4, '이번 달 주문', `=COUNTIFS(${col('접수시각')},">="&EOMONTH(TODAY(),-1)+1,${col('상태')},"<>취소"${NX})`, '0"건"', '취소 제외', 'money');
-  card(11, 6, '판매 중인 옷', `=COUNTIFS(${pcol('노출')},"Y",${pcol('품절')},"<>Y")`, '0"벌"', '손님 화면에 보이는 옷', 'info');
+  card(11, 6, '판매 중인 옷', `=COUNTIFS(${pcol('노출')},"<>N",${pcol('상품명')},"<>",${pcol('품절')},"<>Y")`, '0"벌"', '손님 화면에 보이는 옷', 'info');
   const todo2 = [
-    card(11, 8, '가격 미입력', `=COUNTIFS(${pcol('노출')},"Y",${pcol('가격')},"")`, '0"벌"', '"가격 문의"로 보이는 옷', 'action')
+    card(11, 8, '가격 미입력', `=COUNTIFS(${pcol('노출')},"<>N",${pcol('상품명')},"<>",${pcol('가격')},"")`, '0"벌"', '"가격 문의"로 보이는 옷', 'action')
   ];
   height(11, 11, 22); height(12, 12, 44); height(13, 13, 22);
 
   // 상품 준비도: 판매 중인 옷 중 가격·사진·재고가 채워진 비율 (막대)
   const bar = (row, label, filled) => {
-    const total = `MAX(1,COUNTIFS(${pcol('노출')},"Y"))`;
+    const total = `MAX(1,COUNTIFS(${pcol('노출')},"<>N",${pcol('상품명')},"<>"))`;
     d.getRange(`B${row}:C${row}`).merge().setValue(label).setFontSize(10).setFontColor(INK);
     d.getRange(`D${row}:G${row}`).merge().setFormula(`=SPARKLINE(${filled}/${total},{"charttype","bar";"max",1;"color1","${THEME.done[1]}";"empty","zero"})`);
     d.getRange(`H${row}:I${row}`).merge().setFormula(`=TEXT(${filled},"0")&" / "&TEXT(${total},"0")&"  ("&TEXT(${filled}/${total},"0%")&")"`)
@@ -416,9 +450,9 @@ function styleDashboard_(ss) {
 
   // 상품 준비도 (가격·사진·재고)
   sec(27, '  상품 준비도 · 손님 화면에 보이는 옷 기준');
-  bar(28, '가격 입력', `COUNTIFS(${pcol('노출')},"Y",${pcol('가격')},"<>")`);
-  bar(29, '사진 있음', `COUNTIFS(${pcol('노출')},"Y",${pcol('사진')},"<>")`);
-  bar(30, '재고 관리 중', `COUNTIFS(${pcol('노출')},"Y",${pcol('재고')},"<>")`);
+  bar(28, '가격 입력', `COUNTIFS(${pcol('노출')},"<>N",${pcol('상품명')},"<>",${pcol('가격')},"<>")`);
+  bar(29, '사진 있음', `COUNTIFS(${pcol('노출')},"<>N",${pcol('상품명')},"<>",${pcol('사진')},"<>")`);
+  bar(30, '재고 관리 중', `COUNTIFS(${pcol('노출')},"<>N",${pcol('상품명')},"<>",${pcol('재고')},"<>")`);
 
   // ⑤ 손님
   sec(32, '  손님');
@@ -495,13 +529,15 @@ function ordersTable_() {
   const head = disp[0].map(h => String(h).replace(/\s/g, ''));
   const i = n => head.indexOf(n);
   const rows = vals.slice(1).map((r, k) => ({
-    row: k + 2, at: r[i('접수시각')] instanceof Date ? r[i('접수시각')] : new Date(disp[k + 1][i('접수시각')]),
+    row: k + 2, at: date_(r[i('접수시각')], disp[k + 1][i('접수시각')]),
     no: disp[k + 1][i('주문번호')], status: disp[k + 1][i('상태')], name: disp[k + 1][i('받는분')],
     method: disp[k + 1][i('받는방법')], items: disp[k + 1][i('상품')], all: r[i('입금액')], note: i('관리메모') >= 0 ? disp[k + 1][i('관리메모')] : ''
   })).filter(o => o.no && !isExample_(o.no));
   return { sh, head, rows };
 }
 const days_ = d => (Date.now() - d.getTime()) / 86400000;
+// 접수시각이 비었거나 날짜가 아니면 지금 시각으로 봄 (손으로 적은 주문도 계산이 멈추지 않게)
+function date_(raw, shown) { const d = raw instanceof Date ? raw : new Date(shown); return isNaN(d.getTime()) ? new Date() : d; }
 const won_ = n => (Number(n) > 0 ? Number(n).toLocaleString('ko-KR') + '원' : '확인 후 안내');
 
 // 1) 입금기한 확인: 지난 주문에 관리메모 표시, 자동취소가 Y 면 취소
@@ -529,16 +565,23 @@ function archiveOld_() {
   let a = ss.getSheetByName(ARCHIVE_SHEET);
   if (!a) { a = ss.insertSheet(ARCHIVE_SHEET); a.appendRow(t.sh.getRange(1, 1, 1, t.sh.getLastColumn()).getValues()[0]); a.setFrozenRows(1); a.setTabColor('#8a8085'); }
   const w = t.sh.getLastColumn();
-  old.forEach(o => a.appendRow(t.sh.getRange(o.row, 1, 1, w).getValues()[0]));
+  old.forEach(o => a.appendRow(t.sh.getRange(o.row, 1, 1, w).getValues()[0].map(safe_)));
   old.map(o => o.row).sort((x, y) => y - x).forEach(r => t.sh.deleteRow(r));
   return old.length;
 }
 
-// 3) 아침 요약 메일
-function dailyJob() {
-  const late = checkOverdue_();
-  const archived = archiveOld_();
-  const autoSold = soldOutByStock_();
+// 다른 칸으로 옮겨 적을 때: 글자는 수식으로 실행되지 않게, 숫자·날짜는 그대로
+function safe_(v) { return typeof v === 'string' ? cell(v, 50000) : v; }
+
+// 메뉴 "지금 아침 요약 받아보기": 주문을 취소·보관하지 않고 요약 메일만 보냄
+function previewSummary() { return dailyJob(true); }
+
+// 3) 아침 요약 메일 (previewOnly 면 시트를 바꾸지 않고 메일만)
+function dailyJob(previewOnly) {
+  const dry = previewOnly === true;                       // 예약 실행은 이벤트 객체가 들어오므로 true 일 때만 미리보기
+  const late = dry ? [] : checkOverdue_();
+  const archived = dry ? 0 : archiveOld_();
+  const autoSold = dry ? [] : soldOutByStock_();
   const ins = buildInsights();
   const t = ordersTable_();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -584,7 +627,7 @@ function weeklyReport_(rows) {
   const week = rows.filter(o => days_(o.at) < 7 && o.status !== '취소');
   const sum = week.filter(o => /입금확인|발송완료|픽업완료/.test(o.status)).reduce((s, o) => s + (Number(o.all) || 0), 0);
   const count = {};
-  week.forEach(o => String(o.items).split('\n').forEach(l => { const m = l.match(/^([^(]+)\(.*\)×(\d+)/); if (m) count[m[1].trim()] = (count[m[1].trim()] || 0) + Number(m[2]); }));
+  week.forEach(o => String(o.items).split('\n').forEach(l => { const m = l.match(/^(.+)\(([^()]*)\)×(\d+)/); if (m) count[m[1].trim()] = (count[m[1].trim()] || 0) + Number(m[3]); }));
   const top = Object.keys(count).sort((a, b) => count[b] - count[a]).slice(0, 3);
   return [`■ 지난주 리포트`, `· 주문 ${week.length}건 · 입금 확인된 금액 ${sum.toLocaleString('ko-KR')}원`,
     ...(top.length ? ['· 많이 주문된 옷: ' + top.map(n => `${n} ${count[n]}벌`).join(', ')] : [])];
@@ -598,7 +641,7 @@ function weeklyBackup() {
   const name = `${ss.getName()} 백업 ${Utilities.formatDate(new Date(), AUTO_TZ, 'yyyy-MM-dd')}`;
   DriveApp.getFileById(ss.getId()).makeCopy(name, folder);
   const files = []; const f = folder.getFiles();
-  while (f.hasNext()) files.push(f.next());
+  while (f.hasNext()) { const x = f.next(); if (x.getName().indexOf(' 백업 ') > 0) files.push(x); }   // 백업 파일만 정리 대상
   files.sort((a, b) => b.getDateCreated() - a.getDateCreated()).slice(BACKUP_KEEP).forEach(x => x.setTrashed(true));
   return name;
 }
@@ -615,7 +658,7 @@ const DONE = /입금확인|발송완료|픽업완료/;
 // 주문 한 줄의 상품 칸 "니트 후드 가디건(아이보리/평소 66)×1 가격문의" → [{name,color,size,q}]
 function parseItems_(text) {
   return String(text || '').split('\n').map(l => {
-    const m = l.match(/^(.+?)\((.*)\)×(\d+)/); if (!m) return null;
+    const m = l.match(/^(.+)\(([^()]*)\)×(\d+)/); if (!m) return null;
     const opts = m[2].split('/').map(x => x.trim()).filter(Boolean);
     const size = opts.find(x => /^(평소 \d{2}|[SML]|XL|XXL|FREE|프리.*|\d{2})$/i.test(x)) || '';
     const color = opts.filter(x => x !== size).join('/');
@@ -630,7 +673,7 @@ function allOrders_() {
     const h = d[0].map(x => String(x).replace(/\s/g, '')), i = k => h.indexOf(k);
     v.slice(1).forEach((r, k) => {
       const dr = d[k + 1]; if (!dr[i('주문번호')] || isExample_(dr[i('주문번호')])) return;
-      const at = r[i('접수시각')] instanceof Date ? r[i('접수시각')] : new Date(dr[i('접수시각')]);
+      const at = date_(r[i('접수시각')], dr[i('접수시각')]);
       out.push({ at, status: dr[i('상태')], name: dr[i('받는분')], phone: dr[i('연락처')], method: dr[i('받는방법')],
         items: parseItems_(dr[i('상품')]), all: Number(String(r[i('입금액')]).replace(/[^\d]/g, '')) || 0, ad: i('소식수신') >= 0 ? dr[i('소식수신')] : '' });
     });
@@ -744,7 +787,7 @@ function writeTable_(ss, name, head, rows, o, note) {
   });
   if (rows.length) {
     const r = sh.getRange(3, 1, rows.length, head.length);
-    r.setValues(rows).setFontSize(10).setVerticalAlignment('middle');
+    r.setValues(rows.map(row => row.map(safe_))).setFontSize(10).setVerticalAlignment('middle');
     (o.money || []).forEach(c => sh.getRange(3, c, rows.length, 1).setNumberFormat('#,##0"원"'));
     (o.date || []).forEach(c => sh.getRange(3, c, rows.length, 1).setNumberFormat('yyyy-mm-dd'));
     (o.center || []).forEach(c => sh.getRange(3, c, rows.length, 1).setHorizontalAlignment('center'));
@@ -829,7 +872,7 @@ function insertExamples() {
         추가사진: '', 컬러: '베이지, 블랙', 사이즈: '', 추천사이즈: '66~88', 설명: '예시) 원단·핏·기장을 적어요', 코디팁: '예시) 청바지에 툭 걸치면 예뻐요',
         인스타링크: '', 함께입기: '', 품절: 'N', 재고: 3
       };
-      p.insertRowAfter(1);
+      if (p.getLastRow() >= 2) p.insertRowBefore(2); else p.insertRowAfter(1);   // 아래 줄 서식을 물려받게 (머리줄 색이 번지지 않게)
       p.getRange(2, 1, 1, ph.length).setValues([ph.map(h => (h in v ? v[h] : ''))]);
     }
   }

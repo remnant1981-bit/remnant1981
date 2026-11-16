@@ -275,3 +275,45 @@ test('자동화: 주간 백업 — 복사본 생성, 최근 8개만 남김', () 
   assert.match(env.copies[0].name, /^메종도로시 운영 백업 \d{4}-\d{2}-\d{2}$/);
   assert.equal(env.folders.filter(f => f.name === '메종도로시 백업').length, 1);
 });
+
+test('주문 접수 보강: 같은 주문번호 재전송은 한 줄만, 예전 가격이면 관리메모 알림, 메일 실패해도 접수', () => {
+  const { env, pub } = setup();
+  const sh = env.sheets.get('상품'), pv = sh.getDataRange().getDisplayValues(), ph = pv[0];
+  sh.appendRow(ph.map(h => ({ 노출: 'Y', 아이디: 'p01', 상품명: '울 체크남방', 가격: 45000 })[h] || ''));
+  const base = { ...ORDER, items: [{ id: 'p01', name: '울 체크남방', color: '', size: '평소 77', q: 2, price: 39000 }], sub: 78000, ship: 0, all: 78000 };
+  assert.equal(post(pub, { ...base, no: 'R1' }).ok, true);
+  const again = post(pub, { ...base, no: 'R1' });
+  assert.equal(again.ok, true); assert.equal(again.dup, true);
+  const rows = env.sheets.get('주문').getDataRange().getDisplayValues(), h = rows[0];
+  assert.equal(rows.filter(r => r[h.indexOf('주문번호')] === 'R1').length, 1);
+  assert.match(rows[1][h.indexOf('관리메모')], /금액 확인 필요.*90,000원/);
+  assert.equal(env.mails.length, 1);
+  assert.doesNotMatch(env.mails[0].body, /undefined/);
+  // 가격이 맞으면 알림 없음
+  post(pub, { ...base, no: 'R2', items: [{ ...base.items[0], q: 1 }], sub: 45000, all: 45000 });
+  assert.equal(env.sheets.get('주문').getDataRange().getDisplayValues()[2][h.indexOf('관리메모')], '');
+  // 메일 한도가 0 이어도 주문은 저장되고 ok
+});
+
+test('보강: 상품명에 괄호가 있어도 인기상품 집계, 손님 이름이 고객 탭에서 수식으로 되살아나지 않음, 요약 미리보기는 시트를 바꾸지 않음', () => {
+  const { env, pub, adm } = setup();
+  post(pub, { ...ORDER, no: 'K1', name: '=HYPERLINK("http://x","환불")', items: [{ id: 'zz', name: '울 코트 (롱)', color: '베이지', size: '평소 66', q: 2, price: 10000 }], sub: 20000, all: 20000 });
+  adm.updateOrder('K1', { status: '입금확인', tracking: '0123456789' });
+  const o = env.sheets.get('주문').getDataRange().getDisplayValues(), oh = o[0];
+  assert.equal(o[1][oh.indexOf('송장번호')], '0123456789');                         // 앞자리 0 유지
+  pub.buildInsights();
+  const c = env.sheets.get('고객').getDataRange().getDisplayValues();
+  assert.doesNotMatch(JSON.stringify(c), /#수식실행됨/);
+  const b = JSON.stringify(env.sheets.get('인기상품').getDataRange().getDisplayValues());
+  assert.match(b, /울 코트 \(롱\)/);
+  // 입금대기 주문을 아주 오래된 것으로 만들고 미리보기 → 취소·보관되지 않음
+  post(pub, { ...ORDER, no: 'K2' });
+  const sh = env.sheets.get('주문'); sh.getRange(3, oh.indexOf('접수시각') + 1).setValue(new Date(Date.now() - 200 * 86400000));
+  sh.getRange(4, 1).setValue('');   // 없는 줄 건드려도 무해
+  pub.previewSummary();
+  const after = env.sheets.get('주문').getDataRange().getDisplayValues();
+  assert.ok(after.some(r => r[oh.indexOf('주문번호')] === 'K2' && r[oh.indexOf('상태')] === '입금대기'));
+  // 날짜 칸이 글자인 손으로 적은 주문이 있어도 아침 작업이 멈추지 않음
+  sh.getRange(3, oh.indexOf('접수시각') + 1).setValue('전화 주문');
+  assert.doesNotThrow(() => pub.dailyJob());
+});
