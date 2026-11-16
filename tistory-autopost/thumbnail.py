@@ -47,7 +47,9 @@ def find_font(custom: str = "") -> str:
     FONT_DIR.mkdir(exist_ok=True)
     local = FONT_DIR / "NanumGothic-ExtraBold.ttf"
     if not local.is_file():
-        urllib.request.urlretrieve(FONT_URL, local)
+        tmp = local.with_suffix(".part")   # 받다가 끊긴 파일이 폰트로 남지 않도록 다 받은 뒤 이름 변경
+        urllib.request.urlretrieve(FONT_URL, tmp)
+        tmp.replace(local)
     return str(local)
 
 

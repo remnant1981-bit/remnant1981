@@ -165,7 +165,7 @@ python tistory_poster.py --login
 **결과 확인**: Actions 실행 화면 Summary에 발행 결과표(제목·성공/실패) + 블로그 글 관리 링크 표시
 
 - 매일 자동: `.github/workflows/tistory-autopost.yml`의 `schedule` 주석 해제
-- 세션 암호화 키: Secret `SESSION_KEY` (미등록 시 `KAKAO_PW`, 둘 다 없으면 세션 저장 안 함)
+- 세션 암호화 키: Secret `SESSION_KEY` (미등록이면 세션 저장 안 함. 암호화된 세션은 Actions 캐시에 보관되므로 추측 가능한 값 대신 긴 무작위 문자열 사용)
 
 ### 주의
 - 저장소가 **공개** 상태라 `topics.txt`, `posts/` 내용은 누구나 볼 수 있음 (Secrets는 암호화 보관)
@@ -187,6 +187,9 @@ python tistory_poster.py --login
 
 - 자동 배정 시간대: Variables `SCHEDULE_SLOTS` = `09:00,19:00` (기본 `09:00`). 이미 예약된 칸은 건너뜀
 - 지정 시각으로 여러 글 작성 시 24시간 간격으로 배정 (`config.json` → `schedule.gap_hours`)
+- **공개범위 확인**: 발행 창에서 공개범위가 실제로 선택됐는지 확인하고, 확인이 안 되면 발행하지 않음(글은 `posts/failed`로 이동). 비공개·보호 글은 발행 뒤 블로그 RSS에 노출되는지도 확인해, 노출되면 실행을 실패로 표시하고 알림
+- **중복 발행 방지**: 발행 전에 블로그 RSS(최근 글)에 같은 제목이 있으면 올리지 않고 발행 완료로 처리. 같은 제목으로 다시 올리려면 제목을 바꾸거나 `config.json`에 `"feed_check": false`
+- 글 형식 오류(front matter의 `visibility`·`publish_at` 값 오류 등)가 있는 글은 `posts/failed`로 옮기고 한 번만 알림 → 고친 뒤 `posts/`로 되돌리면 재시도
 - **발행 빈도 제한 (계정 보호)**: 자동 실행은 1회 1편·직전 발행 후 20시간 간격(하루 1편)·24시간 최대 2편. 밀린 글이 여러 편 있어도 하루 1편씩 나감. 실행 화면에서 직접 실행(Run workflow)할 때는 간격 4시간 적용 (`config.json` → `rate_limit`)
 - 주말 제외 (PC): `config.json` → `schedule.skip_weekdays: [5, 6]`
 - 예약 대기 목록: 실행 화면 Summary ⏰ 표, 또는 `python tistory_poster.py --list`
@@ -265,3 +268,5 @@ GitHub 정기 실행이 늦을 때, 외부 무료 스케줄러로 매시간 실�
 pip install pytest
 python -m pytest tests -q
 ```
+
+`tests/test_e2e_mock.py`는 티스토리·카카오 화면을 흉내 낸 로컬 서버(`tests/mock_tistory.py`)에 실제 Chrome으로 접속해 로그인(쿠키·저장 세션·카카오 재로그인)과 발행 흐름을 끝까지 확인함. 실제 사이트에는 접속하지 않으며 Chrome이 없으면 건너뜀.

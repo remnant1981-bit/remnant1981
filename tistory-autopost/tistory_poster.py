@@ -64,6 +64,14 @@ SEL = {
 
 log = logging.getLogger("tistory")
 
+_EMAIL = re.compile(r"[\w.+*-]+@[\w*-]+(?:\.[\w*-]+)+")
+_PHONE = re.compile(r"(?<!\d)01[016789][-\s.]?[\d*]{3,4}[-\s.]?[\d*]{4}(?!\d)")
+
+
+def mask_personal(text: str) -> str:
+    """로그에 남기기 전 이메일·휴대폰 번호 가림"""
+    return _PHONE.sub("[전화번호]", _EMAIL.sub("[이메일]", text))
+
 
 # ---------------------------------------------------------------- 설정/글 파싱
 def load_config() -> dict:
@@ -73,7 +81,7 @@ def load_config() -> dict:
             shutil.copy(BASE_DIR / "config.example.json", path)
             sys.exit(f"[안내] config.json 생성됨 → blog_name 수정 후 재실행 필요: {path}")
         path = BASE_DIR / "config.example.json"  # CI: 기본값 + 환경변수
-    cfg = json.loads(path.read_text(encoding="utf-8"))
+    cfg = json.loads(path.read_text(encoding="utf-8-sig"))
     if os.environ.get("TISTORY_BLOG_NAME"):
         cfg["blog_name"] = os.environ["TISTORY_BLOG_NAME"].strip()
     if os.environ.get("TISTORY_HEADLESS"):
@@ -122,7 +130,7 @@ def now(cfg: dict | None = None):
 
 def parse_post(path: Path, cfg: dict) -> Post:
     """front matter(--- key: value ---) + 본문(.md 또는 .html) 파싱"""
-    text = path.read_text(encoding="utf-8")
+    text = path.read_text(encoding="utf-8-sig")   # 메모장이 붙이는 BOM 이 있으면 front matter 를 못 읽어 기본 공개범위로 나감
     meta, body = {}, text
     m = re.match(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", text, re.S)
     if m:
@@ -230,6 +238,18 @@ class TistoryBot:
         from selenium.webdriver.support.ui import WebDriverWait
         cond = EC.element_to_be_clickable if clickable else EC.presence_of_element_located
         return WebDriverWait(self.d, timeout).until(cond((By.CSS_SELECTOR, css)))
+
+    def type_text(self, el, text: str):
+        """입력란에 글자 넣기. 이모지처럼 send_keys 가 못 보내는 글자가 있으면 값을 직접 넣고 입력 이벤트를 알림"""
+        if all(ord(c) <= 0xFFFF for c in text):
+            el.send_keys(text)
+            return
+        self.d.execute_script("""
+            const el = arguments[0], add = arguments[1];
+            const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+            Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, el.value + add);
+            el.dispatchEvent(new Event('input', {bubbles: true}));
+            el.dispatchEvent(new Event('change', {bubbles: true}));""", el, text)
 
     def dismiss_alert(self, accept=False):
         try:
@@ -484,9 +504,9 @@ class TistoryBot:
             return ""
 
     def _log_page(self):
-        # 스크린샷 대신 화면 문구만 기록 (계정 정보 노출 방지)
+        # 스크린샷 대신 화면 문구만 기록, 이메일·전화번호는 가림 (공개 저장소는 실행 로그도 공개됨)
         log.info("현재 URL: %s", self.d.current_url.split("?")[0])
-        log.info("화면 문구: %s", " ".join(self._page_text().split())[:300])
+        log.info("화면 문구: %s", mask_personal(" ".join(self._page_text().split())[:300]))
 
     # --- 로그인
     def manual_login(self):
@@ -528,7 +548,7 @@ class TistoryBot:
         # 제목
         title = self.wait(SEL["title"], clickable=True)
         title.clear()
-        title.send_keys(post.title)
+        self.type_text(title, post.title)
 
         # 썸네일: 에디터에 이미지 업로드 → 생성된 이미지 태그를 본문 맨 앞에 배치 (첫 이미지 = 대표 이미지)
         img_html = ""
@@ -549,19 +569,14 @@ class TistoryBot:
             from selenium.webdriver.common.keys import Keys
             tag = self.wait(SEL["tag_input"], clickable=True)
             for t in post.tags:
-                tag.send_keys(t)
+                self.type_text(tag, t)
                 tag.send_keys(Keys.ENTER)
                 time.sleep(0.3)
 
         # 완료 → 공개범위 → 발행
         self.wait(SEL["publish_layer_btn"], clickable=True).click()
         time.sleep(1.5)
-        vis_id = VISIBILITY[post.visibility]
-        try:
-            radio = self.wait(f"#{vis_id}", timeout=5)
-            d.execute_script("arguments[0].click();", radio)
-        except Exception:
-            log.warning("공개범위 선택 실패 → 기본값으로 발행")
+        self._select_visibility(post.visibility)
         time.sleep(0.5)
         self.wait(SEL["publish_btn"], clickable=True).click()
 
@@ -572,6 +587,29 @@ class TistoryBot:
             if "/newpost" not in d.current_url:
                 return d.current_url
         raise RuntimeError("발행 후 페이지 이동 미확인 (발행 여부 수동 확인 필요)")
+
+    def _select_visibility(self, visibility: str):
+        """공개범위 선택 후 실제로 선택됐는지 확인. 확인이 안 되면 발행하지 않음
+        (선택 실패 시 에디터 기본값으로 나가 비공개 글이 공개된 적이 있음)"""
+        from selenium.webdriver.common.by import By
+        d, vis_id = self.d, VISIBILITY[visibility]
+        checked = "return !!(arguments[0] && arguments[0].checked);"
+        try:
+            radio = self.wait(f"#{vis_id}", timeout=8)
+        except Exception:
+            self.editor_report("공개범위 선택란 미발견", publish_layer=True)
+            raise RuntimeError(f"공개범위({visibility}) 선택란 미발견 → 발행 중단")
+        if not d.execute_script(checked, radio):
+            try:
+                d.find_element(By.CSS_SELECTOR, f"label[for='{vis_id}']").click()
+            except Exception:
+                pass
+        if not d.execute_script(checked, radio):
+            d.execute_script("arguments[0].click();", radio)
+            time.sleep(0.3)
+        if not d.execute_script(checked, radio):
+            self.editor_report("공개범위 선택 미확인", publish_layer=True)
+            raise RuntimeError(f"공개범위({visibility}) 선택 미확인 → 발행 중단")
 
     def _thumbnail_file(self, post: Post) -> "Path | None":
         tcfg = self.cfg.get("thumbnail", {})
@@ -635,7 +673,7 @@ class TistoryBot:
             pass
         return ""
 
-    def editor_report(self, label: str = "") -> dict:
+    def editor_report(self, label: str = "", publish_layer: bool = False) -> dict:
         """에디터 화면의 첨부 관련 버튼·파일 입력란을 로그와 Summary 에 기록 (선택자 수정용, 글 내용은 기록 안 함)"""
         js = r"""
         const pick = el => ({tag: el.tagName.toLowerCase(), id: el.id || '', cls: (el.className && el.className.baseVal === undefined ? el.className : '').toString().slice(0, 60),
@@ -646,7 +684,9 @@ class TistoryBot:
           .map(pick).filter(o => kw.test(o.id + o.cls + o.text + o.aria + o.title)).slice(0, 25);
         const files = [...document.querySelectorAll('input[type=file]')].map(el => ({id: el.id, name: el.name, accept: el.accept, cls: el.className}));
         const frames = [...document.querySelectorAll('iframe')].map(f => f.id || f.name || f.src.slice(0, 60));
-        return {url: location.pathname, buttons: btns, file_inputs: files, iframes: frames};
+        const radios = [...document.querySelectorAll('input[type=radio]')].map(el => ({id: el.id, name: el.name, value: el.value, checked: el.checked,
+          label: ((el.labels && el.labels[0] && el.labels[0].innerText) || '').trim().slice(0, 20), visible: !!(el.offsetWidth || el.offsetHeight)}));
+        return {url: location.pathname, buttons: btns, file_inputs: files, iframes: frames, radios: radios};
         """
         try:
             info = self.d.execute_script(js)
@@ -658,6 +698,10 @@ class TistoryBot:
                  f"- iframe: `{info.get('iframes', [])}`", "", "| 태그 | id | class | 글자 | aria/title | 보임 |", "|---|---|---|---|---|---|"]
         for b in info.get("buttons", []):
             lines.append(f"| {b['tag']} | {b['id']} | {b['cls']} | {b['text']} | {b['aria'] or b['title']} | {'✅' if b['visible'] else ''} |")
+        if publish_layer or info.get("radios"):
+            lines += ["", "| 선택란 id | name | value | 글자 | 선택됨 | 보임 |", "|---|---|---|---|---|---|"]
+            for r in info.get("radios", []):
+                lines.append(f"| {r['id']} | {r['name']} | {r['value']} | {r['label']} | {'✅' if r['checked'] else ''} | {'✅' if r['visible'] else ''} |")
         summary(lines)
         return info
 
@@ -694,6 +738,14 @@ class TistoryBot:
                     break
             except Exception:
                 pass
+        # 발행 창을 열어 공개범위 선택란 구조 기록 (발행 버튼은 누르지 않음)
+        try:
+            d.find_element(By.TAG_NAME, "body").send_keys("\ue00c")
+            self.wait(SEL["publish_layer_btn"], timeout=5, clickable=True).click()
+            time.sleep(1.5)
+            self.editor_report("④ 발행 창 (공개범위 선택란)", publish_layer=True)
+        except Exception as e:
+            log.info("발행 창 열기 실패: %s", e)
         # 작성 중 글이 남지 않도록 빈 화면으로 이동
         try:
             d.get("about:blank")
@@ -778,12 +830,33 @@ PUBLISH_LOG = BASE_DIR / "publish_log.jsonl"
 def _publish_times() -> list:
     out = []
     if PUBLISH_LOG.exists():
-        for line in PUBLISH_LOG.read_text(encoding="utf-8").splitlines():
+        for line in PUBLISH_LOG.read_text(encoding="utf-8-sig").splitlines():
             try:
-                out.append(dt.datetime.fromisoformat(json.loads(line)["at"]))
+                at = dt.datetime.fromisoformat(json.loads(line)["at"])
+                out.append(at if at.tzinfo else at.replace(tzinfo=tz()))
             except Exception:
                 pass
     return out
+
+
+def _norm_title(s: str) -> str:
+    import html
+    return re.sub(r"\s+", " ", html.unescape(html.unescape(s or ""))).strip()
+
+
+def feed_titles(cfg: dict) -> "set | None":
+    """블로그 RSS 의 공개 글 제목 (최근 글). 읽지 못하면 None"""
+    import urllib.request
+    from xml.etree import ElementTree as ET
+    try:
+        req = urllib.request.Request(f"https://{cfg['blog_name']}.tistory.com/rss?t={int(time.time())}",
+                                     headers={"User-Agent": "Mozilla/5.0 (compatible; tistory-autopost)"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            root = ET.fromstring(r.read())
+        return {_norm_title(i.findtext("title")) for i in root.iter("item")}
+    except Exception as e:
+        log.info("RSS 확인 생략: %s", e)
+        return None
 
 
 def record_publish(title: str, visibility: str):
@@ -835,11 +908,16 @@ def run_once(cfg: dict, files: list, dry_run=False) -> int:
         summary_schedule(cfg)
         return 0
     posts = []
+    results = []
     for f in files:
         try:
             posts.append(parse_post(f, cfg))
         except Exception as e:
             log.error("파싱 실패 %s: %s", f.name, e)
+            # 고치기 전에는 매 실행 실패가 반복되므로 대기 폴더에서 빼 둠 (front matter 수정 후 posts/ 로 되돌리면 재시도)
+            if not dry_run and f.is_file() and f.resolve().parent == Path(cfg["posts_dir"]).resolve():
+                move(f, cfg["failed_dir"])
+                results.append(f"| ❌ | {f.name} | 글 형식 오류: {str(e)[:70]} → posts/failed 로 이동 |")
     if dry_run:
         for p in posts:
             when = f"{p.publish_at:%Y-%m-%d %H:%M}" if p.publish_at else "즉시"
@@ -847,9 +925,15 @@ def run_once(cfg: dict, files: list, dry_run=False) -> int:
                      p.path.name, p.title, p.category or "-", p.tags, p.visibility, when, len(p.html))
         return len(posts)
 
+    if not posts:
+        if results:
+            summary(["### 티스토리 발행 결과: 0건", "| 결과 | 제목 | 공개범위/오류 |", "|---|---|---|", *results])
+            notify("티스토리 글 형식 오류", "\n".join(r.split("|")[2].strip() for r in results), "high")
+        return 0
+    check_feed = cfg.get("feed_check", True)
+    before = feed_titles(cfg) if check_feed else None
     bot = TistoryBot(cfg)
     ok = 0
-    results = []
     try:
         logged_in = bot.is_logged_in()
         record_login_state(logged_in)
@@ -866,6 +950,13 @@ def run_once(cfg: dict, files: list, dry_run=False) -> int:
                       " (클라우드 실행 시 KAKAO_ID/KAKAO_PW 또는 TISTORY_COOKIES 확인)")
             return 0
         for i, p in enumerate(posts):
+            if before and _norm_title(p.title) in before:
+                # 지난 실행에서 발행은 됐는데 결과 저장(커밋)이 실패한 경우 등 → 같은 글을 두 번 올리지 않음
+                log.warning("[건너뜀] 같은 제목의 글이 이미 블로그에 있음: %s", p.title)
+                move(p.path, cfg["published_dir"])
+                ok += 1
+                results.append(f"| ⏭️ | {p.title} | 이미 발행된 글 (중복 발행 안 함) |")
+                continue
             try:
                 url = bot.publish(p)
                 log.info("[성공] %s → %s", p.title, url)
@@ -873,13 +964,23 @@ def run_once(cfg: dict, files: list, dry_run=False) -> int:
                 record_publish(p.title, p.visibility)
                 ok += 1
                 results.append(f"| ✅ | {p.title} | {p.visibility} |")
+                if check_feed and p.visibility != "public":
+                    time.sleep(5)
+                    after = feed_titles(cfg)
+                    if after and _norm_title(p.title) in after:
+                        ok -= 1   # 실행을 실패로 표시해 바로 알림
+                        log.error("[공개범위 불일치] %s 로 발행했는데 공개 RSS 에 노출됨: %s", p.visibility, p.title)
+                        results[-1] = f"| ⚠️ | {p.title} | **{p.visibility} 로 발행했으나 공개 상태** → 티스토리 앱에서 공개범위 수정 필요 |"
             except Exception as e:
                 log.exception("[실패] %s: %s", p.title, e)
                 LOG_DIR.mkdir(exist_ok=True)
-                try:
-                    bot.d.save_screenshot(str(LOG_DIR / f"error_{p.path.stem}.png"))
-                except Exception:
-                    pass
+                if not os.environ.get("CI"):   # 공개 저장소의 실행 첨부 파일에 관리 화면이 남지 않도록 로컬에서만 저장
+                    try:
+                        bot.d.save_screenshot(str(LOG_DIR / f"error_{p.path.stem}.png"))
+                    except Exception:
+                        pass
+                else:
+                    bot._log_page()
                 move(p.path, cfg["failed_dir"])
                 results.append(f"| ❌ | {p.title} | {str(e).splitlines()[0][:80] if str(e) else type(e).__name__} |")
             if i < len(posts) - 1:
