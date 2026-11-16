@@ -1,12 +1,12 @@
 // R&D 사업비 계산 로직(순수 함수). 금액 단위: 천원(정수).
-// 기준: 국가연구개발혁신법 시행령 별표 1(2024.12.31. 개정), 「국가연구개발사업 연구개발비 사용 기준」(과기정통부고시 제2026-38호, 2026.5.6. 시행).
+// 기준: 국가연구개발혁신법 시행령 별표 1(2026.3.10. 개정), 「국가연구개발사업 연구개발비 사용 기준」(과기정통부고시 제2026-38호, 2026.5.6. 시행).
 // 사업별 공고·운영요령에서 비율을 달리 정하면 그 기준이 우선(화면 '공고문 기준 직접 입력').
 (function (root) {
   'use strict';
 
-  const BASIS_DATE = '2026-11-13';
+  const BASIS_DATE = '2026-11-16';
   const SOURCES = {
-    decreeT1: '국가연구개발혁신법 시행령 제19조·별표 1(2024.12.31. 개정)',
+    decreeT1: '국가연구개발혁신법 시행령 제19조·별표 1(2026.3.10. 개정)',
     std: '국가연구개발사업 연구개발비 사용 기준(과기정통부고시 제2026-38호, 2026.5.6. 시행)',
   };
 
@@ -15,13 +15,13 @@
     sme: { label: '중소기업', govMaxPct: 75, cashMinPct: 10, indirectPct: 10, indirectMax: 10, profit: true,
       basis: { gov: '시행령 별표 1 제1호: 정부지원 75% 이하', cash: '시행령 별표 1 제2호: 기관부담금의 10% 이상 현금', indirect: '사용 기준 제114조④: 영리기관 간접비고시비율 10%' } },
     midS: { label: '중견기업(평균매출액등 3천억 원 미만)', govMaxPct: 70, cashMinPct: 10, indirectPct: 10, indirectMax: 10, profit: true,
-      basis: { gov: '시행령 별표 1 제1호: 정부지원 70% 이하', cash: '시행령 별표 1 제2호·비고 2: 3천억 원 미만 중견 10% 이상 현금', indirect: '사용 기준 제114조④: 영리기관 10%' } },
+      basis: { gov: '시행령 별표 1 제1호: 정부지원 70% 이하', cash: '시행령 별표 1 제2호 나목: 3천억 원 미만 중견 10% 이상 현금', indirect: '사용 기준 제114조④: 영리기관 10%' } },
     midL: { label: '중견기업(평균매출액등 3천억 원 이상)', govMaxPct: 70, cashMinPct: 13, indirectPct: 10, indirectMax: 10, profit: true,
       basis: { gov: '시행령 별표 1 제1호: 정부지원 70% 이하', cash: '시행령 별표 1 제2호: 중견기업 13% 이상 현금', indirect: '사용 기준 제114조④: 영리기관 10%' } },
     large: { label: '대기업·공기업', govMaxPct: 50, cashMinPct: 15, indirectPct: 10, indirectMax: 10, profit: true,
       basis: { gov: '시행령 별표 1 제1호: 정부지원 50% 이하', cash: '시행령 별표 1 제2호: 공기업·대기업 15% 이상 현금', indirect: '사용 기준 제114조④: 영리기관(공기업 포함) 10%' } },
     univ: { label: '대학', govMaxPct: 100, cashMinPct: 0, indirectPct: 5, indirectMax: 100, profit: false,
-      basis: { gov: '시행령 제19조①: 비영리기관은 기관부담 의무 없음', cash: '기관부담 의무 없음', indirect: '사용 기준 제114조②: 고시비율 없는 대학 5%(고시비율 있으면 그 비율 입력)' } },
+      basis: { gov: '시행령 제19조①: 비영리기관은 기관부담 의무 없음', cash: '기관부담 의무 없음', indirect: '사용 기준 제114조③: 고시비율 없는 대학 5%(고시비율 있으면 그 비율 입력)' } },
     nonprofit: { label: '비영리기관(대학 외)', govMaxPct: 100, cashMinPct: 0, indirectPct: 17, indirectMax: 100, profit: false,
       basis: { gov: '시행령 제19조①: 비영리기관은 기관부담 의무 없음', cash: '기관부담 의무 없음', indirect: '사용 기준 제114조③: 고시비율 없는 비영리기관 17%(고시비율 있으면 그 비율 입력)' } },
     custom: { label: '공고문 기준 직접 입력', govMaxPct: 75, cashMinPct: 10, indirectPct: 10, indirectMax: 100, profit: true, custom: true,
@@ -47,7 +47,7 @@
     { key: 'allowance', label: '연구수당', inkind: false },
   ];
 
-  // 인력 구분(사용 기준 제64조②): 기존 인력=현물 원칙, 신규 채용=현금, 부처 인정 시 기존 인력 현금
+  // 인력 구분(사용 기준 제65조④): 기존 인력=현물 원칙, 신규 채용=현금, 부처 인정 시 기존 인력 현금
   const PERSON_KINDS = {
     existing: { label: '기존 인력(현물)', inkind: true },
     new: { label: '신규 채용(현금)', inkind: false },
@@ -220,7 +220,7 @@
       const name = p.name || '이름 없음';
       if (p.totalRate > LIMITS.rateMax) add('error', `${name}: 총 참여율 ${p.totalRate}%(이 과제 ${pct(p.rate, 1000)}% + 다른 과제 ${pct(p.otherRate, 1000)}%)가 100%를 넘습니다.`, '사용 기준 제65조⑦', 'rate', people.indexOf(p));
       if (p.cost === 0 && (p.name || p.salary)) add('warn', `${name}: 연봉·참여개월·참여율을 확인하세요(인건비 0).`);
-      if (p.kind === 'existingCash' && rules.profit) add('warn', `${name}: 기존 인력 인건비는 원칙적으로 현물입니다. 현금 계상은 부처(전문기관)가 인정한 경우에만 가능합니다.`, '사용 기준 제64조②', 'kindcash', people.indexOf(p));
+      if (p.kind === 'existingCash' && rules.profit) add('warn', `${name}: 인건비 현금 계상은 신규 채용 인력 등 사용 기준이 정한 경우에만 가능합니다. 기존 인력을 현금으로 넣으려면 부처(전문기관) 인정이 필요합니다.`, '사용 기준 제65조④', 'kindcash', people.indexOf(p));
     }
     const equip = get('equipment').total;
     if (equip >= 30000) add('warn', `연구시설·장비비 ${fmt(equip)}천원 — 3천만 원 이상 장비는 ZEUS 공동활용 확인이 필요하고, 1억 원 이상은 시설·장비 표준지침 절차를 따릅니다(장비 1건 기준).`, '사용 기준 제23조');
@@ -637,7 +637,7 @@
 
   // ---------- 처음 편성 도우미(features.helper) ----------
   const ITEM_HELP = {
-    personnel: '참여연구원 인건비. 2단계 표에서 자동 계산. 기존 인력은 현물, 신규 채용은 현금(사용 기준 제64조).',
+    personnel: '참여연구원 인건비. 2단계 표에서 자동 계산. 기존 인력은 현물, 신규 채용은 현금(사용 기준 제65조④).',
     student: '학생연구자 인건비(대학·연구기관만). 기업은 해당 없음.',
     equipment: '연구에 필요한 장비 구입·임차·제작비. 보유 장비는 구입가의 20% 이내 현물 가능. 3천만 원 이상은 ZEUS 공동활용 확인.',
     material: '시약·재료·시제품 제작 재료·소모품. 보통 현금 편성의 중심 비목이라 금액 조정에 가장 많이 씀.',

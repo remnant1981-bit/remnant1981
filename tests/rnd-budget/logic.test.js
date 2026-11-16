@@ -172,7 +172,7 @@ test('위탁연구개발비 40%·기존 인력 현금·장비 3천만 원 안내
   r = RB.calcBudget(base({ items: { material: { cash: 100000 }, outsource: { cash: 40000 } } }));
   assert.doesNotMatch(lv(r, 'error'), /위탁/);
   r = RB.calcBudget(base({ people: [{ name: '김', salary: 50000, months: 12, rate: 50, kind: 'existingCash' }], items: { equipment: { cash: 30000 } } }));
-  assert.match(lv(r, 'warn'), /김: 기존 인력 인건비는 원칙적으로 현물/);
+  assert.match(lv(r, 'warn'), /김: 인건비 현금 계상은 신규 채용 인력 등/);
   assert.match(lv(r, 'warn'), /3천만 원 이상 장비/);
   assert.equal(r.rows.find((x) => x.key === 'personnel').cash, 25000); // 현금으로 집계
   // 이전 저장값(inkind:true) 호환

@@ -31,10 +31,10 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   // ① 기본 설정(1단계 공개 범위): 꺼진 기능은 숨김
   await p.goto(base);
   check('기본: 과제 구성·안 저장·단계 메뉴 숨김, Q&A 표시', (await p.locator('#s0').isHidden()) && (await p.locator('#saveScenario').isHidden()) && (await p.locator('.faq').isVisible()) && (await p.locator('.steps').isHidden()));
-  check('Q&A 21개', (await p.locator('#faq details').count()) === 21);
+  check('Q&A 23개', (await p.locator('#faq details').count()) === 23);
   await p.fill('#faqSearch', '현물');
   const shownQ = await p.locator('#faq details:not([hidden])').count();
-  check('Q&A 검색(현물)', shownQ >= 3 && shownQ < 21 && (await p.locator('#faq details:not([hidden])').first().getAttribute('open')) !== null, String(shownQ));
+  check('Q&A 검색(현물)', shownQ >= 3 && shownQ < 23 && (await p.locator('#faq details:not([hidden])').first().getAttribute('open')) !== null, String(shownQ));
   await p.fill('#faqSearch', 'zzzz');
   check('Q&A 검색 결과 없음 안내', await p.locator('#faqEmpty').isVisible());
   await p.fill('#faqSearch', '');
@@ -95,7 +95,7 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   check('연구수당 한도 초과 + 근거', err.includes('연구수당') && err.includes('제26조'), err);
   await p.getByLabel('연구수당 현금(천원)').fill('');
   await row.getByLabel('연구원 1 구분').selectOption('existingCash');
-  check('기존 인력 현금 경고', (await p.textContent('#checks')).includes('부처(전문기관)가 인정한 경우'));
+  check('기존 인력 현금 경고', (await p.textContent('#checks')).includes('부처(전문기관) 인정이 필요'));
   await row.getByLabel('연구원 1 구분').selectOption('existing');
   const sw = await p.evaluate(() => document.documentElement.scrollWidth);
   check('390px 가로 스크롤 없음', sw <= 390, String(sw));
