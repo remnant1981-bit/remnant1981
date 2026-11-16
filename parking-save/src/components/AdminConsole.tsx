@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { AdminOverrideEditor, SyncHistoryChart } from "./AdminOverrideEditor";
+import { AdminStats } from "./AdminStats";
 
 // 토큰은 이 탭(sessionStorage)에만 보관하고 탭을 닫으면 사라짐
 const TOKEN_KEY = "parkingsave:admin-token";
@@ -71,6 +72,11 @@ export function AdminConsole() {
       <p role="status" aria-live="polite" className="text-sm">{msg}</p>
       {data && (
         <>
+          <section aria-labelledby="stats-h">
+            <h2 id="stats-h" className="font-semibold">운영 현황</h2>
+            <AdminStats call={call} />
+          </section>
+
           <section aria-labelledby="sync-h">
             <h2 id="sync-h" className="font-semibold">수집 상태(원천별 마지막 실행)</h2>
             {data.sync.length === 0 ? <p className="text-sm text-gray-700">수집 이력 없음</p> : <div className="overflow-x-auto"><table className="mt-1 w-full text-sm tabular-nums"><thead><tr className="text-left text-gray-600"><th scope="col">원천</th><th scope="col">상태</th><th scope="col">종료</th><th scope="col">받은 건수</th><th scope="col">오류</th></tr></thead>

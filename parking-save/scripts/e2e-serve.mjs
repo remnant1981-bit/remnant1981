@@ -9,10 +9,10 @@ const sa = path.join(root, ".next/standalone");
 if (!fs.existsSync(path.join(sa, "server.js"))) { console.error("먼저 npm run build"); process.exit(1); }
 for (const [from, to] of [["public", "public"], [".next/static", ".next/static"], ["migrations", "migrations"], ["assets", "assets"]])
   fs.cpSync(path.join(root, from), path.join(sa, to), { recursive: true });
-const db = path.join(root, "data/e2e.sqlite");
+const port = process.env.E2E_PORT || "3100";
+const db = path.join(root, `data/e2e-${port}.sqlite`); // 서버별 DB(여러 서버를 동시에 띄울 때 서로 지우지 않게)
 fs.mkdirSync(path.dirname(db), { recursive: true });
 for (const f of [db, db + "-wal", db + "-shm"]) fs.rmSync(f, { force: true }); // 매번 새 DB(목업 자동 적재)
-const port = process.env.E2E_PORT || "3100";
 const child = spawn(process.execPath, ["server.js"], {
   cwd: sa, stdio: "inherit",
   env: { ...process.env, NODE_ENV: "production", PORT: port, HOSTNAME: "127.0.0.1", DATABASE_PATH: db, PARKING_MOCK_DATA: "true", SITE_URL: `http://127.0.0.1:${port}`,

@@ -13,7 +13,7 @@ import { dict } from "@/i18n/dict";
 export interface MapItem { id: number; name: string; lat: number; lng: number; feeLabel: string; tone: "free" | "paid" | "unknown"; amount: number | null; distanceLabel: string; href: string }
 
 /** 이 거리(화면 px) 안의 핀은 하나로 묶어 표시 — 시설이 몰린 곳에서 요금 핀이 서로 가리는 문제 방지 */
-const CLUSTER_PX = 64;
+export const CLUSTER_PX = 64;
 
 const TONE: Record<MapItem["tone"], { bg: string; fg: string; border: string }> = {
   free: { bg: "#e3f4ec", fg: "#0b5a3a", border: "#11724b" },
@@ -22,14 +22,14 @@ const TONE: Record<MapItem["tone"], { bg: string; fg: string; border: string }> 
 };
 
 /** 핀 라벨 DOM(텍스트는 textContent로만 넣어 시설명·요금 문자열이 HTML로 해석되지 않게 함) */
-function pinEl(item: Pick<MapItem, "tone" | "feeLabel">, cluster = false): HTMLElement {
+export function pinEl(item: Pick<MapItem, "tone" | "feeLabel">, cluster = false): HTMLElement {
   const t = cluster ? { bg: "#1d4ed8", fg: "#ffffff", border: "#1e3a8a" } : TONE[item.tone];
   const el = document.createElement("div");
   el.textContent = item.feeLabel;
   el.style.cssText = `display:inline-block;white-space:nowrap;padding:2px 7px;border-radius:999px;font:600 12px/1.4 system-ui,sans-serif;background:${t.bg};color:${t.fg};border:1.5px solid ${t.border};box-shadow:0 1px 2px rgba(0,0,0,.25);transform:translate(-50%,-100%)`;
   return el;
 }
-function clusterPopupEl(items: MapItem[]): HTMLElement {
+export function clusterPopupEl(items: MapItem[]): HTMLElement {
   const ul = document.createElement("ul");
   ul.style.cssText = "margin:0;padding-left:16px;max-height:180px;overflow:auto";
   for (const it of items) {
@@ -41,7 +41,7 @@ function clusterPopupEl(items: MapItem[]): HTMLElement {
   }
   return ul;
 }
-function popupEl(item: MapItem): HTMLElement {
+export function popupEl(item: MapItem): HTMLElement {
   const box = document.createElement("div");
   const a = document.createElement("a");
   a.href = item.href; a.textContent = item.name; a.style.fontWeight = "600";

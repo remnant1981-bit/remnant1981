@@ -188,3 +188,136 @@ test('체험 예시: 정상 예시는 모든 기관·연차 오류 0건, 오류 
   const err = RB.calcBudget(RB.sheetState(RB.normalizeProject(RB.EXAMPLES.error.state), 0, 0)).checks.filter((c) => c.level === 'error').map((c) => c.msg).join('\n');
   for (const re of [/최소 총사업비보다/, /현금 .*부족/, /연구수당/, /위탁연구개발비/, /총 참여율/]) assert.match(err, re);
 });
+
+// ---------- 집행 현황판 ----------
+const execProject = () => {
+  const p = RB.normalizeProject(RB.EXAMPLES.ok.state);
+  p.insts[0].data[0].exec = { start: '2026-04-01', end: '2027-03-31',
+    monthly: { personnel: [3500, 3250, 3250, 3250, 3250, 3250, 3250, 3250], equipment: [0, 0, 45000, 0, 13000], material: [0, 2400, 5100, 3800, 6200, 4300, 5100, 4300], outsource: [0, 0, 0, 20000], activity: [1200, 1800, 2100, 1600, 2300, 1500, 1900, 1600], allowance: [0, 0, 0, 0, 0, 4500, 0, 5000], indirect: [1500, 1700, 2200, 1800, 2100, 1900, 1900, 1900] },
+    paid: [{ date: '2026-06-30', amount: '5000' }] };
+  return p;
+};
+
+test('집행: 경과율·집행률·잔액·상태(±25%p)', () => {
+  const E = RB.calcExecution(execProject(), 0, 0, '2026-11-13');
+  assert.equal(E.elapsedPct, 62.2); assert.deepEqual(E.days, { passed: 227, total: 365 });
+  assert.deepEqual(E.total, { agreed: 313900, spent: 173950, remain: 139950, rate: 55.4 });
+  const st = Object.fromEntries(E.rows.map((r) => [r.key, r.status]));
+  assert.deepEqual(st, { personnel: 'ok', equipment: 'fast', material: 'slow', outsource: 'ok', activity: 'ok', allowance: 'over', indirect: 'ok' });
+  assert.equal(E.months[0], '2026-04'); assert.equal(E.months[11], '2027-03');
+  const msg = E.checks.map((c) => c.msg).join('\n');
+  assert.match(msg, /연구수당 9,500천원 — 협약액 9,000천원 초과/);
+  assert.match(msg, /기관부담 현금 8,900천원 미납 — 기한 2026-12-31\(연차 종료 3개월 전\), D-48/);
+  assert.deepEqual(E.schedule.map((s) => [s.date, s.dday]), [['2026-12-31', 48], ['2027-01-31', 79], ['2027-03-31', 138]]);
+});
+
+test('집행: 협약 조정·기한(협약)·경계값·기간 미입력', () => {
+  const p = execProject(); const ex = p.insts[0].data[0].exec;
+  ex.agreed = { allowance: '10000' }; ex.cashDue = '2026-11-01';
+  let E = RB.calcExecution(p, 0, 0, '2026-11-13');
+  assert.equal(E.rows.find((r) => r.key === 'allowance').status, 'fast'); // 9,500/10,000 = 95% > 경과율+25
+  assert.ok(E.checks.some((c) => c.level === 'error' && /기한 2026-11-01\(협약\) 경과/.test(c.msg)));
+  // 부진 경계: 경과율 − 25 정확히는 정상
+  ex.monthly.material = []; ex.agreed.material = '1000'; ex.monthly.material[0] = 372; // 37.2% = 62.2 − 25
+  assert.equal(RB.calcExecution(p, 0, 0, '2026-11-13').rows.find((r) => r.key === 'material').status, 'ok');
+  ex.monthly.material[0] = 371;
+  assert.equal(RB.calcExecution(p, 0, 0, '2026-11-13').rows.find((r) => r.key === 'material').status, 'slow');
+  // 인건비는 과속 판정 제외
+  ex.monthly.personnel = [35000];
+  assert.equal(RB.calcExecution(p, 0, 0, '2026-11-13').rows.find((r) => r.key === 'personnel').status, 'ok');
+  // 기간 미입력
+  E = RB.calcExecution(RB.normalizeProject(RB.EXAMPLES.ok.state), 0, 0, '2026-11-13');
+  assert.equal(E.ready, false); assert.equal(E.elapsedPct, 0); assert.match(E.checks[0].msg, /시작일·종료일/);
+  // 잘못된 날짜 정리, 월말 보정
+  assert.equal(RB.normalizeExec({ start: '2026-02-30', end: 'x' }).start, '');
+  assert.equal(RB.ymdAddMonths('2027-05-31', -3), '2027-02-28');
+  // 종료일 이후 경과율 100% 상한
+  assert.equal(RB.calcExecution(execProject(), 0, 0, '2028-01-01').elapsedPct, 100);
+});
+
+test('집행 엑셀: 시트 구성·수식', () => {
+  const files = unzip(RB.buildExecXlsx(execProject(), 0, 0, '2026-11-13'));
+  for (const n of ['집행 현황', '월별 집행', '기관부담 현금', '점검·일정']) assert.match(files['xl/workbook.xml'], new RegExp(`name="${n}"`));
+  assert.match(files['xl/worksheets/sheet1.xml'], /<f>B5-C5<\/f>/);
+  assert.match(files['xl/worksheets/sheet1.xml'], /초과/);
+  assert.match(files['xl/worksheets/sheet2.xml'], /2026-04/);
+  assert.match(files['xl/worksheets/sheet3.xml'], /2026-06-30/);
+});
+
+test('v2 저장값에 exec 자동 추가, 편성 계산 영향 없음', () => {
+  const p = RB.normalizeProject(RB.EXAMPLES.ok.state);
+  assert.deepEqual(p.insts[0].data[0].exec, RB.blankExec());
+  assert.equal(RB.calcProject(p).total.total, RB.calcProject(RB.EXAMPLES.ok.state).total.total);
+});
+
+// ---------- 처음 편성 도우미 ----------
+test('도우미 초안: 최소 총사업비·현금 기준을 정확히 충족', () => {
+  for (const [ruleset, gov] of [['sme', 300000], ['midS', 150000], ['midL', 200000], ['large', 500000], ['univ', 100000]]) {
+    const d = RB.draftBudget({ ruleset, gov, existing: { count: 3, salary: 60000, rate: 40 }, hires: { count: 1, salary: 42000, months: 10 }, equipCash: 50000, equipInkind: 10000, outsource: 30000 });
+    assert.equal(d.result.checks.filter((c) => c.level === 'error').length, 0, ruleset);
+    assert.ok(d.result.total.total >= d.result.funding.total, ruleset);
+    // 연구재료비 1천원만 줄여도 기준 미달(최소값)
+    const less = { ...d.sheet, ruleset, items: { ...d.sheet.items, material: { cash: String(RB.int(d.sheet.items.material.cash) - 1) } } };
+    if (RB.int(d.sheet.items.material.cash) > 0) assert.ok(RB.calcBudget(less).checks.some((c) => c.code === 'total' || c.code === 'cash'), ruleset);
+  }
+  const d = RB.draftBudget({ ruleset: 'sme', gov: 300000, existing: { count: 3, salary: 60000, rate: 40 } });
+  assert.equal(d.sheet.people.length, 3); assert.equal(d.sheet.people[0].kind, 'existing');
+  assert.equal(RB.int(d.sheet.items.allowance.cash), Math.floor(72000 * 0.1));
+  assert.equal(d.result.total.total, 400000);
+});
+
+test('고치기 제안: 적용하면 오류 해소', () => {
+  let sh = RB.sheetState(RB.normalizeProject(RB.EXAMPLES.error.state), 0, 0);
+  const codes = RB.suggestFixes(sh).map((f) => f.code).sort();
+  assert.deepEqual(codes, ['allowance', 'kindcash', 'outsource', 'rate', 'total']);
+  for (let k = 0; k < 4; k++) { const fx = RB.suggestFixes(sh); if (!fx.length) break; for (const f of fx) sh = { ...sh, ...RB.applyFix(sh, f) }; }
+  assert.equal(RB.calcBudget(sh).checks.filter((c) => c.level === 'error').length, 0);
+  // 원본 불변
+  const orig = RB.sheetState(RB.normalizeProject(RB.EXAMPLES.error.state), 0, 0);
+  RB.applyFix(orig, RB.suggestFixes(orig)[0]);
+  assert.equal(orig.items.material.cash, '150000');
+  // 비목 설명
+  for (const k of ['personnel', 'equipment', 'material', 'outsource', 'activity', 'allowance', 'indirect']) assert.ok(RB.ITEM_HELP[k]);
+});
+
+test('한 번에 고치기: 오류 0, 주의 항목은 유지', () => {
+  const sh = RB.sheetState(RB.normalizeProject(RB.EXAMPLES.error.state), 0, 0);
+  const r = RB.autoFix(sh);
+  assert.equal(r.remaining, 0);
+  assert.ok(r.applied.length >= 4);
+  assert.equal(r.sheet.people[1].kind, 'existingCash'); // 주의(warn) 항목은 사용자가 판단
+  assert.equal(RB.calcBudget(r.sheet).checks.filter((c) => c.level === 'error').length, 0);
+});
+
+// ---------- 코드 검토 회귀 테스트 ----------
+test('[회귀] 손상된 저장값 정리(사람·연차·기관·집행)', () => {
+  const p = RB.normalizeProject({ v: 2, years: 2, insts: [null, 'x', { name: 'A', role: 'lead', ruleset: 'sme', data: [null, { gov: '1000', people: [null, 'x', { name: 'P', salary: '1000', months: 12, rate: 10 }], items: { material: 5, equipment: { cash: '10' } }, exec: { monthly: { material: 5, equipment: 'abc', activity: [1, 2] }, paid: [null, 'x', { date: '2026-01-01', amount: '5' }], agreed: [1] } }] }] });
+  assert.equal(p.insts.length, 1);
+  const d = p.insts[0].data[0];
+  assert.equal(d.people.length, 1); assert.deepEqual(Object.keys(d.items), ['equipment']);
+  assert.deepEqual(Object.keys(d.exec.monthly), ['activity']); assert.equal(d.exec.paid.length, 1); assert.deepEqual(d.exec.agreed, {});
+  assert.doesNotThrow(() => RB.calcProject(p)); assert.doesNotThrow(() => RB.calcExecution(p, 0, 0, '2026-11-14'));
+});
+
+test('[회귀] 공고문 기준 직접 입력에서 정부지원 비율 0·빈칸 → 오류', () => {
+  for (const v of ['', 0, '0']) {
+    const r = RB.calcBudget({ ruleset: 'custom', govMaxPct: v, gov: '100000', items: { material: { cash: '110000' } } });
+    assert.ok(r.checks.some((c) => c.code === 'govmax' && c.level === 'error'), String(v));
+    assert.ok(!r.checks.some((c) => c.level === 'ok'));
+  }
+});
+
+test('[회귀] 다른 과제 참여율 100% 이상이면 참여율 고치기 제안 안 함·autoFix 반복 중단', () => {
+  const sh = { ruleset: 'sme', gov: '100000', people: [{ name: 'A', salary: '60000', months: 12, rate: 30, otherRate: 120, kind: 'existing' }], items: { material: { cash: '200000' } } };
+  assert.ok(!RB.suggestFixes(sh).some((f) => f.code === 'rate'));
+  const r = RB.autoFix(sh);
+  assert.ok(r.applied.length < 5); assert.equal(r.remaining, 1);
+});
+
+test('[회귀] 엑셀: 제어문자 제거·시트명 따옴표·집행 기간 없을 때 월 머리글', () => {
+  const files = unzip(RB.buildXlsx({ v: 2, title: 'A\x01B', years: 1, insts: [{ name: "ABC'", role: 'lead', ruleset: 'sme', data: [{ gov: '1000', people: [{ name: 'x\x07y', salary: '1000', months: 12, rate: 10 }], items: {} }] }] }));
+  for (const [n, x] of Object.entries(files)) assert.ok(!/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(x), n);
+  assert.match(files['xl/workbook.xml'], /name="1\.ABC"/);
+  const ex = unzip(RB.buildExecXlsx(RB.normalizeProject(RB.EXAMPLES.ok.state), 0, 0, '2026-11-14'));
+  assert.match(ex['xl/worksheets/sheet2.xml'], /12개월/);
+});

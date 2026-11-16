@@ -11,7 +11,8 @@ import { headers } from "next/headers";
 import { clientKey, searchLimiter } from "@/server/rate-limit";
 import { TooManyRequests } from "@/components/TooManyRequests";
 import { ResultsMap, type MapItem } from "@/components/ResultsMap";
-import { tileConfig } from "@/lib/map-tiles";
+import { mapProvider } from "@/lib/map-tiles";
+import { NaverResultsMap } from "@/components/NaverResultsMap";
 import { ShareButton } from "@/components/ShareButton";
 import { CompareTray } from "@/components/CompareControls";
 import { RecentSearchRecorder } from "@/components/RecentSearchRecorder";
@@ -21,6 +22,7 @@ import { dict } from "@/i18n/dict";
 import { logError } from "@/server/log";
 import { resolveDestination } from "@/server/place";
 import { walkMinutesEstimate } from "@/domain/geo";
+import { countUsage } from "@/server/usage";
 
 export async function generateMetadata(): Promise<Metadata> { return { title: dict(await getLang()).search.title }; }
 const FIRST_LIMIT = 20, MORE_LIMIT = 50;
@@ -60,6 +62,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       <p role="alert" className="mb-4 rounded border border-red-400 bg-red-50 p-3 text-sm text-red-900">{lang === "ko" ? parsed.message : (S.errors[parsed.code] ?? S.errors.INVALID_PERIOD)}</p>{form}</>);
   }
   let res;
+  countUsage("search_page");
   try { res = await searchLotsCached(await getAppDb(), parsed.params); }
   catch (e) {
     logError("search_page.error", e);
@@ -133,7 +136,10 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         </section>
       )}
       {view === "map" && res.items.length > 0 && (
-        <ResultsMap lang={lang} tile={tileConfig().tile} center={{ lat: res.searchCenter.lat, lng: res.searchCenter.lng, label: centerLabel }} radiusMeters={parsed.params.radiusMeters} items={mapItems} />
+        (() => { const mp = mapProvider().provider; const c = { lat: res.searchCenter.lat, lng: res.searchCenter.lng, label: centerLabel };
+          return mp.kind === "naver"
+            ? <NaverResultsMap lang={lang} clientId={mp.clientId} fallback={mp.fallback} center={c} radiusMeters={parsed.params.radiusMeters} items={mapItems} />
+            : <ResultsMap lang={lang} tile={mp.tile} center={c} radiusMeters={parsed.params.radiusMeters} items={mapItems} />; })()
       )}
       {res.items.length === 0 ? (
         <div className="mt-6 rounded border border-gray-300 p-4" role="status">

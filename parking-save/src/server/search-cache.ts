@@ -5,6 +5,7 @@
 import type { Db } from "./db";
 import { mockEnabled } from "./mock";
 import { searchLots, type SearchParams, type SearchResponse } from "./search";
+import { countUsage } from "./usage";
 
 export const SEARCH_CACHE_TTL_MS = 30_000;
 const MAX_ENTRIES = 300;
@@ -20,7 +21,7 @@ export async function searchLotsCached(db: Db, p: SearchParams, now = new Date()
   if (mockEnabled()) return searchLots(db, p, now);
   const key = searchCacheKey(p), t = now.getTime();
   const hit = cache.get(key);
-  if (hit && t - hit.at < SEARCH_CACHE_TTL_MS) { searchCacheStats.hits++; return hit.res; }
+  if (hit && t - hit.at < SEARCH_CACHE_TTL_MS) { searchCacheStats.hits++; countUsage("search_cache_hit", t); return hit.res; }
   searchCacheStats.misses++;
   // 진행 중인 계산도 공유(같은 조건 동시 요청이 몰릴 때 한 번만 계산). 실패하면 캐시에서 제거
   const res = searchLots(db, p, now);

@@ -2,6 +2,8 @@
 // ⚠ 한계: 프로세스 메모리 기반이라 인스턴스가 여러 개면 인스턴스별로 적용됨. 클라이언트 식별은
 //   x-forwarded-for 끝에서 TRUSTED_PROXY_COUNT번째 값(신뢰 프록시가 덧붙인 접속 IP) — 프록시 뒤에서만 의미가 있음.
 //   운영 인프라(OPEN_ISSUES #10) 결정 후 공유 저장소/엣지 제한으로 교체 권장.
+import { countUsage } from "./usage";
+
 export interface Limiter { check(key: string, now?: number): { ok: boolean; retryAfterSec: number } }
 
 /** 클라이언트 키 최대 보관 수. 만료 정리 후에도 넘치면(많은 주소에서 동시에 몰릴 때) 오래된 키부터 버린다 — 메모리가 끝없이 늘지 않게 */
@@ -19,7 +21,9 @@ export function createLimiter(limit: number, windowMs: number, maxKeys = LIMITER
       const cur = hits.get(key);
       if (!cur || now - cur.start >= windowMs) { hits.set(key, { start: now, n: 1 }); return { ok: true, retryAfterSec: 0 }; }
       cur.n++;
-      return cur.n <= limit ? { ok: true, retryAfterSec: 0 } : { ok: false, retryAfterSec: Math.max(1, Math.ceil((cur.start + windowMs - now) / 1000)) };
+      if (cur.n <= limit) return { ok: true, retryAfterSec: 0 };
+      countUsage("rate_limited");
+      return { ok: false, retryAfterSec: Math.max(1, Math.ceil((cur.start + windowMs - now) / 1000)) };
     },
   };
 }

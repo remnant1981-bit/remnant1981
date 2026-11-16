@@ -49,3 +49,20 @@ test("요금 보정 적용 → 상세에 반영·표시 → 되돌리면 원래 
   await expect(feeLine).toHaveText(before);
   await expect(page.getByText(/관리자 보정 값입니다/)).toHaveCount(0);
 });
+
+test("운영 현황: 상세 조회 건수가 바로 반영, 접근성 위반 없음", async ({ page, context }) => {
+  await context.setExtraHTTPHeaders({ "x-forwarded-for": "10.8.0.2" });
+  await page.goto(DETAIL);
+  await page.goto("/admin");
+  await page.getByLabel(/관리자 토큰/).fill(TOKEN);
+  await page.getByRole("button", { name: "접속" }).click();
+  const sec = page.locator("section[aria-labelledby=stats-h]");
+  const lot = sec.locator("figure", { hasText: "주차장 상세 조회" });
+  await expect(lot.locator("figcaption")).toContainText(/오늘 [1-9]/);
+  await sec.getByText("표로 보기(최근 14일)").click();
+  await expect(sec.getByRole("table")).toBeVisible();
+  await page.evaluate(axeSource);
+  const ax = await page.evaluate(() => (window as unknown as { axe: { run: (d: Document, o: unknown) => Promise<{ violations: Array<{ id: string; nodes: Array<{ target: string[] }> }> }> } }).axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"] } }));
+  expect(ax.violations.map((v) => `${v.id} ${v.nodes.slice(0, 3).map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
+  await sec.screenshot({ path: "test-results/admin-stats.png" });
+});

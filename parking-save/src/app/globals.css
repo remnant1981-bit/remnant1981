@@ -10,6 +10,7 @@
   --chart-grid: #e5e7eb;
   --chart-muted: #4b5563;
   --chart-ink: #111827;
+  --chart-alert: #b45309; /* 오류·경고 막대(주황 계열, 흰 바탕 대비 확인) */
 }
 
 /*
@@ -27,6 +28,7 @@
     --chart-grid: #2b3544;
     --chart-muted: #a2adbd;
     --chart-ink: #e8edf4;
+    --chart-alert: #f2b45a;
 
     --color-white: #111827;
     --color-gray-300: #374151;

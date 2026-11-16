@@ -65,6 +65,9 @@ test("헬스체크·관리자 API 보호", async ({ request }) => {
   const h = await (await request.get("/api/health")).json();
   expect(["ok", "degraded"]).toContain(h.status);
   expect((await request.get("/api/admin/db-check")).status()).toBe(401);
+  const csp = (await request.get("/")).headers()["content-security-policy"];
+  expect(csp).toContain("default-src 'self'");
+  expect(csp).not.toContain("naver"); // 기본 모드는 외부 스크립트 없음
 });
 
 test("한눈에 보기와 도보 시간 추정이 결과에 표시됨", async ({ page }) => {
