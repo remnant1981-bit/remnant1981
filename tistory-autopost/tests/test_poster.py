@@ -99,3 +99,43 @@ def test_cookie_site_matches_only_target_domains():
     assert site({"domain": "kauth.kakao.com"}) == "kakao.com"
     assert site({"domain": "nottistory.com"}) == ""
     assert site({"domain": ".daum.net"}) == "" and site({}) == ""
+
+
+def test_front_matter_with_bom_is_read(env):
+    p = env["posts_dir"] / "bom.md"
+    p.write_bytes("\ufeff---\r\ntitle: 메모장 글\r\nvisibility: private\r\n---\r\n\r\n본문\r\n".encode("utf-8"))
+    r = tp.parse_post(p, env)
+    assert (r.title, r.visibility) == ("메모장 글", "private")      # BOM 때문에 기본값(공개)으로 읽히면 안 됨
+
+
+def test_broken_post_is_moved_out_once(env, monkeypatch):
+    cfg = {**env, "failed_dir": env["posts_dir"] / "failed", "published_dir": env["posts_dir"] / "published"}
+    bad = post(cfg, "bad")
+    bad.write_text("---\ntitle: x\npublish_at: 내일 아침\n---\n본문", encoding="utf-8")
+    assert tp.pending_posts(cfg) == [bad]                  # 한 번은 대상에 올라 보고됨
+    monkeypatch.setattr(tp, "TistoryBot", lambda *a, **k: (_ for _ in ()).throw(AssertionError("브라우저를 띄우면 안 됨")))
+    assert tp.run_once(cfg, [bad]) == 0
+    assert not bad.exists() and len(list(cfg["failed_dir"].iterdir())) == 1
+    assert tp.pending_posts(cfg) == []                     # 다음 실행부터는 반복 실패하지 않음
+
+
+def test_dry_run_does_not_move_broken_post(env):
+    cfg = {**env, "failed_dir": env["posts_dir"] / "failed"}
+    bad = post(cfg, "bad")
+    bad.write_text("---\nvisibility: nope\n---\n본문", encoding="utf-8")
+    assert tp.run_once(cfg, [bad], dry_run=True) == 0 and bad.exists()
+
+
+def test_mask_personal():
+    s = tp.mask_personal("hong.gd+1@nate.com 계정 / ho***@kakao.com / 010-1234-5678 / 01012345678 / 2026-11-05 09:00")
+    assert "@" not in s and "1234" not in s and "2026-11-05 09:00" in s
+
+
+def test_naive_publish_time_is_accepted(env):
+    naive = (tp.now(env) - dt.timedelta(hours=1)).replace(tzinfo=None)
+    tp.PUBLISH_LOG.write_text(json.dumps({"at": naive.isoformat(timespec="seconds")}) + "\n", encoding="utf-8")
+    assert tp.apply_rate_limit(env, ["a"], quiet=True) == []      # 시간대 없는 기록도 비교 오류 없이 제한 적용
+
+
+def test_feed_title_normalisation():
+    assert tp._norm_title("난방비  절약 &amp;mdash; 보일러&middot;단열 ") == "난방비 절약 — 보일러·단열"

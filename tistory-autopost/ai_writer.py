@@ -105,7 +105,7 @@ def load_ai_config() -> dict:
     cfg = dict(DEFAULT_AI)
     path = BASE_DIR / "config.json"
     if path.exists():
-        cfg.update(json.loads(path.read_text(encoding="utf-8")).get("ai", {}))
+        cfg.update(json.loads(path.read_text(encoding="utf-8-sig")).get("ai", {}))
     return cfg
 
 
@@ -311,7 +311,7 @@ def main():
     topics = list(args.topics)
     tf = Path(args.topics_file) if args.topics_file else None
     if tf:
-        lines = [l.strip() for l in tf.read_text(encoding="utf-8").splitlines()]
+        lines = [l.strip() for l in tf.read_text(encoding="utf-8-sig").splitlines()]
         file_topics = [l for l in lines if l and not l.startswith("#")]
         if args.count:
             file_topics = file_topics[: args.count]
@@ -321,7 +321,7 @@ def main():
 
     main_cfg = {}
     if (BASE_DIR / "config.json").exists():
-        main_cfg = json.loads((BASE_DIR / "config.json").read_text(encoding="utf-8"))
+        main_cfg = json.loads((BASE_DIR / "config.json").read_text(encoding="utf-8-sig"))
     posts_dir = (BASE_DIR / main_cfg.get("posts_dir", "./posts")).resolve()
     category = args.category or main_cfg.get("default_category", "")
     visibility = args.visibility or main_cfg.get("default_visibility", "public")
@@ -341,6 +341,8 @@ def main():
     else:
         slots = [""] * len(topics)
 
+    if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
+        sys.exit("[오류] API 키 확인 필요 (환경변수 ANTHROPIC_API_KEY)")
     client = anthropic.Anthropic()  # ANTHROPIC_API_KEY 환경변수 사용
     saved, done = [], []
     for i, topic in enumerate(topics, 1):
@@ -361,18 +363,17 @@ def main():
                   f"발행: {data['_publish_at'] or '즉시'})")
             saved.append(path)
             done.append(topic)
-        except (anthropic.AuthenticationError, TypeError):
-            # TypeError: 인증 정보 미설정 시 SDK 가 발생
+        except anthropic.AuthenticationError:
             sys.exit("[오류] API 키 확인 필요 (환경변수 ANTHROPIC_API_KEY)")
         except anthropic.RateLimitError:
             print("  [중단] 요청 한도 초과 → 잠시 후 재실행")
             break
-        except (anthropic.APIStatusError, anthropic.APIConnectionError, RuntimeError, json.JSONDecodeError) as e:
+        except (anthropic.APIStatusError, anthropic.APIConnectionError, RuntimeError, json.JSONDecodeError, KeyError) as e:
             print(f"  [실패] {e}")
 
     # 작성 완료된 주제는 topics 파일에서 제거
     if tf and done:
-        remain = [l for l in tf.read_text(encoding="utf-8").splitlines() if l.strip() not in done]
+        remain = [l for l in tf.read_text(encoding="utf-8-sig").splitlines() if l.strip() not in done]
         tf.write_text("\n".join(remain) + ("\n" if remain else ""), encoding="utf-8")
 
     print(f"완료: {len(saved)}/{len(topics)} 건 작성")

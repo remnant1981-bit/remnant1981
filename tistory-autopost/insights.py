@@ -50,9 +50,11 @@ def sitemap_posts(blog: str) -> list:
             continue
         lm = u.findtext("s:lastmod", default="", namespaces=ns)
         try:
-            lm = dt.datetime.fromisoformat(lm) if lm else None
+            lm = dt.datetime.fromisoformat(lm.strip()) if lm and lm.strip() else None
         except ValueError:
             lm = None
+        if lm and lm.tzinfo is None:   # 날짜만 있는 사이트맵 → 시간대 있는 값과 비교할 수 있게 UTC 로 간주
+            lm = lm.replace(tzinfo=dt.timezone.utc)
         out.append((loc, lm))
     return out
 
@@ -345,7 +347,10 @@ def cmd_refresh(cfg, n: int = 5, min_age_days: int = 180, recheck_days: int = 90
     except Exception as e:
         summary(f"## 🔄 오래된 글 점검\n- 사이트맵 읽기 실패: {e}")
         return "갱신 점검: 사이트맵 실패"
-    state = json.loads(REFRESH_STATE.read_text(encoding="utf-8")) if REFRESH_STATE.exists() else {}
+    try:
+        state = json.loads(REFRESH_STATE.read_text(encoding="utf-8-sig")) if REFRESH_STATE.exists() else {}
+    except ValueError:
+        state = {}   # 기록 파일이 깨졌으면 처음부터
     today = dt.datetime.now(dt.timezone.utc)
     cutoff, recheck = today - dt.timedelta(days=min_age_days), today - dt.timedelta(days=recheck_days)
 
@@ -366,9 +371,12 @@ def cmd_refresh(cfg, n: int = 5, min_age_days: int = 180, recheck_days: int = 90
             p = fetch_post(u)
             docs.append(f"[URL] {u}\n[제목] {p['title']}\n[작성] {p['published'][:10]} [수정] {lm:%Y-%m-%d}\n"
                         f"{p['text'][:6000]}")
+            state[u] = today.isoformat()   # 읽은 글만 점검한 것으로 기록 (읽기 실패한 글은 다음에 다시 시도)
         except Exception as e:
             print(f"글 읽기 실패 {u}: {e}")
-        state[u] = today.isoformat()
+    if not docs:
+        summary("## 🔄 오래된 글 점검\n- 대상 글을 읽지 못함 (다음 실행에서 다시 시도)")
+        return "갱신 점검: 글 읽기 실패"
     client, acfg, call = claude()
     r = call(client, acfg, REFRESH_SYSTEM, f"오늘: {dt.date.today()}\n\n" + "\n\n=====\n\n".join(docs),
              REFRESH_SCHEMA, effort="medium")

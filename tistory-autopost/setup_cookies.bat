@@ -73,7 +73,8 @@ start https://github.com/remnant1981-bit/remnant1981/settings/secrets/actions/ne
 pause
 
 %PY% -c "import secrets,sys; sys.stdout.write(secrets.token_urlsafe(32))" | clip
-echo  (2) SESSION_KEY 값을 클립보드에 복사함. 열리는 페이지에서:
+echo  (2) SESSION_KEY 값을 클립보드에 복사함. (쿠키만 다시 등록하는 경우 이 단계는 창을 닫고 건너뛰어도 됨)
+echo      열리는 페이지에서:
 echo      Name = SESSION_KEY  /  Secret 칸에 Ctrl+V  /  [Add secret] 클릭
 start https://github.com/remnant1981-bit/remnant1981/settings/secrets/actions/new
 pause

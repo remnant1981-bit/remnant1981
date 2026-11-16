@@ -67,8 +67,9 @@ jobs:
       # 매시 자동 실행(schedule)은 사람이 승인할 수 없으므로 카카오 로그인 시도 안 함 → 저장된 세션만 사용
       KAKAO_ID: ${{ github.event_name != 'schedule' && secrets.KAKAO_ID || '' }}
       KAKAO_PW: ${{ github.event_name != 'schedule' && secrets.KAKAO_PW || '' }}
-      # 로그인 세션 암호화 키 (별도 등록 안 하면 카카오 비밀번호 사용)
-      SESSION_KEY: ${{ secrets.SESSION_KEY || secrets.KAKAO_PW }}
+      # 로그인 세션 암호화 키. 암호화된 세션은 Actions 캐시에 보관되고 공개 저장소의 캐시는 외부 PR 실행에서도 읽힐 수 있으므로
+      # 추측 가능한 값(계정 비밀번호 등)을 대신 쓰지 않음 → 미등록이면 세션을 저장하지 않음
+      SESSION_KEY: ${{ secrets.SESSION_KEY }}
       HAS_KAKAO: ${{ secrets.KAKAO_ID != '' && secrets.KAKAO_PW != '' }}
       TISTORY_HEADLESS: "1"
       MODE: ${{ inputs.mode || (github.event.schedule == '23 0 * * 1' && '주간 점검') || '작성+발행' }}
@@ -245,7 +246,16 @@ jobs:
             echo "변경 없음"
           else
             git commit -m "tistory-autopost: ${MODE} 결과 정리"
-            git pull --rebase --autostash -q origin "${GITHUB_REF_NAME}" && git push
+            # 저장이 실패하면 발행된 글이 대기 목록에 남아 다음 실행에서 다시 올라갈 수 있음 → 다른 커밋과 겹쳐도 재시도
+            for i in 1 2 3 4; do
+              if git pull --rebase --autostash -q origin "${GITHUB_REF_NAME}" && git push -q origin "HEAD:${GITHUB_REF_NAME}"; then
+                exit 0
+              fi
+              git rebase --abort 2>/dev/null || true
+              echo "결과 저장 재시도 ${i}/4"; sleep $((i * 5))
+            done
+            echo "::error::결과 저장 실패 → 발행된 글이 대기 목록에 남아 있을 수 있음 (다음 실행은 블로그 RSS 로 중복 여부를 확인함)"
+            exit 1
           fi
 
       - name: 로그인 세션 암호화
