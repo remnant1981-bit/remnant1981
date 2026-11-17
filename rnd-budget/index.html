@@ -37,7 +37,8 @@
   <ol class="steps" aria-label="작성 순서" data-feature="steps"><li><a href="#s0">과제 구성</a></li><li><a href="#s1">기관·정부출연금</a></li><li><a href="#s2">인건비</a></li><li><a href="#s3">비목 편성</a></li><li><a href="#s4">점검</a></li><li><a href="#s5">총괄표·엑셀</a></li></ol>
 
   <section class="card" id="s0" aria-labelledby="h-proj" data-feature="project">
-    <h2 id="h-proj"><span class="no">0</span>과제 구성</h2>
+    <details class="projbox" id="projBox">
+    <summary><h2 id="h-proj"><span class="no">0</span>과제 구성</h2><span class="proj-sum" id="projSum"></span><span class="proj-edit">연차·공동기관 설정</span></summary>
     <div class="grid3">
       <label>연구개발기간<select id="years"></select></label>
     </div>
@@ -53,6 +54,7 @@
         <li>위탁연구개발기관은 기관으로 추가하지 않고, 위탁하는 기관의 <strong>위탁연구개발비</strong> 비목에 넣습니다.</li>
         <li>다음 연차는 <strong>이전 연차 복사</strong> 후 바뀐 금액만 고치면 빠릅니다.</li>
       </ul>
+    </details>
     </details>
   </section>
 
@@ -151,8 +153,13 @@
     <aside class="col-side" aria-label="편성 요약·점검·엑셀">
     <section class="card live" aria-labelledby="h-live">
       <h2 id="h-live">편성 요약 <span class="cur" id="liveCur"></span></h2>
+      <div class="live-start" id="liveStart" hidden>
+        <p>작성 순서</p>
+        <ol><li><strong>기관 유형</strong>을 고릅니다.</li><li><strong>정부출연금</strong>을 넣으면 최소 총사업비·기관부담금이 계산됩니다.</li><li><strong>인건비·비목</strong>을 편성합니다.</li><li>점검 결과를 확인하고 <strong>엑셀</strong>로 받습니다.</li></ol>
+        <button type="button" class="btn sm" id="liveHelper">몇 가지만 답하고 초안 받기</button>
+      </div>
       <dl class="live-grid" id="live" aria-live="polite"></dl>
-      <div class="meter" aria-hidden="true"><span id="meterGov"></span><span id="meterCash"></span><span id="meterInk"></span></div>
+      <div class="meter" id="liveMeter" aria-hidden="true"><span id="meterGov"></span><span id="meterCash"></span><span id="meterInk"></span></div>
       <p class="meter-legend"><i class="g"></i>정부지원 <i class="c"></i>기관 현금 <i class="k"></i>기관 현물</p>
     </section>
   <section class="card" id="s4" aria-labelledby="h-check">
@@ -202,6 +209,7 @@
       </section>
       <section class="card" id="x2" aria-labelledby="h-x2">
         <h2 id="h-x2"><span class="no">2</span>비목별 집행 현황 <span class="cur">현금 · 천원</span></h2>
+        <p class="empty-note" id="xEmpty" hidden>편성된 금액이 없습니다. 집행 현황은 편성 금액을 기준으로 계산하므로 먼저 사업비를 편성하세요. <button type="button" class="linkbtn" id="xGoPlan">편성 화면으로</button></p>
         <div class="tbl-wrap"><table class="tbl" id="xRows"></table></div>
         <p class="hint" id="xHint"></p>
       </section>

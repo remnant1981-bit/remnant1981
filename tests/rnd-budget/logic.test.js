@@ -381,3 +381,39 @@ test('[연차·공동기관 공개] 빈 연차 안내·비영리 반올림 1천�
   assert.ok(r.checks.some((c) => c.code === 'np-round' && c.level === 'info'));
   assert.ok(!r.checks.some((c) => c.level === 'error' || c.level === 'warn'));
 });
+
+test('[세부 비목] 세부 합계가 비목 금액이 되고, 현물은 허용 세목만 인정', () => {
+  const st = { ruleset: 'sme', gov: '300000', people: [], items: {
+    equipment: { cash: '999', inkind: '999', sub: [{ t: 'buy', name: '분석기', cash: '120000', inkind: '5000' }, { t: 'rent', cash: '10000', inkind: '777' }] },
+    activity: { sub: [{ t: 'expert', cash: '50000' }, { t: 'techin', cash: '10000', inkind: '20000' }, { t: 'travel', cash: '5000', inkind: '9' }] },
+    material: { cash: '200000' } } };
+  const r = RB.calcBudget(st), row = (k) => r.rows.find((x) => x.key === k);
+  assert.deepEqual([row('equipment').cash, row('equipment').inkind], [130000, 5000]);
+  assert.deepEqual([row('activity').cash, row('activity').inkind], [65000, 20000]);
+  assert.equal(row('material').cash, 200000);
+  assert.ok(r.checks.some((c) => c.level === 'warn' && c.msg.includes('‘분석기’') && c.msg.includes('1억 원 이상')));
+  assert.ok(r.checks.some((c) => c.level === 'ok' && c.msg.includes('외부 전문기술 활용비 80,000천원')));
+});
+
+test('[세부 비목] 외부 전문기술 활용비 직접비 40% 초과 오류·세목 미선택 주의', () => {
+  const r = RB.calcBudget({ ruleset: 'sme', gov: '300000', people: [], items: { activity: { sub: [{ t: 'expert', cash: '200000' }, { t: '', cash: '1000' }] }, material: { cash: '250000' } } });
+  assert.ok(r.checks.some((c) => c.code === 'exttech' && c.level === 'error' && c.basis.includes('제25조')));
+  assert.ok(r.checks.some((c) => c.level === 'warn' && c.msg.includes('세목을 고르지 않은')));
+});
+
+test('[세부 비목] 자동 고치기는 세부 행을 조정·저장값 정리·엑셀 세부 내역 시트', () => {
+  const st = { ruleset: 'sme', gov: '300000', people: [], items: { material: { sub: [{ t: 'buy', cash: '50000' }, { t: 'make', cash: '10000' }] } } };
+  const a = RB.autoFix(st);
+  assert.equal(a.remaining, 0);
+  assert.ok(RB.int(a.sheet.items.material.sub[0].cash) > 50000); assert.equal(a.sheet.items.material.sub[1].cash, '10000');
+  const v = { sub: [{ t: 'buy', cash: '300' }, { t: 'make', cash: '200' }] };
+  RB.setItemTotal('material', v, 'cash', 250); assert.deepEqual(v.sub.map((x) => x.cash), ['250', '0']);
+  const p = RB.normalizeProject({ v: 2, years: 1, insts: [{ name: 'A', role: 'lead', ruleset: 'sme', data: [{ gov: '100000', items: { material: { sub: [null, { t: 'zz', cash: '5' }, { t: 'buy', name: 'x'.repeat(99), cash: '140000' }] }, allowance: { sub: [{ t: 'x' }] }, equipment: { sub: 'bad' } } }] }] });
+  const it = p.insts[0].data[0].items;
+  assert.equal(it.material.sub.length, 2); assert.equal(it.material.sub[0].t, ''); assert.equal(it.material.sub[1].name.length, 40);
+  assert.equal(it.allowance.sub, undefined); assert.equal(it.equipment.sub, undefined);
+  assert.doesNotThrow(() => RB.calcProject(p));
+  const files = unzip(RB.buildXlsx(p));
+  assert.match(files['xl/workbook.xml'], /name="세부 내역"/);
+  assert.doesNotMatch(unzip(RB.buildXlsx(RB.normalizeProject(RB.EXAMPLES.ok.state)))['xl/workbook.xml'], /세부 내역/);
+});

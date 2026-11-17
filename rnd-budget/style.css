@@ -313,3 +313,44 @@ label[data-filebtn]:focus-visible{outline:2px solid var(--brand);outline-offset:
 @media (prefers-reduced-motion:reduce){.faq .faq-group summary::after{transition:none}}
 @media (max-width:899px){.faq-col{display:contents}.faq-body{gap:18px}}
 .faq-body.flat{gap:0}
+
+/* 세부 비목(features.details) */
+.subbtn{border:1px solid var(--line);background:var(--card);color:var(--brand);border-radius:99px;font:inherit;font-size:.72rem;font-weight:600;padding:1px 8px;cursor:pointer;white-space:nowrap}
+.subbtn:hover{border-color:var(--brand)}.subbtn.on{background:var(--brand-soft);border-color:var(--brand)}
+#items tr.has-sub td{border-bottom-color:transparent;font-weight:600}
+#items td.subsum{color:var(--ink)}
+#items tr.sub-row td{background:var(--bg);border-bottom:1px dashed var(--line);padding-top:4px;padding-bottom:4px}
+#items tr.sub-row td:first-child{padding-left:18px}
+.sub-in{display:flex;gap:6px;align-items:center}
+.sub-in select{flex:0 1 46%;min-width:0;max-width:260px;padding:6px 8px;font-size:.85rem}
+.sub-in input{flex:1 1 0;min-width:0;text-align:left;padding:6px 8px;font-size:.85rem}
+#items tr.sub-row td input{padding-top:6px;padding-bottom:6px}
+#items td.subtot{color:var(--muted);font-variant-numeric:tabular-nums}
+#items tr.sub-row td.del{text-align:right}
+#items tr.sub-add td{background:var(--bg);text-align:left;padding:6px 6px 10px 18px}
+.sub-close{font-weight:400;font-size:.8rem;color:var(--muted);margin-left:8px}
+#items tr.sub-row.narrow td{padding:8px 0 8px 10px;position:static}
+.sub-card{display:grid;grid-template-columns:1fr 40px;gap:6px;align-items:center;text-align:left}
+.sub-card select{width:100%;min-width:0}.sub-card>input{grid-column:1/-1;text-align:left;width:100%}
+.sub-amts{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:6px;align-items:center}
+.sub-amts input{width:100%;min-width:0}.sub-amts .na{color:var(--muted);font-size:.8rem;text-align:center}
+#items tr.sub-row.narrow td.sr{padding:0;border:0}
+@media (max-width:639px){#items tr.sub-add td{padding-left:10px}}
+@media print{.subbtn,.sub-add{display:none!important}#items tr.sub-row td{background:none}.sub-in select{border:0;appearance:none;-webkit-appearance:none;background:none;padding:0}.sub-in input{border:0;padding:0}}
+
+/* 사용자 관점 정리(2026-11-17): 과제 구성 접기·처음 화면 안내·집행 빈 상태 */
+.projbox>summary{list-style:none;display:flex;align-items:center;gap:10px;flex-wrap:wrap;cursor:pointer}
+.projbox>summary::-webkit-details-marker{display:none}
+.projbox>summary h2{margin:0}
+.proj-sum{color:var(--muted);font-size:.9rem}
+.proj-edit{margin-left:auto;font-size:.82rem;font-weight:600;color:var(--brand);border:1px solid var(--line);border-radius:99px;padding:3px 12px;white-space:nowrap}
+.proj-edit::after{content:" ▾"}.projbox[open] .proj-edit::after{content:" ▴"}
+.projbox>summary:hover .proj-edit{border-color:var(--brand)}
+.projbox>summary:focus-visible{outline:2px solid var(--brand);outline-offset:4px;border-radius:6px}
+.projbox[open]>summary{margin-bottom:14px}
+#s0:has(.projbox:not([open])){padding-top:14px;padding-bottom:14px}
+.live-start{background:var(--brand-soft);border-radius:10px;padding:12px 14px}
+.live-start p{margin:0 0 6px;font-size:.78rem;font-weight:700;color:var(--brand)}
+.live-start ol{margin:0 0 10px;padding-left:1.2em;font-size:.88rem;line-height:1.7}
+.empty-note{margin:0;padding:16px;text-align:center;border:1px dashed var(--line);border-radius:10px;color:var(--muted);font-size:.9rem}
+@media print{.projbox>summary .proj-edit,.live-start{display:none!important}}
