@@ -172,7 +172,7 @@ test('위탁연구개발비 40%·기존 인력 현금·장비 3천만 원 안내
   r = RB.calcBudget(base({ items: { material: { cash: 100000 }, outsource: { cash: 40000 } } }));
   assert.doesNotMatch(lv(r, 'error'), /위탁/);
   r = RB.calcBudget(base({ people: [{ name: '김', salary: 50000, months: 12, rate: 50, kind: 'existingCash' }], items: { equipment: { cash: 30000 } } }));
-  assert.match(lv(r, 'warn'), /김: 기존 인력 인건비는 원칙적으로 현물/);
+  assert.match(lv(r, 'warn'), /김: 인건비 현금 계상은 신규 채용 인력 등/);
   assert.match(lv(r, 'warn'), /3천만 원 이상 장비/);
   assert.equal(r.rows.find((x) => x.key === 'personnel').cash, 25000); // 현금으로 집계
   // 이전 저장값(inkind:true) 호환
@@ -320,4 +320,50 @@ test('[회귀] 엑셀: 제어문자 제거·시트명 따옴표·집행 기간 �
   assert.match(files['xl/workbook.xml'], /name="1\.ABC"/);
   const ex = unzip(RB.buildExecXlsx(RB.normalizeProject(RB.EXAMPLES.ok.state), 0, 0, '2026-11-14'));
   assert.match(ex['xl/worksheets/sheet2.xml'], /12개월/);
+});
+
+test('[사용자 검토] 단위 착오 경고·÷1,000 고치기', () => {
+  const sh = { ruleset: 'sme', gov: '300000000', people: [{ name: 'A', salary: '60000000', months: 12, rate: 30, kind: 'existing' }], items: {} };
+  const r = RB.calcBudget(sh);
+  assert.ok(r.checks.some((c) => c.code === 'unit-gov' && c.msg.includes('3,000억 원')));
+  assert.ok(r.checks.some((c) => c.code === 'unit-salary'));
+  const fx = RB.suggestFixes(sh);
+  const s2 = RB.applyFix(RB.applyFix(sh, fx.find((f) => f.code === 'unit-gov')), fx.find((f) => f.code === 'unit-salary'));
+  assert.equal(s2.gov, '300000'); assert.equal(s2.people[0].salary, '60000');
+  assert.ok(!RB.calcBudget({ ruleset: 'sme', gov: '9999999', items: {} }).checks.some((c) => c.code === 'unit-gov'));
+});
+
+test('[사용자 검토] 참여개월 12 초과·참여율 1 미만 주의', () => {
+  const r = RB.calcBudget({ ruleset: 'sme', gov: '100000', people: [{ name: 'A', salary: '60000', months: 14, rate: 0.3, kind: 'existing' }], items: { material: { cash: '140000' } } });
+  assert.ok(r.checks.some((c) => c.level === 'warn' && c.msg.includes('12개월로 계산')));
+  assert.ok(r.checks.some((c) => c.level === 'warn' && c.msg.includes('0.3이 아니라 30')));
+});
+
+test('[사용자 검토] 비영리: 정부출연금 초과 편성 안내(직접비 상한 제시)', () => {
+  const over = RB.calcBudget({ ruleset: 'univ', gov: '105000', people: [], items: { material: { cash: '105000' } } });
+  const c = over.checks.find((x) => x.code === 'np-over');
+  assert.ok(c && c.level === 'warn' && c.msg.includes('100,000천원 이하'));
+  const fit = RB.calcBudget({ ruleset: 'univ', gov: '105000', people: [], items: { material: { cash: '100000' } } });
+  assert.equal(fit.total.total, 105000); assert.ok(!fit.checks.some((x) => x.code === 'np-over'));
+});
+
+test('[사용자 검토] 집행: 종료일<시작일 오류·기간만큼 월 표시·시작일 변경 시 월별 금액 이동', () => {
+  const p = RB.normalizeProject(RB.EXAMPLES.ok.state);
+  p.insts[0].data[0].exec = { start: '2026-04-01', end: '2026-03-01' };
+  const bad = RB.calcExecution(p, 0, 0, '2026-11-16', '2027-12-31');
+  assert.ok(bad.checks.some((c) => c.level === 'error' && c.msg.includes('빠릅니다'))); assert.equal(bad.schedule.length, 0);
+  p.insts[0].data[0].exec = { start: '2026-04-01', end: '2026-12-31' };
+  assert.equal(RB.calcExecution(p, 0, 0, '2026-11-16').nMonths, 9);
+  const fw = RB.shiftMonthly({ a: [10, 20, 30] }, '2026-04-01', '2026-05-15');
+  assert.deepEqual(fw.monthly.a.slice(0, 3), [20, 30, '']); assert.equal(fw.dropped, 10);
+  const bw = RB.shiftMonthly({ a: [10, 20, 30] }, '2026-04-01', '2026-02-01');
+  assert.deepEqual(bw.monthly.a.slice(0, 5), ['', '', 10, 20, 30]); assert.equal(bw.dropped, 0);
+});
+
+test('[사용자 검토] 엑셀: 점검 결과 시트 포함·도우미 학생인건비(비영리)', () => {
+  const files = unzip(RB.buildXlsx(RB.normalizeProject(RB.EXAMPLES.error.state)));
+  assert.match(files['xl/workbook.xml'], /name="점검 결과"/);
+  const d = RB.draftBudget({ ruleset: 'univ', gov: '200000', existing: { count: 2, salary: '60000', rate: 30 }, student: '30000' });
+  assert.equal(d.sheet.items.student.cash, '30000');
+  assert.ok(d.sheet.people.every((p) => p.kind === 'new'));
 });

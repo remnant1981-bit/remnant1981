@@ -236,3 +236,32 @@ dialog.ask::backdrop{background:rgba(15,23,42,.45)}
 .faq-tools{display:grid;gap:8px;margin-bottom:6px}
 .faq-tools input{max-width:520px}
 .faq p .cite{display:block;margin-top:4px;font-size:.78rem;color:var(--muted)}
+
+/* 사용자 검토 반영(2026-11): 단위 안내·되돌리기·저장 상태·인쇄·모바일 */
+.won{display:block;font-size:.78rem;color:var(--muted);font-weight:400;margin-top:2px;min-height:1.1em}
+.live-grid .won{grid-column:1/-1;background:none;padding:0 10px;margin-top:-6px}.live-grid .won dd{font-size:.8rem;font-weight:400;color:var(--muted)}
+.save-status{margin:8px 0 0;font-size:.78rem;color:var(--muted)}.save-status.bad{color:var(--err);font-weight:600}
+.undo-bar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;display:flex;gap:10px;align-items:center;max-width:min(92vw,640px);background:var(--ink);color:var(--card);border-radius:10px;padding:10px 12px;font-size:.88rem;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+.undo-bar .icon{color:inherit}
+kbd{border:1px solid var(--line);border-radius:4px;padding:0 4px;font-size:.8em;background:var(--bg)}
+label[data-filebtn]:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.rules-tbl input.locked{cursor:not-allowed}
+.print-head{display:none}
+.m-bar{display:none}
+@media (min-width:1100px){#checks{max-height:38vh;overflow:auto}}
+@media print{
+  .print-head{display:block;font-size:.85rem;border-bottom:1px solid #000;padding-bottom:6px;margin:0 0 10px}
+  .btn,.info,.dl-card,.undo-bar,.m-bar,.save-status,.dl-toast,.sub-actions,dialog,.help-row,.fixall{display:none!important}
+  #checks{max-height:none;overflow:visible}
+  .tbl{min-width:0!important;font-size:.78rem}.tbl select{border:0;appearance:none;-webkit-appearance:none;background:none;padding:0;max-width:none;white-space:normal}
+  .tbl-wrap{overflow:visible}#xGrid input{width:auto;min-width:0;padding:0;font-size:.7rem}#xGrid td,#xGrid th{padding:2px 3px}
+  .card{break-inside:avoid}
+}
+@media (max-width:639px){
+  input,select,textarea{font-size:16px}
+  .btn.sm,.chip,.icon{min-height:40px}.info{min-height:32px;min-width:32px}
+  #items td:first-child,#items th:first-child,#xGrid td:first-child,#xGrid th:first-child,#xRows td:first-child,#xRows th:first-child{position:sticky;left:0;background:var(--card);z-index:1}
+  .m-bar{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 16px;background:var(--card);border-top:1px solid var(--line);color:var(--ink);text-decoration:none;font-size:.9rem}
+  .m-bar .bad{color:var(--err);font-weight:700}.m-bar .good{color:var(--ok);font-weight:700}
+  body{padding-bottom:56px}.undo-bar{bottom:66px}
+}
