@@ -33,6 +33,7 @@
 </header>
 
 <main id="main" class="wrap">
+  <p class="preview-bar" id="previewBar" hidden>관리자 미리보기 중 — 이 브라우저에서만 기능 스위치가 다르게 보입니다. <button type="button" class="linkbtn" id="previewOff">미리보기 끄기</button></p>
   <p class="print-head" id="printHead"></p>
   <p class="demo-note" id="demoNote" hidden></p>
   <ol class="steps" aria-label="작성 순서" data-feature="steps"><li><a href="#s0">과제 구성</a></li><li><a href="#s1">기관·정부출연금</a></li><li><a href="#s2">인건비</a></li><li><a href="#s3">비목 편성</a></li><li><a href="#s4">점검</a></li><li><a href="#s5">총괄표·엑셀</a></li></ol>
@@ -78,6 +79,10 @@
       <label>기관 유형<select id="ruleset"></select></label>
       <label>정부출연금(천원)<input id="gov" inputmode="numeric" placeholder="예: 300,000 (= 3억 원)" autocomplete="off" maxlength="18" aria-describedby="govWon"><small class="won" id="govWon" aria-live="polite"></small></label>
       <label>과제명(선택)<input id="title" maxlength="80" placeholder="예: 액체수소 펌프 개발"></label>
+    </div>
+    <div class="ministry" data-feature="ministry">
+      <label>소관 부처·사업 유형 <span class="badge">선택</span><select id="ministry"></select></label>
+      <ul class="ministry-note" id="ministryNote" hidden></ul>
     </div>
     <details class="rulebox" id="ruleBox">
       <summary><span id="ruleSummary"></span> <span id="ruleMode" class="badge"></span></summary>

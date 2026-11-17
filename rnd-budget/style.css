@@ -358,3 +358,17 @@ label[data-filebtn]:focus-visible{outline:2px solid var(--brand);outline-offset:
 .foot-links{margin-top:-32px}.foot-links a{color:var(--muted)}
 .policy h2{margin-top:18px}.policy h2:first-child{margin-top:0}.policy p,.policy li{line-height:1.7;font-size:.93rem}
 @media print{.foot-links{display:none}}
+
+/* 부처 프리셋·관리자 미리보기 */
+.ministry{margin:12px 0 0}.ministry label{max-width:420px}
+.ministry-note{margin:8px 0 0;padding:10px 12px 10px 28px;background:var(--brand-soft);border-radius:8px;font-size:.84rem;line-height:1.65}
+.ministry-note .cite{list-style:none;margin-left:-16px;margin-top:4px;color:var(--muted);font-size:.78rem}
+.preview-bar{margin:0 0 12px;padding:8px 12px;border-radius:8px;background:var(--warn-bg);color:var(--warn);font-size:.85rem;font-weight:600}
+@media print{.preview-bar,.ministry-note{display:none!important}}
+/* 관리자 화면 */
+.admin .card h2{margin-top:0}.admin .sub-h{font-size:.9rem;margin:16px 0 6px}
+.admin #flags td,.admin #flags th{text-align:left}.admin #flags input[type=checkbox]{width:18px;height:18px}
+.admin .todo,.admin .links{list-style:none;padding:0;margin:0;display:grid;gap:8px;font-size:.92rem}
+.admin .todo input{width:16px;height:16px;vertical-align:-2px}
+.admin code{background:var(--bg);border-radius:4px;padding:1px 5px;font-size:.85em}
+.admin #gate{max-width:420px}

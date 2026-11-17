@@ -83,7 +83,10 @@
   };
 
   // 기능 스위치(config.js features). 꺼진 기능은 숨김만 하고 저장 데이터는 유지
-  const FEAT = Object.assign({ examples: true, project: false, scenarios: false, faq: false, steps: false, legalHeader: false, execution: false, noticeImport: false, helper: false, details: false }, CFG.features || {});
+  const FEAT = Object.assign({ examples: true, project: false, scenarios: false, faq: false, steps: false, legalHeader: false, execution: false, noticeImport: false, helper: false, details: false, ministry: false }, CFG.features || {});
+  // 관리자 미리보기(admin.html): 이 브라우저에서만 기능 스위치를 바꿔 봄
+  const PREVIEW = store.get('rb.preview', null);
+  if (PREVIEW && PREVIEW.features && typeof PREVIEW.features === 'object') for (const [k, v] of Object.entries(PREVIEW.features)) if (k in FEAT && typeof v === 'boolean') FEAT[k] = v;
   document.querySelectorAll('[data-feature]').forEach((e) => { if (!FEAT[e.dataset.feature]) e.hidden = true; });
   // 연차·공동기관 기능이 꺼져 있으면 첫 기관·1차년도만 편집·계산·내보내기
   const single = (p) => (FEAT.project ? p : { ...p, years: 1, insts: p.insts.slice(0, 1) });
@@ -275,6 +278,7 @@
     $('ruleSummary').textContent = rs.profit || custom
       ? `적용 기준: 정부지원 ≤ ${eff.govMaxPct}% · 기관부담 현금 ≥ ${eff.cashMinPct}% · 간접비 ${eff.indirectPct}%`
       : `적용 기준: 기관부담 의무 없음 · 간접비 ${eff.indirectPct}%`;
+    syncMinistry();
     if (custom) $('ruleBox').open = true;
     $('ruleMode').textContent = custom ? '공고문 기준 직접 입력' : '법령 기준 고정';
     $('ruleMode').classList.toggle('warn', custom);
@@ -286,7 +290,29 @@
         ? `🔒 표시 값은 법령 기준으로 고정됩니다. 간접비율은 기관 간접비 고시비율 범위(최대 ${rs.indirectMax}%) 안에서 낮출 수 있습니다.${FEAT.project ? ' 기관 유형은 모든 연차에 같이 적용됩니다.' : ''}`
         : '🔒 비영리기관은 기관부담 의무가 없습니다. 간접비율은 기관 고시비율이 있으면 그 값으로 바꾸세요.';
   }
-  sel.addEventListener('change', () => setRuleset(C.i, sel.value));
+  sel.addEventListener('change', () => { delete I().ministry; setRuleset(C.i, sel.value); });
+  // 소관 부처·사업 유형(features.ministry): 원문으로 확인된 비율 차이만 적용, 나머지는 안내
+  const minSel = $('ministry');
+  minSel.replaceChildren(...Object.entries(RB.MINISTRIES).map(([k, m]) => el('option', { value: k, text: m.label })));
+  function syncMinistry() {
+    const key = I().ministry && RB.MINISTRIES[I().ministry] ? I().ministry : 'common', m = RB.MINISTRIES[key];
+    minSel.value = key;
+    $('ministryNote').hidden = !m.notes.length;
+    $('ministryNote').replaceChildren(...m.notes.map((n) => el('li', { text: n })), ...(m.src ? [el('li', { class: 'cite', text: `근거: ${m.src} · 사업 공고가 우선합니다.` })] : []));
+  }
+  minSel.addEventListener('change', () => {
+    const inst = I(), key = minSel.value, legal = RB.RULESETS[inst.ruleset].custom ? inst.lastLegal || 'sme' : inst.ruleset;
+    const rates = RB.ministryRates(key, legal);
+    mark();
+    if (key === 'common') delete inst.ministry; else inst.ministry = key;
+    if (rates) { // 법령 기준에서 출발해 부처 기준 비율만 바꿈
+      const base = RB.effectiveRules({ ruleset: legal });
+      Object.assign(inst, { lastLegal: legal, ruleset: 'custom', govMaxPct: rates.govMaxPct, cashMinPct: rates.cashMinPct, indirectPct: base.indirectPct, allowanceMaxPct: base.allowancePct, outsourceMaxPct: base.outsourcePct, noticeSource: RB.MINISTRIES[key].label });
+    } else if (RB.RULESETS[inst.ruleset].custom && Object.values(RB.MINISTRIES).some((x) => x.label === inst.noticeSource)) { // 부처 프리셋으로 바꿨던 비율은 법령 기준으로 되돌림
+      inst.ruleset = legal; inst.indirectPct = ''; inst.noticeSource = '';
+    }
+    renderAll(); offerUndo(`적용 기준: ${RB.MINISTRIES[key].label}`); track('rb_ministry', { ministry: key });
+  });
   for (const id of RULE_INPUTS) {
     $(id).addEventListener('input', (e) => { if (!e.target.readOnly) { I()[id] = e.target.value; syncRuleInputs(); update(); } });
     $(id).addEventListener('blur', syncRuleInputs); // 범위를 벗어난 입력은 실제 적용값으로 표시
@@ -959,6 +985,7 @@
   });
   window.addEventListener('afterprint', () => { printOpened.forEach((d) => { d.open = false; }); printOpened = []; });
 
+  if (PREVIEW) { $('previewBar').hidden = false; $('previewOff').addEventListener('click', () => { try { localStorage.removeItem('rb.preview'); } catch { /* 무시 */ } location.reload(); }); }
   renderAll(); renderScenarios();
   setMode(C.mode); syncProjBox();
 })();

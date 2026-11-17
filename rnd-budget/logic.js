@@ -96,6 +96,27 @@
     if (diff > 0) { const r = rows[0] || v.sub[0]; r[side] = String(int(r[side]) + diff); return; }
     for (let i = rows.length - 1; i >= 0 && diff < 0; i--) { const cut = Math.min(int(rows[i][side]), -diff); rows[i][side] = String(int(rows[i][side]) - cut); diff += cut; }
   }
+  // 소관 부처·사업 유형 프리셋(features.ministry). 원문으로 확인한 차이만 반영(2026-11-17 조회).
+  // rates: 기관 유형별 [정부지원 상한 %, 기관부담 중 현금 최소 %] — 시행령 별표 1과 다른 경우만. 나머지는 법령 기준 + 안내 문구
+  const MINISTRIES = {
+    common: { label: '공통(시행령·사용 기준 고시)', src: '', notes: [] },
+    motie1: { label: '산업부 — 원천기술형', src: '산업기술혁신사업 공통 운영요령 제24조②·제25조④(고시 제2024-218호, 2024.12.30.)',
+      notes: ['정부지원·현금 비율은 시행령 기준과 같습니다(대기업 50%·중견 70%·중소 75%).', '위탁연구개발비 비목이 없습니다. 외주 용역은 연구활동비(외부 전문기술 활용비, 직접비의 40% 범위)로 편성합니다(별표 5).', '기존 인력 인건비는 현물이 원칙이고, 신규 채용·창업 7년 이내 중소기업·인건비 현금 인정 분야 등만 현금 계상합니다(별표 5).', '기술도입비는 총 연구개발비의 30%(해외 기술 50%) 이내입니다(별표 5).', '기반조성·인력·국제협력 등은 공고에서 비율을 달리 정합니다(제24조③).'] },
+    motie2: { label: '산업부 — 혁신제품형', src: '산업기술혁신사업 공통 운영요령 제24조②(혁신제품형)·제25조④(고시 제2024-218호, 2024.12.30.)',
+      rates: { sme: [67, 10], midS: [50, 10], midL: [50, 13], large: [33, 15] },
+      notes: ['정부지원 상한이 낮습니다: 대기업 33%·중견 50%·중소 67%(제24조② 표).', '수요기업·소부장 핵심전략기술 참여기업·평균매출액등 3천억 원 미만 중견기업은 중소기업 수준을 적용할 수 있습니다(공고 확인).', '위탁연구개발비 비목이 없습니다. 외주 용역은 연구활동비(외부 전문기술 활용비)로 편성합니다(별표 5).', '기존 인력 인건비는 현물이 원칙입니다(별표 5).'] },
+    mss: { label: '중기부', src: '중소기업기술개발 지원사업 운영요령 제18조·제19조(고시 제2026-6호, 2026.1.21.)',
+      notes: ['중소기업 정부지원 75% 이하·현금 10% 이상으로 시행령 기준과 같습니다(제18조②③).', '세부사업별 지원 비율·분담 방식은 사업 공고·관리지침에서 따로 정합니다(예: 수요처 분담이 있는 사업). 공고문을 꼭 확인하세요.', '자체 재원으로 고용한 연구자 인건비는 현물이 원칙이고, 신규 채용 등 장관이 인정한 경우만 현금입니다(제18조③④).'] },
+    msit: { label: '과기정통부 — 과학기술분야', src: '과학기술정보통신부 과학기술분야 연구개발사업처리규정 제18조(훈령 제325호, 2026.9.18.)',
+      notes: ['별도 수치 없이 시행령·사용 기준 고시를 그대로 따릅니다(제18조⑧).', '과제 제안요구서(RFP)에서 지원 비율·간접비를 조정한 경우 그 값을 따릅니다(제18조①). 기초연구는 더 높게 지원할 수 있습니다.'] },
+    ict: { label: '과기정통부 — ICT(정보통신·방송)', src: '정보통신·방송 연구개발 관리규정 별표 4(고시 제2025-22호, 2025.5.13.)',
+      notes: ['정부지원·현금 비율은 시행령 기준과 같습니다(별표 4 제1·2호).', '신규 채용 인건비가 인건비 총액의 30% 이상이면 같은 금액만큼 기존 인력도 현금 계상할 수 있습니다(제26조②).', '공개SW·소부장·수요기업 과제는 공고에서 특례를 정합니다.'] },
+    ictv: { label: '과기정통부 — ICT 바우처 사업', src: '정보통신·방송 연구개발 관리규정 별표 4 제3호(고시 제2025-22호, 2025.5.13.)',
+      rates: { sme: [75, 5], midS: [70, 6.5], midL: [70, 6.5] },
+      notes: ['현금 부담이 절반입니다: 중소 5%·중견 6.5% 이상(별표 4 제3호).', '정부지원은 중소 75%·중견 70% 이내입니다.'] },
+  };
+  /** 부처 프리셋이 정한 비율(없으면 null = 법령 기준 그대로) */
+  const ministryRates = (key, legalType) => { const m = MINISTRIES[key]; const r = m && m.rates && m.rates[legalType]; return r ? { govMaxPct: r[0], cashMinPct: r[1] } : null; };
   const PERSON_KINDS = {
     existing: { label: '기존 인력(현물)', inkind: true },
     new: { label: '신규 채용(현금)', inkind: false },
@@ -334,6 +355,7 @@ const fit = Math.ceil((gov * 100) / (100 + rate));
     if (!p.insts.length) p.insts = [newInst('lead')];
     for (const inst of p.insts) {
       if (!RULESETS[inst.ruleset]) inst.ruleset = 'sme';
+      if (inst.ministry !== undefined && !MINISTRIES[inst.ministry]) delete inst.ministry;
       if (!ROLES[inst.role]) inst.role = 'joint';
       inst.name = String(inst.name || '').slice(0, 40) || '기관';
       inst.data = Array.isArray(inst.data) ? inst.data.filter(isObj).slice(0, MAX_YEARS) : [];
@@ -918,7 +940,7 @@ const fit = Math.ceil((gov * 100) / (100 + rate));
     return s;
   }
 
-  const RB = { DATA_SHEET, DATA_MAGIC, b64encode, b64decode, parseDataCells, SUBITEMS, MAX_SUB, subType, hasSub, itemAmounts, setItemTotal, UNIT_WARN, shiftMonthly, parseAmount, wonText, ITEM_HELP, DRAFT, minMaterialCash, draftBudget, suggestFixes, applyFix, autoFix, isYmd, ymdAddMonths, blankExec, normalizeExec, execMonths, calcExecution, buildExecXlsx, MAX_YEARS, MAX_INSTS, ROLES, blankYear, newInst, normalizeProject, sheetState, calcProject, splitCash, EXAMPLES, BASIS_DATE, SOURCES, RULESETS, LIMITS, ITEMS, PERSON_KINDS, DEFAULT_RULES, int, pct, effectiveRules, calcFunding, personCost, calcBudget, buildXlsx, crc32 };
+  const RB = { MINISTRIES, ministryRates, DATA_SHEET, DATA_MAGIC, b64encode, b64decode, parseDataCells, SUBITEMS, MAX_SUB, subType, hasSub, itemAmounts, setItemTotal, UNIT_WARN, shiftMonthly, parseAmount, wonText, ITEM_HELP, DRAFT, minMaterialCash, draftBudget, suggestFixes, applyFix, autoFix, isYmd, ymdAddMonths, blankExec, normalizeExec, execMonths, calcExecution, buildExecXlsx, MAX_YEARS, MAX_INSTS, ROLES, blankYear, newInst, normalizeProject, sheetState, calcProject, splitCash, EXAMPLES, BASIS_DATE, SOURCES, RULESETS, LIMITS, ITEMS, PERSON_KINDS, DEFAULT_RULES, int, pct, effectiveRules, calcFunding, personCost, calcBudget, buildXlsx, crc32 };
   if (typeof module !== 'undefined' && module.exports) module.exports = RB;
   else root.RB = RB;
 })(typeof self !== 'undefined' ? self : this);

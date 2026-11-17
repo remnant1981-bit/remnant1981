@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>관리자 — R&amp;D 사업비 편성 가이드</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="admin">
+<header class="top"><div class="wrap"><h1>관리자 화면</h1><p class="sub"><a href="./">← 사이트로 돌아가기</a> · 설정을 바꿔도 이 화면만으로는 실사이트가 바뀌지 않습니다. 만든 설정 파일을 배포해야 반영됩니다.</p></div></header>
+<main class="wrap">
+  <section class="card" id="gate" hidden>
+    <h2>로그인</h2>
+    <label>관리자 비밀번호<input type="password" id="pw" autocomplete="current-password"></label>
+    <div class="actions"><button type="button" class="btn" id="login">들어가기</button></div>
+    <p class="nerr" id="gateErr" role="alert" hidden>비밀번호가 맞지 않습니다.</p>
+  </section>
+
+  <div id="panel" hidden>
+    <section class="card" id="aPw">
+      <h2>1. 관리자 비밀번호 <span class="badge" id="pwState"></span></h2>
+      <p class="hint">비밀번호를 정하면 암호화 값(해시)을 만들어 줍니다. 그 값만 설정 파일에 들어가고, 비밀번호 원문은 어디에도 저장·전송되지 않습니다. 저장소가 공개되어 있으므로 <strong>12자 이상, 다른 곳에서 쓰지 않는 문장형 비밀번호</strong>를 쓰세요.</p>
+      <div class="grid3"><label>새 비밀번호<input type="password" id="pw1" autocomplete="new-password"></label><label>한 번 더<input type="password" id="pw2" autocomplete="new-password"></label></div>
+      <div class="actions"><button type="button" class="btn" id="mkHash">암호화 값 만들기</button></div>
+      <p class="nerr" id="pwErr" role="alert" hidden></p>
+      <p class="nok" id="pwOk" role="status" hidden></p>
+    </section>
+
+    <section class="card">
+      <h2>2. 기능 스위치</h2>
+      <p class="hint">‘운영’은 지금 실사이트 설정, ‘미리보기’는 이 브라우저에서만 켜고 꺼 보는 값입니다. 실사이트에 반영하려면 ‘운영에 반영’을 체크하고 아래에서 설정 파일을 만드세요.</p>
+      <div class="tbl-wrap"><table class="tbl" id="flags"><thead><tr><th>기능</th><th>운영</th><th>미리보기(이 브라우저)</th><th>운영에 반영</th></tr></thead><tbody></tbody></table></div>
+      <div class="actions"><a class="btn" href="./" id="openPreview">미리보기로 사이트 열기</a><button type="button" class="btn ghost" id="clearPreview">미리보기 끄기</button></div>
+    </section>
+
+    <section class="card">
+      <h2>3. 운영 설정</h2>
+      <div class="grid3">
+        <label>방문 통계 측정 ID(GA4)<input id="cGa" placeholder="G-XXXXXXXXXX" autocomplete="off"></label>
+        <label>애드센스 게시자 ID<input id="cAds" placeholder="ca-pub-0000000000000000" autocomplete="off"></label>
+        <label>문의 연락처(공개됨)<input id="cContact" placeholder="예: 문의 메일 주소" autocomplete="off"></label>
+        <label>광고 단위 ID(상단)<input id="cTop" inputmode="numeric" autocomplete="off"></label>
+        <label>광고 단위 ID(하단)<input id="cBottom" inputmode="numeric" autocomplete="off"></label>
+      </div>
+      <p class="hint">여기 값은 모두 공개 정보입니다(사이트 소스에서 누구나 볼 수 있음). 비밀번호·API 키·토큰은 넣지 마세요.</p>
+      <div class="actions"><button type="button" class="btn" id="dlConfig">설정 파일(config.js) 내려받기</button><button type="button" class="btn ghost" id="cpConfig">내용 복사</button></div>
+      <p class="nok" id="cfgOk" role="status" hidden></p>
+      <details class="guide"><summary>반영 방법</summary><ol><li>내려받은 <code>config.js</code>로 저장소의 <code>rnd-budget/config.js</code>를 바꿉니다(브랜치 → PR → 병합).</li><li>병합 후 1~2분 뒤 실사이트에 반영됩니다.</li><li>이 화면을 새로 고쳐 ‘운영’ 값이 바뀌었는지 확인합니다.</li></ol></details>
+    </section>
+
+    <section class="card">
+      <h2>4. 런칭 점검표</h2>
+      <ul class="checks" id="autoChecks"></ul>
+      <h3 class="sub-h">직접 확인할 일</h3>
+      <ul class="todo" id="manual"></ul>
+    </section>
+
+    <section class="card">
+      <h2>5. 바로가기</h2>
+      <ul class="links">
+        <li><a href="https://analytics.google.com/" rel="noopener" target="_blank">구글 애널리틱스</a> — 방문자·이벤트(엑셀 다운로드 등)</li>
+        <li><a href="https://search.google.com/search-console" rel="noopener" target="_blank">구글 서치콘솔</a> — 검색 노출·클릭·검색어, 사이트맵 제출</li>
+        <li><a href="https://searchadvisor.naver.com/" rel="noopener" target="_blank">네이버 서치어드바이저</a> — 네이버 검색 등록·노출</li>
+        <li><a href="https://adsense.google.com/" rel="noopener" target="_blank">구글 애드센스</a> — 광고 수익</li>
+        <li><a href="https://www.law.go.kr/" rel="noopener" target="_blank">국가법령정보센터</a> — 법령·고시 개정 확인</li>
+      </ul>
+      <p class="hint">지표 기록은 저장소의 <code>docs/rnd-budget/KPI_TRACKER.xlsx</code>, 운영 절차는 <code>docs/rnd-budget/LAUNCH_PLAN.md</code>를 참고하세요.</p>
+    </section>
+  </div>
+</main>
+<script src="config.js"></script>
+<script src="logic.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

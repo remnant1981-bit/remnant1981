@@ -557,6 +557,47 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   check('[통계] 금액·과제명 등 입력 내용은 보내지 않음', !/345678|345,678|460905|비밀과제명/.test(JSON.stringify(evs)));
   await gc.close();
 
+  // ⑫ 관리자 화면·부처 프리셋
+  const ac = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+  const a = await ac.newPage(); a.on('pageerror', (e) => errors.push('a:' + e.message));
+  await a.goto(base);
+  check('[부처] 운영 설정(꺼짐)에서는 부처 선택 숨김', await a.locator('#ministry').isHidden());
+  await a.goto(base + 'admin.html');
+  check('[관리자] 비밀번호 미설정 시 바로 열림·점검표 표시', (await a.locator('#panel').isVisible()) && (await a.locator('#gate').isHidden()) && (await a.textContent('#autoChecks')).includes('관리자 비밀번호: 미설정') && (await a.locator('#autoChecks .error').count()) === 0 && (await a.locator('meta[name="robots"]').getAttribute('content')).includes('noindex'));
+  await a.fill('#pw1', 'short'); await a.fill('#pw2', 'short'); await a.click('#mkHash');
+  check('[관리자] 짧은 비밀번호 거부', (await a.textContent('#pwErr')).includes('12자'));
+  const PW = 'test-only passphrase 1234';
+  await a.fill('#pw1', PW); await a.fill('#pw2', PW); await a.click('#mkHash'); await a.waitForSelector('#pwOk:not([hidden])');
+  await a.fill('#cGa', 'bad'); await a.click('#dlConfig');
+  check('[관리자] 잘못된 통계 ID 거부', (await a.textContent('#cfgOk')).includes('G-'));
+  await a.fill('#cGa', 'G-TEST123456'); await a.fill('#cContact', '문의처 예시');
+  await a.check('[data-pub="details"]'); await a.check('[data-pv="ministry"]');
+  const [cf] = await Promise.all([a.waitForEvent('download'), a.click('#dlConfig')]);
+  const cfg = require('fs').readFileSync(await cf.path(), 'utf8');
+  const parsed = new Function('window', cfg + '; return window.RB_CONFIG;')({});
+  check('[관리자] 설정 파일 생성(통계 ID·기능 스위치·암호화 값 포함, 비밀번호 원문 없음)', cf.suggestedFilename() === 'config.js' && parsed.analytics.ga4 === 'G-TEST123456' && parsed.features.details === true && parsed.features.ministry === false && parsed.features.project === true && /^pbkdf2-sha256\$\d+\$/.test(parsed.admin.hash) && !cfg.includes(PW) && parsed.contact === '문의처 예시');
+  await a.goto(base);
+  check('[관리자] 미리보기: 이 브라우저에서만 부처 선택 표시·안내 막대', (await a.locator('#ministry').isVisible()) && (await a.locator('#previewBar').isVisible()));
+  await a.fill('#gov', '300000');
+  await a.selectOption('#ministry', 'motie2');
+  check('[부처] 산업부 혁신제품형: 중소 67%·최소 총사업비 447,762', (await a.inputValue('#govMaxPct')) === '67' && (await a.textContent('#funding')).includes('447,762') && (await a.textContent('#ministryNote')).includes('제24조') && (await a.textContent('#ruleHint')).includes('산업부'));
+  await a.selectOption('#ministry', 'mss');
+  check('[부처] 중기부: 법령 기준으로 복귀(75%)·안내 표시', (await a.inputValue('#ruleset')) === 'sme' && (await a.inputValue('#govMaxPct')) === '75' && (await a.textContent('#ministryNote')).includes('공고'));
+  await a.click('#previewOff'); await a.waitForLoadState();
+  check('[관리자] 미리보기 끄기 → 운영 설정으로', (await a.locator('#ministry').isHidden()) && (await a.locator('#previewBar').isHidden()));
+  // 비밀번호가 배포된 뒤: 로그인 필요
+  await a.route('**/config.js', async (rt) => { const res = await rt.fetch(); rt.fulfill({ response: res, body: (await res.text()).replace("admin: { hash: '' }", `admin: { hash: '${parsed.admin.hash}' }`) }); });
+  await a.goto(base + 'admin.html');
+  check('[관리자] 비밀번호 설정 후에는 로그인 화면', (await a.locator('#gate').isVisible()) && (await a.locator('#panel').isHidden()));
+  await a.fill('#pw', 'wrong password!!'); await a.click('#login'); await a.waitForSelector('#gateErr:not([hidden])');
+  check('[관리자] 틀린 비밀번호 거부', await a.locator('#panel').isHidden());
+  await a.fill('#pw', PW); await a.click('#login'); await a.waitForSelector('#panel:not([hidden])', { timeout: 15000 });
+  check('[관리자] 맞는 비밀번호로 열림', (await a.textContent('#autoChecks')).includes('관리자 비밀번호: 설정됨'));
+  await ac.close();
+  const pv = await (await browser.newContext()).newPage(); pv.on('pageerror', (e) => errors.push('pv:' + e.message));
+  await pv.goto(base + 'privacy.html');
+  check('[런칭] 개인정보 처리 안내 페이지·사이트맵', (await pv.textContent('main')).includes('브라우저') && (await pv.textContent('#pGa')).includes('사용하지 않습니다') && (await (await pv.request.get(base + 'sitemap.xml')).text()).includes('rnd-budget/'));
+
   check('콘솔·스크립트 오류 없음', errors.length === 0, errors.join(' | '));
   await browser.close(); server.close();
   const fail = results.filter((x) => !x).length;

@@ -454,3 +454,16 @@ test('[노출] FAQ 구조화 데이터(JSON-LD)가 화면의 질문과 일치(to
   assert.deepEqual(ld.mainEntity.map((q) => q.name), qs);
   assert.ok(ld.mainEntity.every((q) => q.acceptedAnswer.text.length > 20));
 });
+
+test('[부처 프리셋] 원문 확인된 차이만 비율 변경, 나머지는 법령 기준', () => {
+  assert.deepEqual(RB.ministryRates('motie2', 'sme'), { govMaxPct: 67, cashMinPct: 10 });
+  assert.deepEqual(RB.ministryRates('motie2', 'large'), { govMaxPct: 33, cashMinPct: 15 });
+  assert.deepEqual(RB.ministryRates('ictv', 'midL'), { govMaxPct: 70, cashMinPct: 6.5 });
+  for (const k of ['common', 'motie1', 'mss', 'msit', 'ict']) assert.equal(RB.ministryRates(k, 'sme'), null, k);
+  assert.equal(RB.ministryRates('motie2', 'univ'), null); assert.equal(RB.ministryRates('ictv', 'large'), null); assert.equal(RB.ministryRates('없는값', 'sme'), null);
+  for (const m of Object.values(RB.MINISTRIES)) assert.ok(m.label && Array.isArray(m.notes) && (m === RB.MINISTRIES.common || /\d{4}\.\d{1,2}\.\d{1,2}\./.test(m.src)), m.label);
+  const r = RB.calcBudget({ ruleset: 'custom', govMaxPct: 67, cashMinPct: 10, gov: '300000', people: [], items: { material: { cash: '400000' } } });
+  assert.equal(r.funding.total, 447762);
+  const p = RB.normalizeProject({ v: 2, years: 1, insts: [{ name: 'A', role: 'lead', ruleset: 'sme', ministry: 'zzz', data: [{}] }] });
+  assert.equal(p.insts[0].ministry, undefined);
+});
