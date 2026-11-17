@@ -3,6 +3,9 @@ window.RB_CONFIG = {
   // 구글 애드센스(승인 후 입력). 비우면 광고 영역이 표시되지 않음
   adsenseClient: '',        // 예: 'ca-pub-0000000000000000'
   adsenseSlots: { top: '', bottom: '' },
+  // 방문 통계(구글 애널리틱스 4). 측정 ID(G-XXXXXXXXXX)를 넣으면 방문·기능 사용 횟수를 집계. 비우면 통계 코드를 불러오지 않음
+  // 입력한 금액·기관명·과제명·검색어는 보내지 않음. 이벤트 목록: docs/rnd-budget/LAUNCH_PLAN.md
+  analytics: { ga4: '' },
   // 기능 스위치(단계적 공개). false = 화면에서 숨김(코드·데이터는 유지). 켜려면 true 로 바꿔 배포
   features: {
     examples: true,     // 예시로 체험하기
@@ -13,8 +16,12 @@ window.RB_CONFIG = {
     legalHeader: false, // 상단 적용 법령 문구(하단 안내에는 항상 표시)
     helper: true,        // 처음 편성 도우미(질문→초안, 오류 '고치기' 버튼, 비목 ⓘ 설명) — 2026-11-14 공개
     noticeImport: true,  // 공고문(HWP·HWPX·PDF)에서 적용 기준 가져오기 — 2026-11-14 베타 공개
+    ministry: false,    // 소관 부처·사업 유형 선택(산업부·중기부·과기정통부) — 원문으로 확인된 비율 차이 적용 + 안내
+    details: false,     // 비목별 세부 내역(세목) 입력 — 연구시설·장비비·연구재료비·연구활동비, 세부 내역 엑셀 시트
     execution: true,    // 집행 현황판(편성/집행 전환, 월별 집행·점검·일정·백업) — 2026-11-14 공개
   },
+  // 관리자 화면(admin.html) 비밀번호의 암호화 값. admin.html 에서 직접 만들어 붙여 넣음(비밀번호 원문은 절대 적지 말 것)
+  admin: { hash: '' },
   // 문의 연락처(비우면 표시 안 함)
   contact: '',
 };

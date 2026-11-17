@@ -31,16 +31,25 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   // ① 기본 설정(1단계 공개 범위): 꺼진 기능은 숨김
   await p.goto(base);
   check('기본: 과제 구성 표시(2026-11-17 공개)·안 저장·단계 메뉴 숨김, Q&A 표시', (await p.locator('#s0').isVisible()) && (await p.locator('#saveScenario').isHidden()) && (await p.locator('.faq').isVisible()) && (await p.locator('.steps').isHidden()));
-  check('Q&A 27개', (await p.locator('#faq details').count()) === 27);
+  check('Q&A 29개', (await p.locator('#faq details').count()) === 29);
   await p.fill('#faqSearch', '현물');
   const shownQ = await p.locator('#faq details:not([hidden])').count();
-  check('Q&A 검색(현물)', shownQ >= 3 && shownQ < 23 && (await p.locator('#faq details:not([hidden])').first().getAttribute('open')) !== null, String(shownQ));
+  check('Q&A 검색(현물)', shownQ >= 3 && shownQ < 23 && (await p.locator('#faq .faq-group[data-group="기본"] details:not([hidden])').first().getAttribute('open')) !== null, String(shownQ));
   await p.fill('#faqSearch', 'zzzz');
   check('Q&A 검색 결과 없음 안내', await p.locator('#faqEmpty').isVisible());
   await p.fill('#faqSearch', '');
   await p.click('#faqCats [data-qcat="비목"]');
   check('Q&A 분류(비목 5개)', (await p.locator('#faq details:not([hidden])').count()) === 5);
   await p.click('#faqCats [data-qcat=""]');
+  check('Q&A 화면: 분류 묶음 6개·건수 표시', (await p.locator('#faq .faq-group:not([hidden])').count()) === 6 && (await p.textContent('#faqCount')) === '전체 29건' && (await p.textContent('#faqCats [data-qcat="비목"]')).includes('5'));
+  await p.click('#faqToggle');
+  check('Q&A 모두 펼치기 → 모두 접기', (await p.locator('#faq details[open]').count()) === 29 && (await p.textContent('#faqToggle')) === '모두 접기');
+  await p.click('#faqToggle');
+  check('Q&A 모두 접기', (await p.locator('#faq details[open]').count()) === 0 && (await p.textContent('#faqToggle')) === '모두 펼치기');
+  await p.fill('#faqSearch', '현물');
+  check('Q&A 검색: 한 단 목록·분류 표시·결과 건수·위 3건 펼침', (await p.evaluate(() => document.getElementById('faqBody').classList.contains('flat'))) && (await p.locator('#faq details:not([hidden]) .qcat').first().isVisible()) && /검색 결과 \d+건/.test(await p.textContent('#faqCount')) && (await p.locator('#faq details[open]').count()) === 3);
+  await p.fill('#faqSearch', 'zzzz'); await p.click('#faqReset');
+  check('Q&A 결과 없음 → 전체 보기', (await p.inputValue('#faqSearch')) === '' && (await p.locator('#faq details:not([hidden])').count()) === 29 && (await p.locator('#faqEmpty').isHidden()));
   check('기본: 집행 전환 표시(공개)', await p.locator('#modeBar').isVisible());
   check('기본: 편성 도우미 버튼 표시(공개)', await p.locator('#helperOpen').isVisible());
   check('기본: 공고문 가져오기 표시(베타)', (await p.locator('#noticeDrop').isVisible()) && (await p.textContent('#noticeDrop')).includes('베타'));
@@ -129,6 +138,7 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   check('단일 기관·1개 연차는 편집 탭 숨김', await p.locator('#editBar').isHidden());
   await p.fill('#gov', '100000');
   await p.getByLabel('연구재료비 현금(천원)').fill('130000');
+  await p.evaluate(() => { document.getElementById('projBox').open = true; });
   await p.selectOption('#years', '2');
   check('2개 연차 → 편집 탭 표시', (await p.locator('#editBar').isVisible()) && (await p.locator('#yearTabs .chip').count()) === 2);
   await p.click('#yearTabs .chip >> nth=1');
@@ -345,6 +355,7 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   check('[회귀] 이전 연차 복사 후 2차년도 집행 기간 유지', (await r.inputValue('#xStart')) === '2027-04-01');
   await r.click('#modeBar [data-mode="plan"]');
   // 기관 삭제 후 편집 대상 유지
+  await r.evaluate(() => { document.getElementById('projBox').open = true; });
   await r.click('#addInst'); await r.click('#addInst'); // 기관 3개, 편집 = 3번째
   await r.getByLabel('공동기관 1 삭제').click();
   check('[회귀] 앞 기관 삭제 후 편집 대상 유지', (await r.textContent('#curLabel')).includes('공동기관 2'), await r.textContent('#curLabel'));
@@ -430,6 +441,7 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   await u.emulateMedia({ media: 'print' }); await u.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
   check('[검토] 인쇄: 머리글(과제명·기준일)·버튼 숨김·적용 기준 펼침', (await u.textContent('#printHead')).includes('법령 기준일') && (await u.locator('#printHead').isVisible()) && (await u.locator('#xlsx').isHidden()) && (await u.evaluate(() => document.getElementById('ruleBox').open)));
   await u.evaluate(() => window.dispatchEvent(new Event('afterprint'))); await u.emulateMedia({ media: 'screen' });
+  check('[Q&A] PC: 분류 묶음 2단 배치(기본 | 인건비)', await u.evaluate(() => { const g = ['기본', '인건비'].map((c) => document.querySelector(`#faq .faq-group[data-group="${c}"]`).getBoundingClientRect()); return g[0].left < g[1].left && Math.abs(g[0].top - g[1].top) < 2; }));
   // Q&A 검색 키워드
   await u.fill('#faqSearch', 'undo');
   check('[검토] Q&A 검색 키워드(undo → 되돌리기)', (await u.locator('#faq details:not([hidden])').count()) === 1);
@@ -441,6 +453,7 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   const m = await mc.newPage(); m.on('pageerror', (e) => errors.push('m:' + e.message));
   await m.goto(base); await m.click('[data-example="error"]'); await m.waitForTimeout(150);
   check('[검토] 모바일: 하단 요약 막대(총사업비·오류)·가로 넘침 없음', (await m.locator('#mBar').isVisible()) && (await m.textContent('#mBar')).includes('오류') && (await m.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)));
+  check('[Q&A] 모바일: 분류 순서 유지(기본→인건비)·분류 버튼 한 줄', (await m.evaluate(() => { const g = [...document.querySelectorAll('#faq .faq-group')].sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top).map((x) => x.dataset.group); return g.join(','); })) === '기본,인건비,현금·현물,비목,집행,도구' && (await m.evaluate(() => document.getElementById('faqCats').offsetHeight)) < 60 && (await m.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)));
   check('[검토] 모바일: 입력 글자 16px(확대 방지)', (await m.evaluate(() => getComputedStyle(document.getElementById('gov')).fontSize)) === '16px');
   await mc.close();
 
@@ -450,6 +463,7 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   await j.goto(base);
   check('[공개] 운영 설정: 과제 구성 표시, 단독 과제는 편집 탭 숨김', (await j.locator('#s0').isVisible()) && (await j.locator('#editBar').isHidden()));
   await j.fill('#gov', '300000'); await j.getByLabel('연구재료비 현금(천원)').fill('400000');
+  await j.evaluate(() => { document.getElementById('projBox').open = true; });
   await j.selectOption('#years', '2');
   check('[공개] 빈 연차 안내(통과로 표시하지 않음)', (await j.textContent('#projChecks')).includes('편성하지 않은 칸이 1곳') && (await j.textContent('#dlStatus')).includes('미편성 1곳'));
   await j.click('#yearTabs .chip >> nth=1'); await j.click('#copyPrev');
@@ -465,6 +479,124 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   const jm = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage(); jm.on('pageerror', (e) => errors.push('jm:' + e.message));
   await jm.goto(base); await jm.click('[data-example="ok"]'); await jm.waitForTimeout(200);
   check('[공개] 모바일: 2기관·2연차 예시 가로 넘침 없음·편집 탭 표시', (await jm.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)) && (await jm.locator('#editBar').isVisible()) && (await jm.evaluate(() => document.getElementById('editBar').offsetHeight)) < 120);
+
+  // ⑩ 세부 비목(features.details 켬) + 사용자 관점 정리
+  const dc = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+  const d = await dc.newPage(); d.on('pageerror', (e) => errors.push('d:' + e.message));
+  await d.goto(base);
+  await d.evaluate(() => { document.getElementById('projBox').open = true; });
+  await d.locator('#insts tbody tr').first().locator('select').first().selectOption('joint');
+  await d.fill('#gov', '300000'); await d.getByLabel('연구재료비 현금(천원)').fill('400000');
+  check('[참여기관] 역할을 공동기관으로 → 이름 자동 변경·주관기관 경고 없음·점검 통과', (await d.locator('#insts tbody tr input').first().inputValue()) === '공동기관 1' && (await d.textContent('#projSum')).includes('공동') && !(await d.textContent('#projChecks')).includes('주관연구개발기관') && (await d.locator('#checks .error').count()) === 0 && !(await d.isDisabled('#xlsx')));
+  await d.click('#reset');
+  check('[세부] 운영 설정(꺼짐)에서는 세부 버튼 숨김', (await d.locator('.subbtn').count()) === 0);
+  check('[정리] 처음 화면: 과제 구성 한 줄 접힘·작성 순서 안내·0 숫자 숨김', !(await d.evaluate(() => document.getElementById('projBox').open)) && (await d.textContent('#projSum')).includes('1년') && (await d.locator('#liveStart').isVisible()) && (await d.locator('#funding').isHidden()) && (await d.locator('#live').isHidden())
+    && (await d.evaluate(() => document.getElementById('gov').getBoundingClientRect().top)) < 520);
+  await d.click('#liveHelper');
+  check('[정리] 작성 순서 안내 → 도우미 열기', await d.locator('#helperDlg').isVisible());
+  await d.click('#hdClose');
+  await d.click('#modeBar [data-mode="exec"]');
+  check('[정리] 집행: 편성 전에는 안내 표시', (await d.locator('#xEmpty').isVisible()) && (await d.locator('#xRows').isHidden()));
+  await d.click('#xGoPlan');
+  check('[정리] 안내 → 편성 화면 이동', (await d.locator('#planView').isVisible()));
+  await d.setInputFiles('#backupLoad2', { name: '사업비편성표.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from('PK') });
+  await d.waitForTimeout(150);
+  check('[정리] 엑셀을 백업으로 올려도 기존 내용 유지', (await d.locator('#planView').isVisible()) && (await d.inputValue('#gov')) === '');
+  await d.route('**/config.js', async (rt) => { const res = await rt.fetch(); rt.fulfill({ response: res, body: (await res.text()).replace('details: false', 'details: true') }); });
+  await d.reload();
+  await d.fill('#gov', '300000');
+  check('[정리] 단독 과제: 총괄표 생략·엑셀 버튼 보임', (await d.locator('#summary').isHidden()) && (await d.textContent('#h-out-t')) === '엑셀 편성표' && (await d.locator('#funding').isVisible()) && (await d.locator('#live').isVisible()));
+  await d.getByLabel('연구재료비 현금(천원)').fill('200000'); await d.getByLabel('연구활동비 현금(천원)').fill('20000');
+  await d.click('[data-subbtn="activity"]');
+  check('[세부] 열면 기존 합계가 첫 세목으로 이동(금액 유지)', (await d.getByLabel('연구활동비 세목 1 현금(천원)').inputValue()) === '20,000' && (await d.textContent('[data-cell="activity.cash"]')) === '20,000' && (await d.textContent('[data-subbtn="activity"]')) === '세부 1');
+  await d.click('[data-subadd="activity"] .btn');
+  await d.getByLabel('연구활동비 세목 2', { exact: true }).selectOption('expert'); await d.getByLabel('연구활동비 세목 2 현금(천원)').fill('200000');
+  check('[세부] 세목 합계 반영·외부 전문기술 40% 초과 오류', (await d.textContent('[data-cell="activity.cash"]')) === '220,000' && (await d.textContent('#checks')).includes('외부 전문기술 활용비'));
+  await d.getByLabel('연구활동비 세목 2 현금(천원)').fill('30000');
+  await d.getByLabel('연구활동비 세목 2', { exact: true }).selectOption('techin');
+  await d.getByLabel('연구활동비 세목 2 현물(천원)').fill('5000');
+  check('[세부] 기술도입비는 현물 입력 가능·합계 반영', (await d.textContent('[data-cell="activity.inkind"]')) === '5,000' && !(await d.textContent('#checks')).includes('외부 전문기술 활용비'));
+  await d.click('[data-subbtn="equipment"]');
+  await d.getByLabel('연구시설·장비비 세목 1 내용').fill('시험장비'); await d.getByLabel('연구시설·장비비 세목 1 현금(천원)').fill('35000');
+  check('[세부] 장비 건별 3천만 원 안내(장비명 표시)', (await d.textContent('#checks')).includes('‘시험장비’'));
+  check('[세부] 시트 목록에 세부 내역', (await d.textContent('#dlSheets')).includes('세부 내역'));
+  const [dx] = await Promise.all([d.waitForEvent('download'), d.click('#xlsx')]);
+  check('[세부] 엑셀 다운로드', (await dx.failure()) === null);
+  const dxPath = await dx.path();
+  await d.click('#reset');
+  check('[엑셀 불러오기] 새로 작성 후 비어 있음', (await d.inputValue('#gov')) === '');
+  await d.setInputFiles('#backupLoad2', { name: '사업비편성표.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: require('fs').readFileSync(dxPath) });
+  await d.waitForTimeout(400);
+  check('[엑셀 불러오기] 내려받은 엑셀을 올리면 편성 내용 복원(세부 내역 포함)', (await d.inputValue('#gov')) === '300,000' && (await d.getByLabel('연구활동비 세목 2 현물(천원)').inputValue()) === '5,000' && (await d.textContent('[data-cell="equipment.cash"]')) === '35,000' && (await d.locator('#undoBar').isVisible()));
+  await d.reload();
+  check('[세부] 새로고침 후 세부 내역 유지', (await d.getByLabel('연구활동비 세목 2 현물(천원)').inputValue()) === '5,000' && (await d.textContent('[data-cell="equipment.cash"]')) === '35,000');
+  await d.getByLabel('연구활동비 세목 1 삭제').click();
+  check('[세부] 세목 삭제 → 합계 갱신·되돌리기', (await d.textContent('[data-cell="activity.cash"]')) === '30,000' && (await d.locator('#undoBar').isVisible()));
+  await d.click('#undoBtn');
+  check('[세부] 삭제 되돌리기', (await d.textContent('[data-cell="activity.cash"]')) === '50,000');
+  await d.click('[data-subadd="activity"] .sub-close');
+  check('[세부] 합계만 입력으로 전환(금액 유지)', (await d.getByLabel('연구활동비 현금(천원)').inputValue()) === '50,000' && (await d.locator('[data-subrow="activity"]').count()) === 0);
+  await d.setViewportSize({ width: 390, height: 844 }); await d.waitForTimeout(150);
+  check('[세부] 모바일: 세목 행 세로 배치·가로 넘침 없음', (await d.locator('#items tr.sub-row.narrow').count()) === 1 && (await d.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)) && (await d.evaluate(() => { const t = document.getElementById('items'); return t.scrollWidth <= t.parentElement.clientWidth + 1; })));
+  await dc.close();
+
+  // ⑪ 방문 통계(측정 ID를 넣을 때만 동작, 입력 내용은 보내지 않음)
+  const gc = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+  const g = await gc.newPage(); g.on('pageerror', (e) => errors.push('g:' + e.message));
+  const gaReq = [];
+  await g.route('**/*googletagmanager.com/**', (rt) => { gaReq.push(rt.request().url()); rt.fulfill({ contentType: 'text/javascript', body: '' }); });
+  await g.goto(base);
+  check('[통계] 측정 ID가 없으면 통계 코드를 불러오지 않음', gaReq.length === 0 && (await g.evaluate(() => typeof window.gtag)) === 'undefined' && !(await g.textContent('#foot')).includes('이용 통계'));
+  await g.route('**/config.js', async (rt) => { const res = await rt.fetch(); rt.fulfill({ response: res, body: (await res.text()).replace("ga4: ''", "ga4: 'G-TEST123456'") }); });
+  await g.reload();
+  await g.fill('#title', '비밀과제명'); await g.fill('#gov', '345678'); await g.getByLabel('연구재료비 현금(천원)').fill('460905');
+  await Promise.all([g.waitForEvent('download'), g.click('#xlsx')]);
+  const evs = await g.evaluate(() => window.dataLayer.map((a) => Array.from(a)).filter((a) => a[0] === 'event'));
+  const names = evs.map((e) => e[1]);
+  check('[통계] 측정 ID 설정 시 로드·주요 이벤트 기록', gaReq.some((u) => u.includes('G-TEST123456')) && ['rb_first_input', 'rb_budget_ready', 'rb_xlsx_download'].every((n) => names.includes(n)) && names.filter((n) => n === 'rb_first_input').length === 1 && (await g.textContent('#foot')).includes('이용 통계'), names.join(','));
+  check('[통계] 금액·과제명 등 입력 내용은 보내지 않음', !/345678|345,678|460905|비밀과제명/.test(JSON.stringify(evs)));
+  await gc.close();
+
+  // ⑫ 관리자 화면·부처 프리셋
+  const ac = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+  const a = await ac.newPage(); a.on('pageerror', (e) => errors.push('a:' + e.message));
+  await a.goto(base);
+  check('[부처] 운영 설정(꺼짐)에서는 부처 선택 숨김', await a.locator('#ministry').isHidden());
+  await a.goto(base + 'admin.html');
+  check('[관리자] 비밀번호 미설정 시 바로 열림·점검표 표시', (await a.locator('#panel').isVisible()) && (await a.locator('#gate').isHidden()) && (await a.textContent('#autoChecks')).includes('관리자 비밀번호: 미설정') && (await a.locator('#autoChecks .error').count()) === 0 && (await a.locator('meta[name="robots"]').getAttribute('content')).includes('noindex'));
+  await a.fill('#pw1', 'short'); await a.fill('#pw2', 'short'); await a.click('#mkHash');
+  check('[관리자] 짧은 비밀번호 거부', (await a.textContent('#pwErr')).includes('12자'));
+  const PW = 'test-only passphrase 1234';
+  await a.fill('#pw1', PW); await a.fill('#pw2', PW); await a.click('#mkHash'); await a.waitForSelector('#pwOk:not([hidden])');
+  await a.fill('#cGa', 'bad'); await a.click('#dlConfig');
+  check('[관리자] 잘못된 통계 ID 거부', (await a.textContent('#cfgOk')).includes('G-'));
+  await a.fill('#cGa', 'G-TEST123456'); await a.fill('#cContact', '문의처 예시');
+  await a.check('[data-pub="details"]'); await a.check('[data-pv="ministry"]');
+  const [cf] = await Promise.all([a.waitForEvent('download'), a.click('#dlConfig')]);
+  const cfg = require('fs').readFileSync(await cf.path(), 'utf8');
+  const parsed = new Function('window', cfg + '; return window.RB_CONFIG;')({});
+  check('[관리자] 설정 파일 생성(통계 ID·기능 스위치·암호화 값 포함, 비밀번호 원문 없음)', cf.suggestedFilename() === 'config.js' && parsed.analytics.ga4 === 'G-TEST123456' && parsed.features.details === true && parsed.features.ministry === false && parsed.features.project === true && /^pbkdf2-sha256\$\d+\$/.test(parsed.admin.hash) && !cfg.includes(PW) && parsed.contact === '문의처 예시');
+  await a.goto(base);
+  check('[관리자] 미리보기: 이 브라우저에서만 부처 선택 표시·안내 막대', (await a.locator('#ministry').isVisible()) && (await a.locator('#previewBar').isVisible()));
+  await a.fill('#gov', '300000');
+  await a.selectOption('#ministry', 'motie2');
+  check('[부처] 산업부 혁신제품형: 중소 67%·최소 총사업비 447,762', (await a.inputValue('#govMaxPct')) === '67' && (await a.textContent('#funding')).includes('447,762') && (await a.textContent('#ministryNote')).includes('제24조') && (await a.textContent('#ruleHint')).includes('산업부'));
+  await a.selectOption('#ministry', 'mss');
+  check('[부처] 중기부: 법령 기준으로 복귀(75%)·안내 표시', (await a.inputValue('#ruleset')) === 'sme' && (await a.inputValue('#govMaxPct')) === '75' && (await a.textContent('#ministryNote')).includes('공고'));
+  await a.click('#previewOff'); await a.waitForLoadState();
+  check('[관리자] 미리보기 끄기 → 운영 설정으로', (await a.locator('#ministry').isHidden()) && (await a.locator('#previewBar').isHidden()));
+  // 비밀번호가 배포된 뒤: 로그인 필요
+  await a.route('**/config.js', async (rt) => { const res = await rt.fetch(); rt.fulfill({ response: res, body: (await res.text()).replace("admin: { hash: '' }", `admin: { hash: '${parsed.admin.hash}' }`) }); });
+  await a.goto(base + 'admin.html');
+  check('[관리자] 비밀번호 설정 후에는 로그인 화면', (await a.locator('#gate').isVisible()) && (await a.locator('#panel').isHidden()));
+  await a.fill('#pw', 'wrong password!!'); await a.click('#login'); await a.waitForSelector('#gateErr:not([hidden])');
+  check('[관리자] 틀린 비밀번호 거부', await a.locator('#panel').isHidden());
+  await a.fill('#pw', PW); await a.click('#login'); await a.waitForSelector('#panel:not([hidden])', { timeout: 15000 });
+  check('[관리자] 맞는 비밀번호로 열림', (await a.textContent('#autoChecks')).includes('관리자 비밀번호: 설정됨'));
+  await ac.close();
+  const pv = await (await browser.newContext()).newPage(); pv.on('pageerror', (e) => errors.push('pv:' + e.message));
+  await pv.goto(base + 'privacy.html');
+  check('[런칭] 개인정보 처리 안내 페이지·사이트맵', (await pv.textContent('main')).includes('브라우저') && (await pv.textContent('#pGa')).includes('사용하지 않습니다') && (await (await pv.request.get(base + 'sitemap.xml')).text()).includes('rnd-budget/'));
 
   check('콘솔·스크립트 오류 없음', errors.length === 0, errors.join(' | '));
   await browser.close(); server.close();

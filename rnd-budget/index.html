@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://pagead2.googlesyndication.com https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com https://*.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com; frame-src https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.googletagmanager.com https://pagead2.googlesyndication.com https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com https://*.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com; frame-src https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="light dark">
 <title>R&amp;D 사업비 편성 가이드·계산기 — 국가연구개발 법령 기준 자동 점검</title>
 <meta name="description" content="정부 R&D 과제 사업비를 법령 기준으로 바로 편성합니다. 기관 유형만 고르면 정부지원 비율·기관부담 현금 비율·간접비율이 자동 적용되고, 인건비·연구수당·위탁연구개발비 한도와 현물 계상까지 점검합니다. 엑셀 편성표 무료 다운로드.">
@@ -13,6 +13,7 @@
 <meta property="og:type" content="website">
 <link rel="stylesheet" href="style.css">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"R&D 사업비 편성 가이드·계산기","applicationCategory":"BusinessApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"0","priceCurrency":"KRW"},"inLanguage":"ko"}</script>
+<script type="application/ld+json" id="faqLd">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"중소기업 기관부담금은 최소 얼마인가요?","acceptedAnswer":{"@type":"Answer","text":"정부지원연구개발비가 총사업비의 75% 이하여야 하므로 정부출연금이 3억 원이면 총사업비는 4억 원 이상, 기관부담금은 1억 원 이상입니다. 그중 10%(1천만 원) 이상은 현금으로 부담해야 합니다. 근거: 시행령 별표 1"}},{"@type":"Question","name":"정부지원 비율과 현금 부담 비율은 기관 유형별로 어떻게 다른가요?","acceptedAnswer":{"@type":"Answer","text":"정부지원 상한: 중소 75%, 중견 70%, 대기업·공기업 50%. 기관부담금 중 현금: 중소 10%, 중견 10%(평균매출액등 3천억 원 미만) 또는 13%(3천억 원 이상), 대기업·공기업 15% 이상입니다. 근거: 시행령 별표 1 제1·2호"}},{"@type":"Question","name":"대학이나 연구기관도 기관부담금을 내야 하나요?","acceptedAnswer":{"@type":"Answer","text":"비영리기관은 기관부담 의무가 없습니다. 다만 협약으로 부담을 정한 과제는 예외일 수 있습니다. 근거: 시행령 제19조①④"}},{"@type":"Question","name":"공고문 비율이 법령과 다르면 어떻게 하나요?","acceptedAnswer":{"@type":"Answer","text":"사업별 공고·운영요령이 우선합니다. 기관 유형에서 '공고문 기준 직접 입력'을 고르거나, 공고문 파일을 올려 기준을 가져오세요."}},{"@type":"Question","name":"공동(참여)기관인데 우리 기관 것만 편성해도 되나요?","acceptedAnswer":{"@type":"Answer","text":"네. '과제 구성'에서 역할을 공동기관으로 바꾸고 우리 기관 금액만 넣으면 됩니다. 정부지원 비율·현금 비율은 기관마다 따로 적용되므로 다른 기관을 넣지 않아도 우리 기관 점검과 엑셀은 그대로 맞습니다. 과제 전체 총괄표가 필요할 때만 다른 기관을 추가하세요."}},{"@type":"Question","name":"공동연구개발기관이 있으면 어떻게 계산하나요?","acceptedAnswer":{"@type":"Answer","text":"정부지원 비율·현금 비율은 기관마다 그 기관 유형 기준을 따로 적용합니다. 예) 주관 중소기업 75%·10%, 공동 대학은 기관부담 의무 없음. 근거: 시행령 별표 1"}},{"@type":"Question","name":"기존 직원 인건비를 현금으로 넣을 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"현금으로 계상할 수 있는 경우가 정해져 있습니다. 중소·중견기업의 신규 채용 인력(채용일부터 공고일까지 6개월 이내 포함), 부처가 인정한 인력 등이 해당하고, 그 밖의 기존 인력은 현물로 넣습니다. 근거: 사용 기준 제65조④"}},{"@type":"Question","name":"인건비는 어떻게 계산하나요?","acceptedAnswer":{"@type":"Answer","text":"연봉 ÷ 12 × 참여개월 × 참여율입니다. 연봉에서 연구수당·능률성과급은 뺍니다. 근거: 사용 기준 제65조"}},{"@type":"Question","name":"참여율 상한이 있나요?","acceptedAnswer":{"@type":"Answer","text":"영리기관 연구자는 모든 과제를 합한 총 참여율(인건비계상률)이 월 100% 이하여야 합니다. 출연연은 연평균 130% 기준이 따로 있습니다. 근거: 사용 기준 제65조⑦, 제39조⑤"}},{"@type":"Question","name":"기업도 학생인건비를 넣을 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"학생인건비는 대학 등 지정된 기관만 사용합니다. 기업(영리기관)은 해당하지 않아 이 도구에서도 비목이 보이지 않습니다. 근거: 사용 기준 제7조"}},{"@type":"Question","name":"현물로 낼 수 있는 것은 무엇인가요?","acceptedAnswer":{"@type":"Answer","text":"기존 인력 인건비, 보유 연구시설·장비(구입가의 20% 이내, 구입 5년 이내), 보유·자체 재원 연구재료, 기술도입비(실제 비용의 50% 이내), 소프트웨어(구입가의 20% 이내)입니다. 근거: 시행령 별표 1 제3호, 사용 기준 제66~68조"}},{"@type":"Question","name":"현물 비중 상한이 있나요?","acceptedAnswer":{"@type":"Answer","text":"현물 비중 상한은 따로 없습니다. 대신 기관부담금 중 현금 최소 비율을 지켜야 하므로 그만큼이 사실상 현물 한도가 됩니다. 근거: 시행령 별표 1"}},{"@type":"Question","name":"간접비는 어떻게 계산하나요?","acceptedAnswer":{"@type":"Answer","text":"간접비 = (직접비 − 현물 − 위탁연구개발비) × 간접비율이며 현금으로만 계상합니다. 영리기관 10%, 고시비율이 없는 대학 5%·비영리기관 17%입니다. 근거: 사용 기준 제2조9호, 제114조"}},{"@type":"Question","name":"연구수당 한도는?","acceptedAnswer":{"@type":"Answer","text":"인건비(현물 포함)와 학생인건비를 더한 금액의 20% 이내이며, 한 사람에게 연구수당 총액의 70%를 넘게 줄 수 없습니다. 근거: 사용 기준 제26조"}},{"@type":"Question","name":"위탁연구개발비는 얼마까지 넣을 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"(직접비 − 위탁연구개발비)의 40% 이하입니다. 부처가 인정하면 초과할 수 있습니다. 근거: 사용 기준 제27조①"}},{"@type":"Question","name":"비싼 장비를 살 때 주의할 점은?","acceptedAnswer":{"@type":"Answer","text":"건당 3천만 원 이상은 장비정보시스템(ZEUS)으로 공동활용 여부를 확인하고, 1억 원 이상은 시설·장비 표준지침 절차를 따릅니다. 과제 종료 2개월 전까지 구입을 마쳐야 합니다. 근거: 사용 기준 제23조"}},{"@type":"Question","name":"부가세도 사업비에 넣나요?","acceptedAnswer":{"@type":"Answer","text":"환급받을 수 있는 부가가치세·관세는 연구개발비로 계상할 수 없습니다. 같은 비용을 현금과 현물로 중복 계상하는 것도 안 됩니다. 근거: 사용 기준 제21조④"}},{"@type":"Question","name":"기관부담 현금은 언제까지 내야 하나요?","acceptedAnswer":{"@type":"Answer","text":"협약에서 정한 기한까지, 정하지 않았으면 연도별 연구개발기간 종료 3개월 전까지 냅니다. 내지 않으면 정부지원금 지급이 중지될 수 있습니다. 근거: 사용 기준 제60조②, 시행령 제19조⑤"}},{"@type":"Question","name":"집행 중 비목 금액을 바꿀 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"가능하지만 비목·금액에 따라 전문기관 사전 승인이 필요합니다(예: 위탁연구개발비 20% 이상 증액, 연구수당 증액, 3천만 원 이상 장비 신규 구입). 사업별 운영요령을 확인하세요. 근거: 사용 기준 제73조"}},{"@type":"Question","name":"입력한 내용은 어디에 저장되나요?","acceptedAnswer":{"@type":"Answer","text":"이 브라우저에만 저장되고 서버로 보내지 않습니다. 브라우저를 정리하거나 PC를 바꾸기 전에는 '백업 저장'으로 파일을 받아 두세요. 다른 PC에서는 '백업 불러오기'로 이어서 작업할 수 있습니다."}},{"@type":"Question","name":"공고문을 올리면 파일이 외부로 전송되나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 파일은 이 PC의 브라우저 안에서만 읽습니다. 찾은 값은 근거 문장과 함께 보여 주고, 확인한 항목만 적용합니다."}},{"@type":"Question","name":"내려받은 엑셀을 다시 불러와 이어서 작업할 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"네. 이 도구에서 내려받은 엑셀을 '불러오기(백업·엑셀)'에 올리면 내려받을 때의 편성 내용이 복원됩니다(엑셀 안에 편성 데이터가 숨김 시트로 함께 저장됨). 다만 엑셀에서 직접 고친 금액은 반영되지 않습니다. 계속 고칠 내용은 도구에서 수정한 뒤 다시 내려받으세요."}},{"@type":"Question","name":"내려받은 엑셀을 고쳐도 되나요?","acceptedAnswer":{"@type":"Answer","text":"네. 합계·비율은 수식으로 들어가 있어 금액을 바꾸면 자동으로 다시 계산됩니다. 정부지원·기관 현금 구분은 비례 배분한 값이니 계획서에 맞춰 조정하세요."}},{"@type":"Question","name":"인건비에 4대 보험과 퇴직금도 포함되나요?","acceptedAnswer":{"@type":"Answer","text":"네. 인건비에는 급여(4대 보험 본인부담금 포함)와 4대 보험 기관부담금, 퇴직급여충당금이 포함됩니다. 연봉 칸에 이를 포함한 금액을 넣으세요. 근거: 사용 기준 제6조"}},{"@type":"Question","name":"2027년에 바뀌는 기준이 있나요?","acceptedAnswer":{"@type":"Answer","text":"연구개발비 사용 기준 개정안이 행정예고되어 있습니다(2026.10.15., 시행 예정 2027.1.1., 확정 전). 예고안 기준으로 장비 구입 완료 시기가 종료 2개월 전에서 6개월 전으로, 연구수당은 개인별 인건비 총액의 100% 이내 조건이 추가됩니다. 정부지원·현금 부담 비율은 변동이 없습니다. 확정되면 이 도구에 반영합니다. 근거: 과기정통부 공고 제2026-1017호(행정예고)"}},{"@type":"Question","name":"용어가 헷갈려요(정부출연금·기관부담금·현금·현물·수정직접비)","acceptedAnswer":{"@type":"Answer","text":"정부출연금 = 정부지원연구개발비(정부가 주는 돈). 기관부담금 = 기관부담연구개발비(예전 '민간부담금', 기관이 내는 몫). 총사업비 = 둘의 합(총연구개발비). 현금은 실제 계좌에 넣어 쓰는 돈, 현물은 이미 가진 인력·장비·재료를 금액으로 환산해 인정받는 것. 수정직접비 = 직접비 − 현물 − 위탁연구개발비(간접비 계산 기준), 수정인건비 = 인건비(현물 포함) + 학생인건비(연구수당 한도 기준)."}},{"@type":"Question","name":"금액 단위와 반올림은 어떻게 처리하나요?","acceptedAnswer":{"@type":"Answer","text":"모든 금액은 천원 단위입니다(3억 원 → 300,000). '3억', '5천만', '300000000원'처럼 입력하면 천원으로 바꿔 줍니다. 인건비·간접비는 천원 미만 반올림, 최소 총사업비·최소 현금은 기준을 넘지 않도록 올림으로 계산합니다. 계획서 시스템과 1천 원 차이가 나면 그쪽 값에 맞춰 엑셀에서 조정하세요."}},{"@type":"Question","name":"잘못 눌러서 내용이 바뀌었어요. 되돌릴 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"예시 불러오기·새로 작성·도우미 초안·자동 고치기·삭제 직후에는 화면 아래에 되돌리기 버튼이 잠시 나타납니다. 중요한 편성은 '백업 저장'으로 파일을 받아 두면 언제든 복원할 수 있습니다."}},{"@type":"Question","name":"대학·비영리기관인데 총사업비가 정부출연금보다 크게 나와요","acceptedAnswer":{"@type":"Answer","text":"비영리기관은 기관부담 의무가 없어 보통 총사업비 = 정부출연금으로 편성합니다. 직접비(현금)에 간접비가 자동으로 더해지므로, 직접비를 '정부출연금 ÷ (1 + 간접비율)' 이하로 잡으면 맞습니다. 점검란의 안내 금액을 참고하세요."}}]}</script>
 </head>
 <body>
 <a class="skip" href="#main">본문 바로가기</a>
@@ -32,12 +33,14 @@
 </header>
 
 <main id="main" class="wrap">
+  <p class="preview-bar" id="previewBar" hidden>관리자 미리보기 중 — 이 브라우저에서만 기능 스위치가 다르게 보입니다. <button type="button" class="linkbtn" id="previewOff">미리보기 끄기</button></p>
   <p class="print-head" id="printHead"></p>
   <p class="demo-note" id="demoNote" hidden></p>
   <ol class="steps" aria-label="작성 순서" data-feature="steps"><li><a href="#s0">과제 구성</a></li><li><a href="#s1">기관·정부출연금</a></li><li><a href="#s2">인건비</a></li><li><a href="#s3">비목 편성</a></li><li><a href="#s4">점검</a></li><li><a href="#s5">총괄표·엑셀</a></li></ol>
 
   <section class="card" id="s0" aria-labelledby="h-proj" data-feature="project">
-    <h2 id="h-proj"><span class="no">0</span>과제 구성</h2>
+    <details class="projbox" id="projBox">
+    <summary><h2 id="h-proj"><span class="no">0</span>과제 구성</h2><span class="proj-sum" id="projSum"></span><span class="proj-edit">연차·공동기관 설정</span></summary>
     <div class="grid3">
       <label>연구개발기간<select id="years"></select></label>
     </div>
@@ -49,10 +52,12 @@
     <details class="guide"><summary>작성 가이드</summary>
       <ul>
         <li>단독 과제는 주관기관 1곳, 1차년도로 그대로 작성하면 됩니다.</li>
+        <li><strong>우리 기관만 편성해도 됩니다.</strong> 참여(공동)기관 담당자라면 역할을 <strong>공동기관</strong>으로 바꾸고 우리 기관 금액만 넣으세요. 다른 기관은 추가하지 않아도 점검·엑셀이 그대로 동작합니다.</li>
         <li>공동 과제는 기관을 추가하고, 아래 <strong>편집 중</strong> 탭에서 기관·연차를 골라 각각 편성합니다. 정부지원 비율·현금 비율은 <strong>기관별로</strong> 그 기관 유형 기준이 적용됩니다(시행령 별표 1).</li>
         <li>위탁연구개발기관은 기관으로 추가하지 않고, 위탁하는 기관의 <strong>위탁연구개발비</strong> 비목에 넣습니다.</li>
         <li>다음 연차는 <strong>이전 연차 복사</strong> 후 바뀐 금액만 고치면 빠릅니다.</li>
       </ul>
+    </details>
     </details>
   </section>
 
@@ -74,6 +79,10 @@
       <label>기관 유형<select id="ruleset"></select></label>
       <label>정부출연금(천원)<input id="gov" inputmode="numeric" placeholder="예: 300,000 (= 3억 원)" autocomplete="off" maxlength="18" aria-describedby="govWon"><small class="won" id="govWon" aria-live="polite"></small></label>
       <label>과제명(선택)<input id="title" maxlength="80" placeholder="예: 액체수소 펌프 개발"></label>
+    </div>
+    <div class="ministry" data-feature="ministry">
+      <label>소관 부처·사업 유형 <span class="badge">선택</span><select id="ministry"></select></label>
+      <ul class="ministry-note" id="ministryNote" hidden></ul>
     </div>
     <details class="rulebox" id="ruleBox">
       <summary><span id="ruleSummary"></span> <span id="ruleMode" class="badge"></span></summary>
@@ -151,8 +160,13 @@
     <aside class="col-side" aria-label="편성 요약·점검·엑셀">
     <section class="card live" aria-labelledby="h-live">
       <h2 id="h-live">편성 요약 <span class="cur" id="liveCur"></span></h2>
+      <div class="live-start" id="liveStart" hidden>
+        <p>작성 순서</p>
+        <ol><li><strong>기관 유형</strong>을 고릅니다.</li><li><strong>정부출연금</strong>을 넣으면 최소 총사업비·기관부담금이 계산됩니다.</li><li><strong>인건비·비목</strong>을 편성합니다.</li><li>점검 결과를 확인하고 <strong>엑셀</strong>로 받습니다.</li></ol>
+        <button type="button" class="btn sm" id="liveHelper">몇 가지만 답하고 초안 받기</button>
+      </div>
       <dl class="live-grid" id="live" aria-live="polite"></dl>
-      <div class="meter" aria-hidden="true"><span id="meterGov"></span><span id="meterCash"></span><span id="meterInk"></span></div>
+      <div class="meter" id="liveMeter" aria-hidden="true"><span id="meterGov"></span><span id="meterCash"></span><span id="meterInk"></span></div>
       <p class="meter-legend"><i class="g"></i>정부지원 <i class="c"></i>기관 현금 <i class="k"></i>기관 현물</p>
     </section>
   <section class="card" id="s4" aria-labelledby="h-check">
@@ -180,7 +194,7 @@
       <button type="button" class="btn ghost sm" id="print">인쇄·PDF</button>
       <button type="button" class="btn ghost sm" id="saveScenario" data-feature="scenarios">현재 안 저장</button>
       <button type="button" class="btn ghost sm" id="backupSave2">백업 저장</button>
-      <label class="btn ghost sm" tabindex="0" role="button" data-filebtn>백업 불러오기<input type="file" id="backupLoad2" accept=".json,application/json" hidden></label>
+      <label class="btn ghost sm" tabindex="0" role="button" data-filebtn>불러오기(백업·엑셀)<input type="file" id="backupLoad2" accept=".json,.xlsx,application/json" hidden></label>
       <button type="button" class="btn ghost sm" id="reset">새로 작성</button>
     </div>
     <p class="save-status" id="saveStatus" role="status"></p>
@@ -202,6 +216,7 @@
       </section>
       <section class="card" id="x2" aria-labelledby="h-x2">
         <h2 id="h-x2"><span class="no">2</span>비목별 집행 현황 <span class="cur">현금 · 천원</span></h2>
+        <p class="empty-note" id="xEmpty" hidden>편성된 금액이 없습니다. 집행 현황은 편성 금액을 기준으로 계산하므로 먼저 사업비를 편성하세요. <button type="button" class="linkbtn" id="xGoPlan">편성 화면으로</button></p>
         <div class="tbl-wrap"><table class="tbl" id="xRows"></table></div>
         <p class="hint" id="xHint"></p>
       </section>
@@ -230,7 +245,7 @@
         <div class="actions">
           <button type="button" class="btn" id="xXlsx">집행 현황 엑셀</button>
           <button type="button" class="btn ghost" id="backupSave">백업 저장</button>
-          <label class="btn ghost" id="backupLoadBtn" tabindex="0" role="button" data-filebtn>백업 불러오기<input type="file" id="backupLoad" accept=".json,application/json" hidden></label>
+          <label class="btn ghost" id="backupLoadBtn" tabindex="0" role="button" data-filebtn>불러오기(백업·엑셀)<input type="file" id="backupLoad" accept=".json,.xlsx,application/json" hidden></label>
         </div>
         <p class="dl-toast" id="xToast" role="status" hidden></p>
         <p class="hint">집행 기록은 이 브라우저에만 저장됩니다. 브라우저 정리·PC 교체 전에 <strong>백업 저장</strong>하세요.</p>
@@ -243,11 +258,17 @@
 
   <section class="card faq" id="faq" aria-labelledby="h-faq" data-feature="faq">
     <h2 id="h-faq">자주 묻는 질문(Q&amp;A)</h2>
-    <div class="faq-tools"><input id="faqSearch" type="search" placeholder="궁금한 내용 검색(예: 현물, 간접비, 참여율)" aria-label="질문 검색"><div class="chips" id="faqCats"><button type="button" class="chip on" data-qcat="">전체</button> <button type="button" class="chip" data-qcat="기본">기본</button> <button type="button" class="chip" data-qcat="인건비">인건비</button> <button type="button" class="chip" data-qcat="현금·현물">현금·현물</button> <button type="button" class="chip" data-qcat="비목">비목</button> <button type="button" class="chip" data-qcat="집행">집행</button> <button type="button" class="chip" data-qcat="도구">도구</button></div></div>
+    <div class="faq-tools">
+      <input id="faqSearch" type="search" placeholder="궁금한 내용 검색(예: 현물, 간접비, 참여율)" aria-label="질문 검색" autocomplete="off">
+      <div class="chips" id="faqCats" role="group" aria-label="분류"><button type="button" class="chip on" data-qcat="" aria-pressed="true">전체</button><button type="button" class="chip" data-qcat="기본" aria-pressed="false">기본</button><button type="button" class="chip" data-qcat="인건비" aria-pressed="false">인건비</button><button type="button" class="chip" data-qcat="현금·현물" aria-pressed="false">현금·현물</button><button type="button" class="chip" data-qcat="비목" aria-pressed="false">비목</button><button type="button" class="chip" data-qcat="집행" aria-pressed="false">집행</button><button type="button" class="chip" data-qcat="도구" aria-pressed="false">도구</button></div>
+      <div class="faq-bar"><span id="faqCount" role="status"></span><button type="button" class="linkbtn" id="faqToggle" aria-expanded="false">모두 펼치기</button></div>
+    </div>
+    <div class="faq-body" id="faqBody">
     <details data-cat="기본"><summary>중소기업 기관부담금은 최소 얼마인가요?</summary><p>정부지원연구개발비가 총사업비의 75% 이하여야 하므로 정부출연금이 3억 원이면 총사업비는 4억 원 이상, 기관부담금은 1억 원 이상입니다. 그중 10%(1천만 원) 이상은 현금으로 부담해야 합니다. <small class="cite">근거: 시행령 별표 1</small></p></details>
     <details data-cat="기본"><summary>정부지원 비율과 현금 부담 비율은 기관 유형별로 어떻게 다른가요?</summary><p>정부지원 상한: 중소 75%, 중견 70%, 대기업·공기업 50%. 기관부담금 중 현금: 중소 10%, 중견 10%(평균매출액등 3천억 원 미만) 또는 13%(3천억 원 이상), 대기업·공기업 15% 이상입니다. <small class="cite">근거: 시행령 별표 1 제1·2호</small></p></details>
     <details data-cat="기본"><summary>대학이나 연구기관도 기관부담금을 내야 하나요?</summary><p>비영리기관은 기관부담 의무가 없습니다. 다만 협약으로 부담을 정한 과제는 예외일 수 있습니다. <small class="cite">근거: 시행령 제19조①④</small></p></details>
     <details data-cat="기본"><summary>공고문 비율이 법령과 다르면 어떻게 하나요?</summary><p>사업별 공고·운영요령이 우선합니다. 기관 유형에서 '공고문 기준 직접 입력'을 고르거나, 공고문 파일을 올려 기준을 가져오세요.</p></details>
+    <details data-cat="도구" data-kw="참여기관 공동기관 우리 기관만 주관기관 없이 일부"><summary>공동(참여)기관인데 우리 기관 것만 편성해도 되나요?</summary><p>네. '과제 구성'에서 역할을 공동기관으로 바꾸고 우리 기관 금액만 넣으면 됩니다. 정부지원 비율·현금 비율은 기관마다 따로 적용되므로 다른 기관을 넣지 않아도 우리 기관 점검과 엑셀은 그대로 맞습니다. 과제 전체 총괄표가 필요할 때만 다른 기관을 추가하세요.</p></details>
     <details data-cat="기본"><summary>공동연구개발기관이 있으면 어떻게 계산하나요?</summary><p>정부지원 비율·현금 비율은 기관마다 그 기관 유형 기준을 따로 적용합니다. 예) 주관 중소기업 75%·10%, 공동 대학은 기관부담 의무 없음. <small class="cite">근거: 시행령 별표 1</small></p></details>
     <details data-cat="인건비"><summary>기존 직원 인건비를 현금으로 넣을 수 있나요?</summary><p>현금으로 계상할 수 있는 경우가 정해져 있습니다. 중소·중견기업의 신규 채용 인력(채용일부터 공고일까지 6개월 이내 포함), 부처가 인정한 인력 등이 해당하고, 그 밖의 기존 인력은 현물로 넣습니다. <small class="cite">근거: 사용 기준 제65조④</small></p></details>
     <details data-cat="인건비"><summary>인건비는 어떻게 계산하나요?</summary><p>연봉 ÷ 12 × 참여개월 × 참여율입니다. 연봉에서 연구수당·능률성과급은 뺍니다. <small class="cite">근거: 사용 기준 제65조</small></p></details>
@@ -264,6 +285,7 @@
     <details data-cat="집행"><summary>집행 중 비목 금액을 바꿀 수 있나요?</summary><p>가능하지만 비목·금액에 따라 전문기관 사전 승인이 필요합니다(예: 위탁연구개발비 20% 이상 증액, 연구수당 증액, 3천만 원 이상 장비 신규 구입). 사업별 운영요령을 확인하세요. <small class="cite">근거: 사용 기준 제73조</small></p></details>
     <details data-cat="도구"><summary>입력한 내용은 어디에 저장되나요?</summary><p>이 브라우저에만 저장되고 서버로 보내지 않습니다. 브라우저를 정리하거나 PC를 바꾸기 전에는 '백업 저장'으로 파일을 받아 두세요. 다른 PC에서는 '백업 불러오기'로 이어서 작업할 수 있습니다.</p></details>
     <details data-cat="도구"><summary>공고문을 올리면 파일이 외부로 전송되나요?</summary><p>아니요. 파일은 이 PC의 브라우저 안에서만 읽습니다. 찾은 값은 근거 문장과 함께 보여 주고, 확인한 항목만 적용합니다.</p></details>
+    <details data-cat="도구" data-kw="엑셀 불러오기 업로드 이어서 복원 다시 열기"><summary>내려받은 엑셀을 다시 불러와 이어서 작업할 수 있나요?</summary><p>네. 이 도구에서 내려받은 엑셀을 '불러오기(백업·엑셀)'에 올리면 내려받을 때의 편성 내용이 복원됩니다(엑셀 안에 편성 데이터가 숨김 시트로 함께 저장됨). 다만 <strong>엑셀에서 직접 고친 금액은 반영되지 않습니다.</strong> 계속 고칠 내용은 도구에서 수정한 뒤 다시 내려받으세요.</p></details>
     <details data-cat="도구"><summary>내려받은 엑셀을 고쳐도 되나요?</summary><p>네. 합계·비율은 수식으로 들어가 있어 금액을 바꾸면 자동으로 다시 계산됩니다. 정부지원·기관 현금 구분은 비례 배분한 값이니 계획서에 맞춰 조정하세요.</p></details>
     <details data-cat="인건비"><summary>인건비에 4대 보험과 퇴직금도 포함되나요?</summary><p>네. 인건비에는 급여(4대 보험 본인부담금 포함)와 4대 보험 기관부담금, 퇴직급여충당금이 포함됩니다. 연봉 칸에 이를 포함한 금액을 넣으세요. <small class="cite">근거: 사용 기준 제6조</small></p></details>
     <details data-cat="기본"><summary>2027년에 바뀌는 기준이 있나요?</summary><p>연구개발비 사용 기준 개정안이 행정예고되어 있습니다(2026.10.15., 시행 예정 2027.1.1., 확정 전). 예고안 기준으로 장비 구입 완료 시기가 종료 2개월 전에서 6개월 전으로, 연구수당은 개인별 인건비 총액의 100% 이내 조건이 추가됩니다. 정부지원·현금 부담 비율은 변동이 없습니다. 확정되면 이 도구에 반영합니다. <small class="cite">근거: 과기정통부 공고 제2026-1017호(행정예고)</small></p></details>
@@ -271,11 +293,13 @@
     <details data-cat="도구" data-kw="원 단위 억 만 반올림 올림 절사 천원 미만"><summary>금액 단위와 반올림은 어떻게 처리하나요?</summary><p>모든 금액은 <strong>천원</strong> 단위입니다(3억 원 → 300,000). '3억', '5천만', '300000000원'처럼 입력하면 천원으로 바꿔 줍니다. 인건비·간접비는 천원 미만 반올림, 최소 총사업비·최소 현금은 기준을 넘지 않도록 올림으로 계산합니다. 계획서 시스템과 1천 원 차이가 나면 그쪽 값에 맞춰 엑셀에서 조정하세요.</p></details>
     <details data-cat="도구" data-kw="실수 취소 undo 복구 지움 삭제"><summary>잘못 눌러서 내용이 바뀌었어요. 되돌릴 수 있나요?</summary><p>예시 불러오기·새로 작성·도우미 초안·자동 고치기·삭제 직후에는 화면 아래에 <strong>되돌리기</strong> 버튼이 잠시 나타납니다. 중요한 편성은 '백업 저장'으로 파일을 받아 두면 언제든 복원할 수 있습니다.</p></details>
     <details data-cat="기본" data-kw="대학 출연연 비영리 자체 부담 초과"><summary>대학·비영리기관인데 총사업비가 정부출연금보다 크게 나와요</summary><p>비영리기관은 기관부담 의무가 없어 보통 총사업비 = 정부출연금으로 편성합니다. 직접비(현금)에 간접비가 자동으로 더해지므로, 직접비를 '정부출연금 ÷ (1 + 간접비율)' 이하로 잡으면 맞습니다. 점검란의 안내 금액을 참고하세요.</p></details>
-    <p class="hint" id="faqEmpty" hidden>검색 결과가 없습니다. 다른 단어로 찾아보세요.</p>
+    </div>
+    <p class="faq-empty" id="faqEmpty" hidden>찾는 내용이 없습니다. 다른 단어(예: 현금, 장비, 백업)로 찾아보세요. <button type="button" class="linkbtn" id="faqReset">전체 보기</button></p>
     <p class="hint">법령 기준일 2026-11-16. 사업별 공고문·운영요령이 우선합니다.</p>
   </section>
 
   <p class="foot" id="foot"></p>
+  <p class="foot foot-links"><a href="privacy.html">개인정보 처리 안내</a></p>
 </main>
 
 <dialog id="helperDlg" class="helper" aria-labelledby="hd-t">

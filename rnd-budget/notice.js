@@ -292,7 +292,36 @@
     return text;
   }
 
-  const RBN = { cfbStreams, hwpRecordsToText, readHwp, normalize, toThousand, extractNotice, pickForType, unzipEntries, hwpxXmlToText, readHwpx, readNoticeFile };
+  /**
+   * 이 도구가 만든 엑셀(.xlsx)에서 숨김 시트(_rndbudget)의 A열 문자열을 위에서부터 읽음. 없으면 null.
+   * 엑셀·한셀 등에서 다시 저장한 파일(문자열이 sharedStrings로 옮겨진 경우)도 읽음
+   */
+  async function readXlsxDataCells(bytes, sheetName) {
+    const dec = new TextDecoder();
+    const ent = await unzipEntries(bytes, (n) => /^xl\/(workbook\.xml|_rels\/workbook\.xml\.rels|sharedStrings\.xml|worksheets\/[^/]+\.xml)$/i.test(n));
+    const get = (name) => { const e = ent.find((x) => x.name.toLowerCase() === name.toLowerCase()); return e ? dec.decode(e.data) : ''; };
+    const attr = (tag, name) => { const m = tag.match(new RegExp(`(?:^|\\s)${name}="([^"]*)"`)); return m ? decodeXml(m[1]) : ''; };
+    const sheetTag = (get('xl/workbook.xml').match(/<sheet\b[^>]*>/g) || []).find((t) => attr(t, 'name') === sheetName);
+    if (!sheetTag) return null;
+    const rid = attr(sheetTag, 'r:id');
+    const relTag = (get('xl/_rels/workbook.xml.rels').match(/<Relationship\b[^>]*>/g) || []).find((t) => attr(t, 'Id') === rid);
+    if (!relTag) return null;
+    const target = attr(relTag, 'Target').replace(/^\/?(xl\/)?/, '');
+    const xml = get(`xl/${target}`);
+    if (!xml) return null;
+    const text = (frag) => decodeXml((frag.match(/<t\b[^>]*>[\s\S]*?<\/t>/g) || []).map((t) => t.replace(/<[^>]+>/g, '')).join(''));
+    const shared = (get('xl/sharedStrings.xml').match(/<si\b[^>]*>[\s\S]*?<\/si>/g) || []).map(text);
+    const cells = [];
+    for (const m of xml.matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)) {
+      const ref = attr(m[1], 'r'), mm = ref.match(/^A(\d+)$/);
+      if (!mm) continue;
+      const v = m[2].match(/<v>([\s\S]*?)<\/v>/);
+      cells[Number(mm[1]) - 1] = attr(m[1], 't') === 's' ? shared[Number(v && v[1])] ?? '' : /<is>/.test(m[2]) ? text(m[2]) : decodeXml(v ? v[1] : '');
+    }
+    return Array.from(cells, (x) => x ?? '');
+  }
+
+  const RBN = { readXlsxDataCells, cfbStreams, hwpRecordsToText, readHwp, normalize, toThousand, extractNotice, pickForType, unzipEntries, hwpxXmlToText, readHwpx, readNoticeFile };
   if (typeof module !== 'undefined' && module.exports) module.exports = RBN;
   else root.RBN = RBN;
 })(typeof self !== 'undefined' ? self : this);

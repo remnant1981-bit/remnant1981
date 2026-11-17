@@ -381,3 +381,89 @@ test('[연차·공동기관 공개] 빈 연차 안내·비영리 반올림 1천�
   assert.ok(r.checks.some((c) => c.code === 'np-round' && c.level === 'info'));
   assert.ok(!r.checks.some((c) => c.level === 'error' || c.level === 'warn'));
 });
+
+test('[세부 비목] 세부 합계가 비목 금액이 되고, 현물은 허용 세목만 인정', () => {
+  const st = { ruleset: 'sme', gov: '300000', people: [], items: {
+    equipment: { cash: '999', inkind: '999', sub: [{ t: 'buy', name: '분석기', cash: '120000', inkind: '5000' }, { t: 'rent', cash: '10000', inkind: '777' }] },
+    activity: { sub: [{ t: 'expert', cash: '50000' }, { t: 'techin', cash: '10000', inkind: '20000' }, { t: 'travel', cash: '5000', inkind: '9' }] },
+    material: { cash: '200000' } } };
+  const r = RB.calcBudget(st), row = (k) => r.rows.find((x) => x.key === k);
+  assert.deepEqual([row('equipment').cash, row('equipment').inkind], [130000, 5000]);
+  assert.deepEqual([row('activity').cash, row('activity').inkind], [65000, 20000]);
+  assert.equal(row('material').cash, 200000);
+  assert.ok(r.checks.some((c) => c.level === 'warn' && c.msg.includes('‘분석기’') && c.msg.includes('1억 원 이상')));
+  assert.ok(r.checks.some((c) => c.level === 'ok' && c.msg.includes('외부 전문기술 활용비 80,000천원')));
+});
+
+test('[세부 비목] 외부 전문기술 활용비 직접비 40% 초과 오류·세목 미선택 주의', () => {
+  const r = RB.calcBudget({ ruleset: 'sme', gov: '300000', people: [], items: { activity: { sub: [{ t: 'expert', cash: '200000' }, { t: '', cash: '1000' }] }, material: { cash: '250000' } } });
+  assert.ok(r.checks.some((c) => c.code === 'exttech' && c.level === 'error' && c.basis.includes('제25조')));
+  assert.ok(r.checks.some((c) => c.level === 'warn' && c.msg.includes('세목을 고르지 않은')));
+});
+
+test('[세부 비목] 자동 고치기는 세부 행을 조정·저장값 정리·엑셀 세부 내역 시트', () => {
+  const st = { ruleset: 'sme', gov: '300000', people: [], items: { material: { sub: [{ t: 'buy', cash: '50000' }, { t: 'make', cash: '10000' }] } } };
+  const a = RB.autoFix(st);
+  assert.equal(a.remaining, 0);
+  assert.ok(RB.int(a.sheet.items.material.sub[0].cash) > 50000); assert.equal(a.sheet.items.material.sub[1].cash, '10000');
+  const v = { sub: [{ t: 'buy', cash: '300' }, { t: 'make', cash: '200' }] };
+  RB.setItemTotal('material', v, 'cash', 250); assert.deepEqual(v.sub.map((x) => x.cash), ['250', '0']);
+  const p = RB.normalizeProject({ v: 2, years: 1, insts: [{ name: 'A', role: 'lead', ruleset: 'sme', data: [{ gov: '100000', items: { material: { sub: [null, { t: 'zz', cash: '5' }, { t: 'buy', name: 'x'.repeat(99), cash: '140000' }] }, allowance: { sub: [{ t: 'x' }] }, equipment: { sub: 'bad' } } }] }] });
+  const it = p.insts[0].data[0].items;
+  assert.equal(it.material.sub.length, 2); assert.equal(it.material.sub[0].t, ''); assert.equal(it.material.sub[1].name.length, 40);
+  assert.equal(it.allowance.sub, undefined); assert.equal(it.equipment.sub, undefined);
+  assert.doesNotThrow(() => RB.calcProject(p));
+  const files = unzip(RB.buildXlsx(p));
+  assert.match(files['xl/workbook.xml'], /name="세부 내역"/);
+  assert.doesNotMatch(unzip(RB.buildXlsx(RB.normalizeProject(RB.EXAMPLES.ok.state)))['xl/workbook.xml'], /세부 내역/);
+});
+
+test('[참여기관만 편성] 주관기관이 없어도 경고 없음, 2곳 이상일 때만 안내', () => {
+  const solo = RB.normalizeProject({ v: 2, years: 1, insts: [{ name: '공동기관 1', role: 'joint', ruleset: 'sme', data: [{ gov: '300000', people: [], items: { material: { cash: '400000' } } }] }] });
+  const P = RB.calcProject(solo);
+  assert.ok(!P.checks.some((c) => /주관연구개발기관/.test(c.msg)));
+  assert.ok(P.checks.some((c) => c.level === 'ok'));
+  assert.doesNotThrow(() => RB.buildXlsx(solo));
+  const two = JSON.parse(JSON.stringify(RB.EXAMPLES.ok.state)); two.insts[0].role = 'joint';
+  assert.ok(!RB.calcProject(two).checks.some((c) => /주관연구개발기관/.test(c.msg)));
+});
+
+test('[엑셀 다시 불러오기] 숨김 시트에 편성 데이터 저장 → 그대로 복원, 다른 엑셀은 null', async () => {
+  const RBN = require('../../rnd-budget/notice.js');
+  const p = RB.normalizeProject(RB.EXAMPLES.ok.state);
+  p.title = '한글·"따옴표"·<태그> & 이모지 없음'; p.insts[0].data[0].items.activity = { sub: [{ t: 'expert', name: '자문', cash: '3000', inkind: '' }] };
+  const bytes = RB.buildXlsx(p, { savedAt: '2026-11-17T00:00:00.000Z' });
+  const files = unzip(bytes);
+  assert.match(files['xl/workbook.xml'], /name="_rndbudget"[^>]*state="veryHidden"/);
+  const obj = RB.parseDataCells(await RBN.readXlsxDataCells(bytes, RB.DATA_SHEET));
+  assert.equal(obj.savedAt, '2026-11-17T00:00:00.000Z');
+  assert.deepEqual(obj.project, p);
+  assert.equal(await RBN.readXlsxDataCells(RB.buildExecXlsx(p, 0, 0, '2026-11-17'), RB.DATA_SHEET), null); // 집행 현황 엑셀에는 없음
+  assert.equal(RB.parseDataCells(['다른 값', '', 'xxxx']), null);
+  assert.equal(RB.parseDataCells([RB.DATA_MAGIC, '', '!!!!깨진값']), null);
+  const big = new Uint8Array(70001).map((_, i) => (i * 31) % 256);
+  assert.deepEqual([...RB.b64decode(RB.b64encode(big))], [...big]);
+});
+
+test('[노출] FAQ 구조화 데이터(JSON-LD)가 화면의 질문과 일치(tools/rnd_faq_jsonld.py 실행 여부)', () => {
+  const html = require('fs').readFileSync(require('path').join(__dirname, '../../rnd-budget/index.html'), 'utf8');
+  const ld = JSON.parse(html.match(/<script type="application\/ld\+json" id="faqLd">([\s\S]*?)<\/script>/)[1]);
+  const qs = [...html.matchAll(/<details data-cat="[^"]*"[^>]*><summary>([\s\S]*?)<\/summary>/g)].map((m) => m[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').trim());
+  assert.equal(ld['@type'], 'FAQPage');
+  assert.equal(ld.mainEntity.length, qs.length);
+  assert.deepEqual(ld.mainEntity.map((q) => q.name), qs);
+  assert.ok(ld.mainEntity.every((q) => q.acceptedAnswer.text.length > 20));
+});
+
+test('[부처 프리셋] 원문 확인된 차이만 비율 변경, 나머지는 법령 기준', () => {
+  assert.deepEqual(RB.ministryRates('motie2', 'sme'), { govMaxPct: 67, cashMinPct: 10 });
+  assert.deepEqual(RB.ministryRates('motie2', 'large'), { govMaxPct: 33, cashMinPct: 15 });
+  assert.deepEqual(RB.ministryRates('ictv', 'midL'), { govMaxPct: 70, cashMinPct: 6.5 });
+  for (const k of ['common', 'motie1', 'mss', 'msit', 'ict']) assert.equal(RB.ministryRates(k, 'sme'), null, k);
+  assert.equal(RB.ministryRates('motie2', 'univ'), null); assert.equal(RB.ministryRates('ictv', 'large'), null); assert.equal(RB.ministryRates('없는값', 'sme'), null);
+  for (const m of Object.values(RB.MINISTRIES)) assert.ok(m.label && Array.isArray(m.notes) && (m === RB.MINISTRIES.common || /\d{4}\.\d{1,2}\.\d{1,2}\./.test(m.src)), m.label);
+  const r = RB.calcBudget({ ruleset: 'custom', govMaxPct: 67, cashMinPct: 10, gov: '300000', people: [], items: { material: { cash: '400000' } } });
+  assert.equal(r.funding.total, 447762);
+  const p = RB.normalizeProject({ v: 2, years: 1, insts: [{ name: 'A', role: 'lead', ruleset: 'sme', ministry: 'zzz', data: [{}] }] });
+  assert.equal(p.insts[0].ministry, undefined);
+});

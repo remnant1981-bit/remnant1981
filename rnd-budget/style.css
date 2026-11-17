@@ -277,3 +277,98 @@ label[data-filebtn]:focus-visible{outline:2px solid var(--brand);outline-offset:
   .eb-label{min-width:0}.eb-label:empty{display:none}
 }
 #summary .sumcell small span{display:inline-block;white-space:nowrap;margin-left:6px}
+
+/* 자주 묻는 질문 화면 정리(2026-11-17): 분류 묶음·2단·검색 결과 건수 */
+.faq-tools{gap:10px;margin-bottom:14px}
+.faq-tools input{max-width:none;width:100%;padding:11px 14px;font-size:1rem}
+@media (min-width:900px){.faq-tools{grid-template-columns:minmax(260px,380px) 1fr;align-items:center}.faq-bar{grid-column:1/-1}}
+.faq .chip .n,.faq-group h3 .n{font-size:.72rem;font-weight:600;margin-left:5px;opacity:.7;font-variant-numeric:tabular-nums}
+.faq-bar{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:.82rem;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+.faq-body{display:grid;gap:8px 28px}
+@media (min-width:900px){.faq-body:not(.flat){grid-template-columns:1fr 1fr;align-items:start}}
+.faq-col{display:grid;gap:18px;align-content:start;min-width:0}
+.faq-body.flat .faq-col{display:contents}
+.faq-body.flat .faq-group{max-width:860px}
+.faq-body.flat .faq-group h3{display:none}
+.faq-group h3{margin:0 0 4px;font-size:.8rem;font-weight:700;color:var(--brand);letter-spacing:.02em}
+.faq .faq-group details{border:1px solid var(--line);border-radius:10px;padding:0;margin-top:6px;background:var(--card);overflow:hidden}
+.faq .faq-group summary{list-style:none;display:flex;align-items:center;gap:8px;padding:11px 12px;font-size:.93rem;line-height:1.45}
+.faq .faq-group summary::-webkit-details-marker{display:none}
+.faq .faq-group summary::after{content:"";flex:0 0 auto;margin-left:auto;width:7px;height:7px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg) translateY(-2px);transition:transform .15s}
+.faq .faq-group details[open]>summary::after{transform:rotate(-135deg) translateY(-2px)}
+.faq .faq-group summary:hover{background:var(--bg)}
+.faq .faq-group summary:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
+.faq .faq-group details[open]{border-color:var(--brand);box-shadow:inset 3px 0 0 var(--brand)}
+.faq .faq-group details[open]>summary{color:var(--brand)}
+.faq .faq-group details p{margin:0;padding:2px 14px 14px 15px;color:var(--ink);font-size:.9rem;line-height:1.7}
+.faq .faq-group p .cite{display:inline-block;margin-top:8px;padding:2px 8px;border-radius:6px;background:var(--bg);font-size:.76rem;color:var(--muted)}
+.qcat{display:none;flex:0 0 auto;font-size:.7rem;font-weight:600;color:var(--brand);background:var(--brand-soft);border-radius:99px;padding:1px 8px;white-space:nowrap}
+.faq-body.flat .qcat{display:inline-block}
+.faq-empty{margin:4px 0 0;padding:18px;text-align:center;border:1px dashed var(--line);border-radius:10px;color:var(--muted);font-size:.9rem}
+@media (max-width:639px){
+  #faqCats{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;margin-right:-16px;padding-right:16px}
+  #faqCats::-webkit-scrollbar{display:none}#faqCats .chip{flex:0 0 auto}
+  .faq .faq-group summary{padding:13px 12px}
+}
+@media (prefers-reduced-motion:reduce){.faq .faq-group summary::after{transition:none}}
+@media (max-width:899px){.faq-col{display:contents}.faq-body{gap:18px}}
+.faq-body.flat{gap:0}
+
+/* 세부 비목(features.details) */
+.subbtn{border:1px solid var(--line);background:var(--card);color:var(--brand);border-radius:99px;font:inherit;font-size:.72rem;font-weight:600;padding:1px 8px;cursor:pointer;white-space:nowrap}
+.subbtn:hover{border-color:var(--brand)}.subbtn.on{background:var(--brand-soft);border-color:var(--brand)}
+#items tr.has-sub td{border-bottom-color:transparent;font-weight:600}
+#items td.subsum{color:var(--ink)}
+#items tr.sub-row td{background:var(--bg);border-bottom:1px dashed var(--line);padding-top:4px;padding-bottom:4px}
+#items tr.sub-row td:first-child{padding-left:18px}
+.sub-in{display:flex;gap:6px;align-items:center}
+.sub-in select{flex:0 1 46%;min-width:0;max-width:260px;padding:6px 8px;font-size:.85rem}
+.sub-in input{flex:1 1 0;min-width:0;text-align:left;padding:6px 8px;font-size:.85rem}
+#items tr.sub-row td input{padding-top:6px;padding-bottom:6px}
+#items td.subtot{color:var(--muted);font-variant-numeric:tabular-nums}
+#items tr.sub-row td.del{text-align:right}
+#items tr.sub-add td{background:var(--bg);text-align:left;padding:6px 6px 10px 18px}
+.sub-close{font-weight:400;font-size:.8rem;color:var(--muted);margin-left:8px}
+#items tr.sub-row.narrow td{padding:8px 0 8px 10px;position:static}
+.sub-card{display:grid;grid-template-columns:1fr 40px;gap:6px;align-items:center;text-align:left}
+.sub-card select{width:100%;min-width:0}.sub-card>input{grid-column:1/-1;text-align:left;width:100%}
+.sub-amts{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:6px;align-items:center}
+.sub-amts input{width:100%;min-width:0}.sub-amts .na{color:var(--muted);font-size:.8rem;text-align:center}
+#items tr.sub-row.narrow td.sr{padding:0;border:0}
+@media (max-width:639px){#items tr.sub-add td{padding-left:10px}}
+@media print{.subbtn,.sub-add{display:none!important}#items tr.sub-row td{background:none}.sub-in select{border:0;appearance:none;-webkit-appearance:none;background:none;padding:0}.sub-in input{border:0;padding:0}}
+
+/* 사용자 관점 정리(2026-11-17): 과제 구성 접기·처음 화면 안내·집행 빈 상태 */
+.projbox>summary{list-style:none;display:flex;align-items:center;gap:10px;flex-wrap:wrap;cursor:pointer}
+.projbox>summary::-webkit-details-marker{display:none}
+.projbox>summary h2{margin:0}
+.proj-sum{color:var(--muted);font-size:.9rem}
+.proj-edit{margin-left:auto;font-size:.82rem;font-weight:600;color:var(--brand);border:1px solid var(--line);border-radius:99px;padding:3px 12px;white-space:nowrap}
+.proj-edit::after{content:" ▾"}.projbox[open] .proj-edit::after{content:" ▴"}
+.projbox>summary:hover .proj-edit{border-color:var(--brand)}
+.projbox>summary:focus-visible{outline:2px solid var(--brand);outline-offset:4px;border-radius:6px}
+.projbox[open]>summary{margin-bottom:14px}
+#s0:has(.projbox:not([open])){padding-top:14px;padding-bottom:14px}
+.live-start{background:var(--brand-soft);border-radius:10px;padding:12px 14px}
+.live-start p{margin:0 0 6px;font-size:.78rem;font-weight:700;color:var(--brand)}
+.live-start ol{margin:0 0 10px;padding-left:1.2em;font-size:.88rem;line-height:1.7}
+.empty-note{margin:0;padding:16px;text-align:center;border:1px dashed var(--line);border-radius:10px;color:var(--muted);font-size:.9rem}
+@media print{.projbox>summary .proj-edit,.live-start{display:none!important}}
+.ask-body p{white-space:pre-line}
+.foot-links{margin-top:-32px}.foot-links a{color:var(--muted)}
+.policy h2{margin-top:18px}.policy h2:first-child{margin-top:0}.policy p,.policy li{line-height:1.7;font-size:.93rem}
+@media print{.foot-links{display:none}}
+
+/* 부처 프리셋·관리자 미리보기 */
+.ministry{margin:12px 0 0}.ministry label{max-width:420px}
+.ministry-note{margin:8px 0 0;padding:10px 12px 10px 28px;background:var(--brand-soft);border-radius:8px;font-size:.84rem;line-height:1.65}
+.ministry-note .cite{list-style:none;margin-left:-16px;margin-top:4px;color:var(--muted);font-size:.78rem}
+.preview-bar{margin:0 0 12px;padding:8px 12px;border-radius:8px;background:var(--warn-bg);color:var(--warn);font-size:.85rem;font-weight:600}
+@media print{.preview-bar,.ministry-note{display:none!important}}
+/* 관리자 화면 */
+.admin .card h2{margin-top:0}.admin .sub-h{font-size:.9rem;margin:16px 0 6px}
+.admin #flags td,.admin #flags th{text-align:left}.admin #flags input[type=checkbox]{width:18px;height:18px}
+.admin .todo,.admin .links{list-style:none;padding:0;margin:0;display:grid;gap:8px;font-size:.92rem}
+.admin .todo input{width:16px;height:16px;vertical-align:-2px}
+.admin code{background:var(--bg);border-radius:4px;padding:1px 5px;font-size:.85em}
+.admin #gate{max-width:420px}
