@@ -3,6 +3,9 @@ window.RB_CONFIG = {
   // 구글 애드센스(승인 후 입력). 비우면 광고 영역이 표시되지 않음
   adsenseClient: '',        // 예: 'ca-pub-0000000000000000'
   adsenseSlots: { top: '', bottom: '' },
+  // 방문 통계(구글 애널리틱스 4). 측정 ID(G-XXXXXXXXXX)를 넣으면 방문·기능 사용 횟수를 집계. 비우면 통계 코드를 불러오지 않음
+  // 입력한 금액·기관명·과제명·검색어는 보내지 않음. 이벤트 목록: docs/rnd-budget/LAUNCH_PLAN.md
+  analytics: { ga4: '' },
   // 기능 스위치(단계적 공개). false = 화면에서 숨김(코드·데이터는 유지). 켜려면 true 로 바꿔 배포
   features: {
     examples: true,     // 예시로 체험하기

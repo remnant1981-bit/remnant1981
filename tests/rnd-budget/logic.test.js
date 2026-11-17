@@ -444,3 +444,13 @@ test('[엑셀 다시 불러오기] 숨김 시트에 편성 데이터 저장 → 
   const big = new Uint8Array(70001).map((_, i) => (i * 31) % 256);
   assert.deepEqual([...RB.b64decode(RB.b64encode(big))], [...big]);
 });
+
+test('[노출] FAQ 구조화 데이터(JSON-LD)가 화면의 질문과 일치(tools/rnd_faq_jsonld.py 실행 여부)', () => {
+  const html = require('fs').readFileSync(require('path').join(__dirname, '../../rnd-budget/index.html'), 'utf8');
+  const ld = JSON.parse(html.match(/<script type="application\/ld\+json" id="faqLd">([\s\S]*?)<\/script>/)[1]);
+  const qs = [...html.matchAll(/<details data-cat="[^"]*"[^>]*><summary>([\s\S]*?)<\/summary>/g)].map((m) => m[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').trim());
+  assert.equal(ld['@type'], 'FAQPage');
+  assert.equal(ld.mainEntity.length, qs.length);
+  assert.deepEqual(ld.mainEntity.map((q) => q.name), qs);
+  assert.ok(ld.mainEntity.every((q) => q.acceptedAnswer.text.length > 20));
+});

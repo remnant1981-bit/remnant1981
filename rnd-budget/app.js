@@ -65,6 +65,23 @@
   }
   const notify = (msg) => ask(msg, { alert: true });
 
+  // 방문 통계(config.js analytics.ga4에 측정 ID를 넣을 때만 동작). 금액·기관명·과제명·검색어 등 입력 내용은 보내지 않음
+  const GA = CFG.analytics && /^G-[A-Z0-9]{4,}$/.test(CFG.analytics.ga4 || '') ? CFG.analytics.ga4 : '';
+  if (GA) {
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function () { window.dataLayer.push(arguments); };
+    window.gtag('js', new Date());
+    window.gtag('config', GA, { anonymize_ip: true, allow_google_signals: false, allow_ad_personalization_signals: false });
+    document.head.append(el('script', { async: true, src: `https://www.googletagmanager.com/gtag/js?id=${GA}` }));
+  }
+  const tracked = new Set();
+  /** 사용 이벤트 기록. once=true 면 방문당 1회 */
+  const track = (name, params = {}, once = false) => {
+    if (!GA) return;
+    if (once) { if (tracked.has(name)) return; tracked.add(name); }
+    try { window.gtag('event', name, params); } catch { /* 통계 실패는 무시 */ }
+  };
+
   // 기능 스위치(config.js features). 꺼진 기능은 숨김만 하고 저장 데이터는 유지
   const FEAT = Object.assign({ examples: true, project: false, scenarios: false, faq: false, steps: false, legalHeader: false, execution: false, noticeImport: false, helper: false, details: false }, CFG.features || {});
   document.querySelectorAll('[data-feature]').forEach((e) => { if (!FEAT[e.dataset.feature]) e.hidden = true; });
@@ -118,7 +135,7 @@
   };
 
   $('basisLine').textContent = `적용 법령: ${RB.SOURCES.decreeT1} · ${RB.SOURCES.std} — 기준일 ${RB.BASIS_DATE}`;
-  $('foot').textContent = `참고용 계산입니다. 공고문·운영요령이 우선합니다. 근거: ${RB.SOURCES.decreeT1}, ${RB.SOURCES.std}(기준일 ${RB.BASIS_DATE}).${CFG.contact ? ` 문의: ${CFG.contact}` : ''}`;
+  $('foot').textContent = `${GA ? '이용 통계(구글 애널리틱스)로 방문·기능 사용 횟수를 집계합니다. 입력한 금액·기관명·과제명은 수집하지 않습니다. ' : ''}참고용 계산입니다. 공고문·운영요령이 우선합니다. 근거: ${RB.SOURCES.decreeT1}, ${RB.SOURCES.std}(기준일 ${RB.BASIS_DATE}).${CFG.contact ? ` 문의: ${CFG.contact}` : ''}`;
   if (FEAT.project) $('h-out-t').textContent = '총괄표·엑셀';
 
   // ---------- 예시(데모) ----------
@@ -131,6 +148,7 @@
     const had = hasInput(); mark();
     replaceProject(FEAT.project ? ex.state : single(RB.normalizeProject(ex.state)));
     if (had) offerUndo('예시를 불러왔습니다.');
+    track('rb_example', { example: b.dataset.example });
   }));
   function updateDemoNote() {
     const n = $('demoNote');
@@ -349,7 +367,7 @@
   mqNarrow.addEventListener('change', () => { if (FEAT.details) { renderItems(); update(); } });
   const rerenderItems = (focusSel) => { renderItems(); update(); if (focusSel) { const e = iBody.querySelector(focusSel); if (e) e.focus(); } };
   function openSub(it, v) {
-    mark();
+    mark(); track('rb_details_open', { item: it.key });
     const defs = RB.SUBITEMS[it.key];
     // 이미 넣어 둔 합계는 첫 세목 행으로 옮겨 금액이 바뀌지 않게 함
     v.sub = [{ t: it.key === 'activity' ? 'etc' : defs[0].k, name: '', cash: v.cash || '', inkind: it.inkind ? v.inkind || '' : '' }];
@@ -423,8 +441,11 @@
       const d = Y(); const n = RB.applyFix({ gov: d.gov, people: d.people, items: d.items }, x);
       d.gov = n.gov ?? d.gov; d.people = n.people; d.items = n.items; govIn.value = groupDigits(d.gov); renderPeople(); renderItems(); update();
       offerUndo(`고쳤습니다: ${x.label}`);
+      track('rb_fix', { code: x.code });
     } });
     const nErr = r.checks.filter((c) => c.level === 'error').length;
+    if (f.gov) track('rb_first_input', {}, true); // 활성화: 정부출연금 입력
+    if (f.gov && r.total.total && !nErr) track('rb_budget_ready', { ruleset: I().ruleset }, true); // 오류 없는 편성 완성
     $('fixAll').hidden = !(FEAT.helper && nErr && fixes.length);
     $('fixAll').textContent = `🛠 오류 ${nErr}건 한 번에 고치기`;
     const li = (c) => el('li', { class: c.level }, el('span', { text: c.msg }), c.basis ? el('small', { class: 'cite', text: c.basis }) : '', ...(c.code ? fixFor(c).map(fixBtn) : []));
@@ -490,7 +511,7 @@
   }
 
   // ---------- 엑셀·저장 ----------
-  $('print').addEventListener('click', () => window.print());
+  $('print').addEventListener('click', () => { track('rb_print'); window.print(); });
   $('reset').addEventListener('click', async () => {
     const hasExec = S.insts.some((x) => x.data.some((d) => d.exec && (d.exec.start || (d.exec.paid || []).length || Object.values(d.exec.monthly || {}).some((a) => (a || []).some((v) => RB.int(v))))));
     if (hasInput() && !(await ask(`입력한 내용을 모두 지우고 새로 작성할까요?${hasExec ? ' 집행 기록도 함께 지워지니 필요하면 먼저 백업 저장하세요.' : ''}${FEAT.scenarios ? ' (저장한 안은 유지)' : ''}`))) return;
@@ -505,6 +526,7 @@
     renderPeople(); renderItems(); update();
     offerUndo(res.remaining ? `${res.applied.length}건 고쳤고 ${res.remaining}건은 직접 확인이 필요합니다.` : `오류를 모두 고쳤습니다(${res.applied.length}단계). 바뀐 금액을 확인하세요.`);
     $('s3').scrollIntoView({ behavior: 'smooth' });
+    track('rb_fix_all', { applied: res.applied.length, remaining: res.remaining });
   });
   // ---------- 엑셀 다운로드 카드 ----------
   const safeName = (v) => String(v || '').replace(/[\\/:*?"<>|]/g, '_').replace(/\.xlsx$/i, '').trim().slice(0, 80);
@@ -539,6 +561,7 @@
     const a = el('a', { href: url, download: name });
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
+    { const Pd = RB.calcProject(single(S)); track('rb_xlsx_download', { insts: Pd.insts.length, years: Pd.project.years, errors: Pd.insts.reduce((a, it) => a + it.years.reduce((b, y) => b + y.errors, 0), 0), ruleset: S.insts[0].ruleset }); }
     toast($('dlToast'), `✔ ‘${name}’ 다운로드됨 — 엑셀에서 열면 합계가 자동 계산됩니다. 이 파일을 ‘불러오기’에 올리면 이어서 작업할 수 있습니다.`);
   });
   const MAX_SCEN = 20;
@@ -574,7 +597,7 @@
     $('planView').hidden = C.mode === 'exec';
     $('execView').hidden = C.mode !== 'exec';
     ['s0', 'ad-top', 'ad-bottom'].forEach((id) => { const e = $(id); if (e) e.classList.toggle('mode-hide', C.mode === 'exec'); });
-    if (C.mode === 'exec') renderExec();
+    if (C.mode === 'exec') { renderExec(); track('rb_exec_view', {}, true); }
     save();
   }
   document.querySelectorAll('#modeBar [data-mode]').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
@@ -682,6 +705,7 @@
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
     toast($('xToast'), `✔ ‘${fname}’ 다운로드됨`);
+    track('rb_exec_xlsx');
   });
   // 백업: 과제 전체(편성+집행)를 JSON 파일로 저장·복원
   const doBackupSave = (box) => {
@@ -690,6 +714,7 @@
     const a = el('a', { href: url, download: `사업비_백업_${(S.title || '과제').replace(/[\\/:*?"<>|]/g, '_')}_${today()}.json` });
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
+    track('rb_backup_save');
     toast(box, `✔ ‘${a.download}’ 백업 저장됨 — 다른 PC·브라우저에서 ‘백업 불러오기’로 이어서 작업할 수 있습니다.`);
   };
   $('backupSave').addEventListener('click', () => doBackupSave($('xToast')));
@@ -706,7 +731,7 @@
         if (!obj) { await notify('이 엑셀에서는 편성 내용을 찾지 못했습니다. 이 도구에서 내려받은 엑셀(2026-11-17 이후 버전)이거나 ‘백업 저장’으로 받은 .json 파일만 불러올 수 있습니다.'); return; }
         const px = RB.normalizeProject(obj.project);
         if (!(await ask(`엑셀에 함께 저장된 편성 내용(${String(obj.savedAt || '').slice(0, 10) || '저장 시점'}, ${px.title || '제목 없음'})을 불러올까요? 현재 입력은 바뀝니다.\n※ 엑셀에서 직접 고친 금액은 반영되지 않고, 내려받을 때의 편성 내용이 복원됩니다.`))) return;
-        mark(); replaceProject(px, C.mode); offerUndo('엑셀에서 편성 내용을 불러왔습니다.');
+        mark(); replaceProject(px, C.mode); offerUndo('엑셀에서 편성 내용을 불러왔습니다.'); track('rb_load', { kind: 'xlsx' });
         return;
       }
       if (file.size > 5 * 1024 * 1024) throw new Error('size');
@@ -715,7 +740,7 @@
       const p = RB.normalizeProject(obj.project);
       if (!(await ask(`백업(${String(obj.savedAt || '').slice(0, 10)}, ${p.title || '제목 없음'})을 불러올까요? 현재 입력은 바뀝니다.`))) return;
       mark(); replaceProject(p, C.mode); // 보고 있던 화면(편성·집행) 유지
-      offerUndo('백업을 불러왔습니다.');
+      offerUndo('백업을 불러왔습니다.'); track('rb_load', { kind: 'json' });
     } catch { await notify('백업 파일을 읽지 못했습니다. 이 도구에서 저장한 .json 파일인지 확인하세요.'); }
   };
   $('backupLoad').addEventListener('change', doBackupLoad);
@@ -734,6 +759,7 @@
     let items;
     try { items = window.RBN.extractNotice(await window.RBN.readNoticeFile(file, document.baseURI)); }
     catch (e) { nBox.replaceChildren(el('p', { class: 'nerr', text: NERR[e && e.message] || '파일을 읽지 못했습니다. 다른 형식(PDF·HWPX)으로 저장해 올려 주세요.' })); return; }
+    track('rb_notice_import', { ext: (file.name.split('.').pop() || '').toLowerCase().slice(0, 5), found: items.length });
     const picked = window.RBN.pickForType(items, I().ruleset === 'custom' ? I().lastLegal || 'sme' : I().ruleset);
     const order = ['govAnnual', 'govMaxPct', 'cashMinPct', 'indirectPct', 'outsourceMaxPct', 'allowanceMaxPct', 'govTotal', 'periodMonths'];
     const rows = order.map((f) => picked[f]).filter(Boolean);
@@ -771,7 +797,7 @@
       renderAll();
       $('ruleBox').open = true;
       nBox.replaceChildren(el('p', { class: 'nok', text: `적용했습니다(${on.length}건). 적용 기준이 ‘공고문 기준 직접 입력’으로 바뀌었고, 출처가 표시됩니다.` }), el('ul', { class: 'hd-notes' }, ...changes.map((c) => el('li', { text: c }))));
-      offerUndo(`공고문 기준 ${on.length}건을 적용했습니다.`);
+      offerUndo(`공고문 기준 ${on.length}건을 적용했습니다.`); track('rb_notice_apply', { n: on.length });
     } });
     const close = el('button', { type: 'button', class: 'btn ghost', text: '닫기', onclick: () => { nBox.hidden = true; } });
     nBox.replaceChildren(head, el('div', { class: 'tbl-wrap' }, tbl), note, el('div', { class: 'actions' }, apply, close),
@@ -800,7 +826,7 @@
   $('helperOpen').addEventListener('click', () => {
     $('hdRuleset').value = RB.RULESETS[I().ruleset] && !RB.RULESETS[I().ruleset].custom ? I().ruleset : 'sme';
     if (RB.int(Y().gov)) $('hdGov').value = groupDigits(Y().gov);
-    hdSync(); $('hdPreview').replaceChildren(); $('hdApply').hidden = true; draft = null;
+    hdSync(); $('hdPreview').replaceChildren(); $('hdApply').hidden = true; draft = null; track('rb_helper_open');
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
   });
   const closeHelper = () => { dlg.close ? dlg.close() : dlg.removeAttribute('open'); };
@@ -827,7 +853,7 @@
     if (isExample()) { S.title = ''; titleIn.value = ''; }
     closeHelper();
     updateDemoNote(); renderAll();
-    C.dirty = true; save();
+    C.dirty = true; save(); track('rb_helper_apply', { ruleset: I().ruleset });
     if (had) offerUndo('초안을 채웠습니다. 연구재료비 등은 실제 필요 금액에 맞춰 조정하세요.'); else toast($('dlToast'), '초안을 채웠습니다. 연구재료비 등은 실제 필요 금액에 맞춰 조정하세요.');
     $('s1').scrollIntoView({ behavior: 'smooth' }); $('h-fund').focus({ preventScroll: true });
   });
@@ -879,7 +905,8 @@
     vis.forEach((d) => { d.open = open; });
     syncFaqToggle();
   });
-  faqBody.addEventListener('toggle', syncFaqToggle, true);
+  faqBody.addEventListener('toggle', (e) => { syncFaqToggle(); if (e.target.open && e.isTrusted) track('rb_faq_open', { cat: e.target.dataset.cat, no: faqAll.indexOf(e.target) + 1 }); }, true);
+  let faqT; $('faqSearch').addEventListener('input', () => { clearTimeout(faqT); faqT = setTimeout(() => { if ($('faqSearch').value.trim()) track('rb_faq_search', { results: faqItems.filter((d) => !d.hidden).length }); }, 1500); });
   $('faqReset').addEventListener('click', () => { $('faqSearch').value = ''; document.querySelector('#faqCats [data-qcat=""]').click(); $('faqSearch').focus(); });
   filterFaq();
 

@@ -540,6 +540,23 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   check('[세부] 모바일: 세목 행 세로 배치·가로 넘침 없음', (await d.locator('#items tr.sub-row.narrow').count()) === 1 && (await d.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)) && (await d.evaluate(() => { const t = document.getElementById('items'); return t.scrollWidth <= t.parentElement.clientWidth + 1; })));
   await dc.close();
 
+  // ⑪ 방문 통계(측정 ID를 넣을 때만 동작, 입력 내용은 보내지 않음)
+  const gc = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+  const g = await gc.newPage(); g.on('pageerror', (e) => errors.push('g:' + e.message));
+  const gaReq = [];
+  await g.route('**/*googletagmanager.com/**', (rt) => { gaReq.push(rt.request().url()); rt.fulfill({ contentType: 'text/javascript', body: '' }); });
+  await g.goto(base);
+  check('[통계] 측정 ID가 없으면 통계 코드를 불러오지 않음', gaReq.length === 0 && (await g.evaluate(() => typeof window.gtag)) === 'undefined' && !(await g.textContent('#foot')).includes('이용 통계'));
+  await g.route('**/config.js', async (rt) => { const res = await rt.fetch(); rt.fulfill({ response: res, body: (await res.text()).replace("ga4: ''", "ga4: 'G-TEST123456'") }); });
+  await g.reload();
+  await g.fill('#title', '비밀과제명'); await g.fill('#gov', '345678'); await g.getByLabel('연구재료비 현금(천원)').fill('460905');
+  await Promise.all([g.waitForEvent('download'), g.click('#xlsx')]);
+  const evs = await g.evaluate(() => window.dataLayer.map((a) => Array.from(a)).filter((a) => a[0] === 'event'));
+  const names = evs.map((e) => e[1]);
+  check('[통계] 측정 ID 설정 시 로드·주요 이벤트 기록', gaReq.some((u) => u.includes('G-TEST123456')) && ['rb_first_input', 'rb_budget_ready', 'rb_xlsx_download'].every((n) => names.includes(n)) && names.filter((n) => n === 'rb_first_input').length === 1 && (await g.textContent('#foot')).includes('이용 통계'), names.join(','));
+  check('[통계] 금액·과제명 등 입력 내용은 보내지 않음', !/345678|345,678|460905|비밀과제명/.test(JSON.stringify(evs)));
+  await gc.close();
+
   check('콘솔·스크립트 오류 없음', errors.length === 0, errors.join(' | '));
   await browser.close(); server.close();
   const fail = results.filter((x) => !x).length;
