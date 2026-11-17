@@ -31,7 +31,7 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   // ① 기본 설정(1단계 공개 범위): 꺼진 기능은 숨김
   await p.goto(base);
   check('기본: 과제 구성 표시(2026-11-17 공개)·안 저장·단계 메뉴 숨김, Q&A 표시', (await p.locator('#s0').isVisible()) && (await p.locator('#saveScenario').isHidden()) && (await p.locator('.faq').isVisible()) && (await p.locator('.steps').isHidden()));
-  check('Q&A 27개', (await p.locator('#faq details').count()) === 27);
+  check('Q&A 28개', (await p.locator('#faq details').count()) === 28);
   await p.fill('#faqSearch', '현물');
   const shownQ = await p.locator('#faq details:not([hidden])').count();
   check('Q&A 검색(현물)', shownQ >= 3 && shownQ < 23 && (await p.locator('#faq .faq-group[data-group="기본"] details:not([hidden])').first().getAttribute('open')) !== null, String(shownQ));
@@ -41,15 +41,15 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   await p.click('#faqCats [data-qcat="비목"]');
   check('Q&A 분류(비목 5개)', (await p.locator('#faq details:not([hidden])').count()) === 5);
   await p.click('#faqCats [data-qcat=""]');
-  check('Q&A 화면: 분류 묶음 6개·건수 표시', (await p.locator('#faq .faq-group:not([hidden])').count()) === 6 && (await p.textContent('#faqCount')) === '전체 27건' && (await p.textContent('#faqCats [data-qcat="비목"]')).includes('5'));
+  check('Q&A 화면: 분류 묶음 6개·건수 표시', (await p.locator('#faq .faq-group:not([hidden])').count()) === 6 && (await p.textContent('#faqCount')) === '전체 28건' && (await p.textContent('#faqCats [data-qcat="비목"]')).includes('5'));
   await p.click('#faqToggle');
-  check('Q&A 모두 펼치기 → 모두 접기', (await p.locator('#faq details[open]').count()) === 27 && (await p.textContent('#faqToggle')) === '모두 접기');
+  check('Q&A 모두 펼치기 → 모두 접기', (await p.locator('#faq details[open]').count()) === 28 && (await p.textContent('#faqToggle')) === '모두 접기');
   await p.click('#faqToggle');
   check('Q&A 모두 접기', (await p.locator('#faq details[open]').count()) === 0 && (await p.textContent('#faqToggle')) === '모두 펼치기');
   await p.fill('#faqSearch', '현물');
   check('Q&A 검색: 한 단 목록·분류 표시·결과 건수·위 3건 펼침', (await p.evaluate(() => document.getElementById('faqBody').classList.contains('flat'))) && (await p.locator('#faq details:not([hidden]) .qcat').first().isVisible()) && /검색 결과 \d+건/.test(await p.textContent('#faqCount')) && (await p.locator('#faq details[open]').count()) === 3);
   await p.fill('#faqSearch', 'zzzz'); await p.click('#faqReset');
-  check('Q&A 결과 없음 → 전체 보기', (await p.inputValue('#faqSearch')) === '' && (await p.locator('#faq details:not([hidden])').count()) === 27 && (await p.locator('#faqEmpty').isHidden()));
+  check('Q&A 결과 없음 → 전체 보기', (await p.inputValue('#faqSearch')) === '' && (await p.locator('#faq details:not([hidden])').count()) === 28 && (await p.locator('#faqEmpty').isHidden()));
   check('기본: 집행 전환 표시(공개)', await p.locator('#modeBar').isVisible());
   check('기본: 편성 도우미 버튼 표시(공개)', await p.locator('#helperOpen').isVisible());
   check('기본: 공고문 가져오기 표시(베타)', (await p.locator('#noticeDrop').isVisible()) && (await p.textContent('#noticeDrop')).includes('베타'));
@@ -484,6 +484,11 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   const dc = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
   const d = await dc.newPage(); d.on('pageerror', (e) => errors.push('d:' + e.message));
   await d.goto(base);
+  await d.evaluate(() => { document.getElementById('projBox').open = true; });
+  await d.locator('#insts tbody tr').first().locator('select').first().selectOption('joint');
+  await d.fill('#gov', '300000'); await d.getByLabel('연구재료비 현금(천원)').fill('400000');
+  check('[참여기관] 역할을 공동기관으로 → 이름 자동 변경·주관기관 경고 없음·점검 통과', (await d.locator('#insts tbody tr input').first().inputValue()) === '공동기관 1' && (await d.textContent('#projSum')).includes('공동') && !(await d.textContent('#projChecks')).includes('주관연구개발기관') && (await d.locator('#checks .error').count()) === 0 && !(await d.isDisabled('#xlsx')));
+  await d.click('#reset');
   check('[세부] 운영 설정(꺼짐)에서는 세부 버튼 숨김', (await d.locator('.subbtn').count()) === 0);
   check('[정리] 처음 화면: 과제 구성 한 줄 접힘·작성 순서 안내·0 숫자 숨김', !(await d.evaluate(() => document.getElementById('projBox').open)) && (await d.textContent('#projSum')).includes('1년') && (await d.locator('#liveStart').isVisible()) && (await d.locator('#funding').isHidden()) && (await d.locator('#live').isHidden())
     && (await d.evaluate(() => document.getElementById('gov').getBoundingClientRect().top)) < 520);

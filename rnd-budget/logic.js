@@ -383,7 +383,8 @@ const fit = Math.ceil((gov * 100) / (100 + rate));
     insts.forEach((it) => it.years.forEach((r, y) => { if (!r.funding.gov && !r.total.total) empty.push(`${it.name} ${y + 1}차년도`); }));
     const checks = [];
     const leads = p.insts.filter((x) => x.role === 'lead').length;
-    if (leads !== 1) checks.push({ level: 'warn', msg: `주관연구개발기관은 1곳이어야 합니다(현재 ${leads}곳).` });
+    // 주관기관이 없는 구성(참여기관만 편성)은 허용. 2곳 이상일 때만 안내
+    if (leads > 1) checks.push({ level: 'warn', msg: `주관연구개발기관은 1곳이어야 합니다(현재 ${leads}곳).` });
     const errs = insts.reduce((a, it) => a + it.years.reduce((b, r) => b + r.errors, 0), 0);
     if (errs) checks.push({ level: 'error', msg: `기관·연차별 편성에 오류 ${errs}건이 있습니다. 총괄표에서 ✖ 표시된 칸을 눌러 확인하세요.` });
     else if (total.gov && !empty.length) checks.push({ level: 'ok', msg: '모든 기관·연차 편성이 점검을 통과했습니다.' });

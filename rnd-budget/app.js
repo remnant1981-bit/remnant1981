@@ -158,7 +158,14 @@
     S.insts.forEach((inst, i) => {
       instBody.append(el('tr', {},
         el('td', { 'data-label': '기관명' }, el('input', { value: inst.name, maxlength: 40, 'aria-label': `기관 ${i + 1} 이름`, oninput: (e) => { inst.name = e.target.value; renderTabs(); updateSummary(); save(); } })),
-        el('td', { 'data-label': '역할' }, el('select', { 'aria-label': `기관 ${i + 1} 역할`, onchange: (e) => { inst.role = e.target.value; renderTabs(); updateSummary(); save(); } },
+        el('td', { 'data-label': '역할' }, el('select', { 'aria-label': `기관 ${i + 1} 역할`, onchange: (e) => {
+          inst.role = e.target.value;
+          // 기본 이름을 그대로 쓰고 있으면 역할에 맞춰 바꿈(직접 지은 이름은 유지)
+          if (inst.role === 'joint' && inst.name === '주관기관') inst.name = `공동기관 ${S.insts.filter((x) => x !== inst && x.role === 'joint').length + 1}`;
+          else if (inst.role === 'lead' && /^공동기관( \d+)?$/.test(inst.name)) inst.name = '주관기관';
+          renderInsts(); renderTabs(); updateSummary(); save();
+          instBody.children[i].querySelector('select').focus();
+        } },
           ...Object.entries(RB.ROLES).map(([k, v]) => el('option', { value: k, text: v.replace('연구개발', ''), selected: inst.role === k })))),
         el('td', { 'data-label': '기관 유형' }, el('select', { 'aria-label': `기관 ${i + 1} 유형`, onchange: (e) => setRuleset(i, e.target.value) }, ...rulesetOptions(inst.ruleset))),
         el('td', { class: 'del' }, S.insts.length > 1 ? el('button', { type: 'button', class: 'icon', 'aria-label': `${inst.name} 삭제`, text: '✕', onclick: async () => {
@@ -169,7 +176,7 @@
     });
     $('addInst').disabled = S.insts.length >= RB.MAX_INSTS;
     const lead = S.insts[0];
-    $('projSum').textContent = `${S.years}년 · ${S.insts.length === 1 ? `${lead.name}(${RB.RULESETS[lead.ruleset].label})` : `기관 ${S.insts.length}곳`}`;
+    $('projSum').textContent = `${S.years}년 · ${S.insts.length === 1 ? `${lead.name}(${lead.role === 'lead' ? '주관' : '공동'} · ${RB.RULESETS[lead.ruleset].label})` : `기관 ${S.insts.length}곳`}`;
   }
   // 과제 구성: 단독·1년 과제는 한 줄로 접어 두고, 다년차·공동 과제는 펼침
   const syncProjBox = () => { $('projBox').open = S.years > 1 || S.insts.length > 1; };

@@ -417,3 +417,13 @@ test('[세부 비목] 자동 고치기는 세부 행을 조정·저장값 정리
   assert.match(files['xl/workbook.xml'], /name="세부 내역"/);
   assert.doesNotMatch(unzip(RB.buildXlsx(RB.normalizeProject(RB.EXAMPLES.ok.state)))['xl/workbook.xml'], /세부 내역/);
 });
+
+test('[참여기관만 편성] 주관기관이 없어도 경고 없음, 2곳 이상일 때만 안내', () => {
+  const solo = RB.normalizeProject({ v: 2, years: 1, insts: [{ name: '공동기관 1', role: 'joint', ruleset: 'sme', data: [{ gov: '300000', people: [], items: { material: { cash: '400000' } } }] }] });
+  const P = RB.calcProject(solo);
+  assert.ok(!P.checks.some((c) => /주관연구개발기관/.test(c.msg)));
+  assert.ok(P.checks.some((c) => c.level === 'ok'));
+  assert.doesNotThrow(() => RB.buildXlsx(solo));
+  const two = JSON.parse(JSON.stringify(RB.EXAMPLES.ok.state)); two.insts[0].role = 'joint';
+  assert.ok(!RB.calcProject(two).checks.some((c) => /주관연구개발기관/.test(c.msg)));
+});
