@@ -199,6 +199,12 @@ details.more[open] > summary::after { content: "▴"; }
 @media (max-width: 480px) { .row.when { grid-template-columns: 1fr; } }
 .geo { min-height: 48px; border: 1px solid var(--accent); background: var(--accent-soft); color: var(--accent); border-radius: 10px; font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 6px; touch-action: manipulation; }
 .geo[aria-busy="true"] { opacity: .6; }
+.wrap > *, .panel > *, .compare > * { min-width: 0; }
+.compare .tbl { max-width: 100%; -webkit-overflow-scrolling: touch; }
+.compare th, .compare td { white-space: normal; min-width: 88px; }
+.compare th[scope="row"] { min-width: 0; }
+.mapview .hit { fill: transparent; cursor: pointer; }
+.cmpgo { position: fixed; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 20; min-height: 48px; padding: 10px 16px; border: 0; border-radius: 999px; background: var(--ink); color: var(--bg); font-weight: 700; font-size: 14px; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
 .card-top { flex-wrap: wrap; row-gap: 8px; }
 .card-top h3 { flex: 1 1 100%; }
 .dist { flex: 1 1 100%; white-space: normal; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 14px; }
@@ -359,6 +365,8 @@ details.more[open] > summary::after { content: "▴"; }
       (groups.get(k) ?? groups.set(k, []).get(k)).push(LOTS[i]);
     }
     if (!groups.size) {
+      const lm = PS.findLandmark(text); // 역·공항·번화가: 주차장 이름·주소에 없으면 대략 좌표로
+      if (lm) return { lat: lm.lat, lng: lm.lng, label: text.trim(), region: "", n: 0, others: [] };
       // 도로명 주소 위주라 '역삼동' 같은 동 이름이 안 잡히면 끝 글자를 떼고 한 번 더(앱과 같은 방식)
       const strip = (t) => { const m = /^(.{2,}?)(\d+)?(동|읍|면|리|가)$/.exec(t); return m ? m[1] : t; };
       const raw = text.trim().split(/\s+/).filter(Boolean).slice(0, 4), loose = raw.map(strip);
@@ -387,7 +395,7 @@ details.more[open] > summary::after { content: "▴"; }
     hits.sort((x, y) => x[0] - y[0]);
     const top = hits.slice(0, 8);
     const area = resolveArea($("q").value);
-    const areaRow = area ? `<li><button type="button" data-area="1"><b>‘${esc(area.label)}’ 주변으로 검색</b><small>${esc(area.region || "지역 미상")} · 이름·주소에 이 말이 있는 주차장 ${area.n}곳의 가운데(대략 위치)${area.others.length ? ` · 다른 지역: ${esc(area.others.join(", "))}` : ""}</small></button></li>` : "";
+    const areaRow = area ? `<li><button type="button" data-area="1"><b>‘${esc(area.label)}’ 주변으로 검색</b><small>${area.n ? `${esc(area.region || "지역 미상")} · 이름·주소에 이 말이 있는 주차장 ${area.n}곳의 가운데(대략 위치)` : "주요 장소의 대략 위치"}${area.others.length ? ` · 다른 지역: ${esc(area.others.join(", "))}` : ""}</small></button></li>` : "";
     lastArea = area;
     sug.innerHTML = top.length ? areaRow + top.map(([, i]) => `<li><button type="button" data-i="${i}">${esc(LOTS[i].name)}<small>${esc(LOTS[i].addr ?? "주소 없음")}</small></button></li>`).join("")
       : `<li><span class="center" style="display:block;padding:8px">일치하는 주차장이 없습니다. 다른 이름이나 동 이름으로 찾아보세요.</span></li>`;
@@ -744,7 +752,15 @@ details.more[open] > summary::after { content: "▴"; }
   toTop.type = "button"; toTop.className = "totop"; toTop.hidden = true; toTop.textContent = "↑ 검색 조건";
   toTop.addEventListener("click", () => { $("form").scrollIntoView({ block: "start" }); });
   document.body.appendChild(toTop);
-  const syncTop = () => { toTop.hidden = $("form").getBoundingClientRect().bottom > 0; };
+  let lastY = scrollY;
+  const syncTop = () => { const up = scrollY < lastY - 4, down = scrollY > lastY + 4; if (up || down || $("form").getBoundingClientRect().bottom > 0) toTop.hidden = !up || $("form").getBoundingClientRect().bottom > 0; lastY = scrollY; syncCmpGo(); };
+  // 비교 담기는 목록 아래쪽에서 누르는데 비교표는 위에 열림 → 화면 밖이면 바로가기 표시
+  const cmpGo = document.createElement("button");
+  cmpGo.type = "button"; cmpGo.className = "cmpgo"; cmpGo.hidden = true;
+  cmpGo.addEventListener("click", () => { $("compare").scrollIntoView({ block: "start" }); });
+  document.body.appendChild(cmpGo);
+  function syncCmpGo() { const el = $("compare"), r = el.getBoundingClientRect(); const off = el.hidden || r.bottom < 0 || r.top > innerHeight; cmpGo.hidden = el.hidden || !off; if (!cmpGo.hidden) cmpGo.textContent = `비교표 보기 (${Math.max(0, el.querySelectorAll("thead th[scope=col]").length - 1)}곳)`; }
+  new MutationObserver(syncCmpGo).observe($("compare"), { childList: true, attributes: true, attributeFilter: ["hidden"] });
   addEventListener("scroll", syncTop, { passive: true }); syncTop();
   ["radius", "type", "sort", "freeOnly", "operatingOnly"].forEach((id) => $(id).addEventListener("change", run));
   // 위치 보기: 외부 지도 없이 검색 중심 기준 상대 위치를 그림(데모 전용 — 실서비스는 지도 타일 사용)
@@ -758,7 +774,7 @@ details.more[open] > summary::after { content: "▴"; }
       const x = cx + (it.lot.lng - p.center.lng) * kx * s, y = cy - (it.lot.lat - p.center.lat) * ky * s;
       const tone = it.fee.status !== "OK" ? "unknown" : it.fee.isFree ? "free" : "paid";
       const feeT = it.fee.status !== "OK" ? "요금 정보 없음" : it.fee.isFree ? "무료" : won(it.fee.amount);
-      return `<g><circle class="pin ${tone}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="8" data-pin="${it.id}" tabindex="0" role="button" aria-label="${k + 1}. ${esc(it.lot.name)} ${feeT} ${dist(it.distanceMeters)}"><title>${esc(it.lot.name)} · ${feeT}</title></circle><text x="${x.toFixed(1)}" y="${(y + 3.5).toFixed(1)}" text-anchor="middle" style="fill:#fff;font-weight:700">${k + 1}</text></g>`;
+      return `<g><circle class="hit" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="16" data-pin="${it.id}"></circle><circle class="pin ${tone}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="8" data-pin="${it.id}" tabindex="0" role="button" aria-label="${k + 1}. ${esc(it.lot.name)} ${feeT} ${dist(it.distanceMeters)}"><title>${esc(it.lot.name)} · ${feeT}</title></circle><text x="${x.toFixed(1)}" y="${(y + 3.5).toFixed(1)}" text-anchor="middle" style="fill:#fff;font-weight:700">${k + 1}</text></g>`;
     }).join("");
     el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="group" aria-label="${esc(p.center.label ?? center.label)} 중심 반경 ${dist(p.radius)} 안 주차장 ${r.items.length}곳의 상대 위치">
       <circle class="ring" cx="${cx}" cy="${cy}" r="${R}"/><circle class="ring" cx="${cx}" cy="${cy}" r="${R / 2}"/>

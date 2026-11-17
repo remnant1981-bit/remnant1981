@@ -2,6 +2,7 @@
 // 정식 지오코딩이 아니다 — 건물·상호는 못 찾고, 동·도로명·시설명처럼 주차장 주소에 나오는 말만 찾는다. 화면에 '주차장 주소 기준 대략 위치'로 표시.
 // 여러 지역에 같은 이름이 있으면 일치가 가장 많은 시·군·구를 고르고, 다른 후보 지역을 함께 알려 준다(임의로 하나를 정답처럼 보이지 않게).
 import type { Db } from "./db";
+import { findLandmark } from "@/domain/landmarks";
 import { regionOf } from "@/domain/region";
 import { NON_PRODUCTION_SOURCES, mockEnabled } from "./mock";
 
@@ -23,6 +24,9 @@ export async function resolveDestination(db: Db, text: string): Promise<Resolved
      WHERE data_status NOT LIKE 'EXCLUDED%' AND latitude IS NOT NULL AND longitude IS NOT NULL AND ${cond}
      ${excluded.length ? `AND source_name NOT IN (${excluded.map(() => "?").join(",")})` : ""} LIMIT 2000`, [...args, ...excluded]);
   if (rows.length === 0) {
+    // 역·공항·번화가처럼 주차장 이름·주소에 없는 장소는 보조 목록의 대략 좌표로
+    const lm = findLandmark(text);
+    if (lm) return { lat: lm.lat, lng: lm.lng, label: text.trim().replace(/\s+/g, " "), region: "", matches: 0, otherRegions: [] };
     // 원천 주소가 도로명 위주라 '역삼동'처럼 동·읍·면 이름으로는 안 잡히는 경우가 많음 → 끝 글자를 떼고 한 번 더(역삼동 → 역삼)
     const loose = tokens.map(stripUnit);
     return loose.some((t, i) => t !== tokens[i]) ? (async () => { const r = await resolveDestination(db, loose.join(" ")); return r ? { ...r, label: text.trim().replace(/\s+/g, " ") } : null; })() : null;

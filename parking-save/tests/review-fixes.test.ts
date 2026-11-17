@@ -76,3 +76,14 @@ describe("목적지: 동 이름 보정", () => {
     expect(stripUnit("세종대로")).toBe("세종대로");
   });
 });
+
+import { findLandmark } from "@/domain/landmarks";
+describe("주요 장소 보조 목록", () => {
+  it("역·공항·번화가 이름(별칭·공백 무시), 없는 이름은 null", () => {
+    expect(findLandmark("강남역")).toMatchObject({ lat: 37.4979 });
+    expect(findLandmark("홍대")?.label).toBe("홍대입구");
+    expect(findLandmark(" 제주 공항 ")?.lat).toBeCloseTo(33.51, 1);
+    expect(findLandmark("없는곳")).toBeNull();
+    expect(findLandmark("")).toBeNull();
+  });
+});
