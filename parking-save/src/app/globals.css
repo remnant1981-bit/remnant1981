@@ -60,3 +60,8 @@ body { background: var(--page-bg); color: var(--page-ink); font-family: system-u
 .skip-link { position: absolute; left: -999px; }
 .skip-link:focus { left: 8px; top: 8px; background: var(--page-bg); padding: 8px; z-index: 10; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+/* 터치 대상 크기(고령자·큰 손가락): 체크·라디오 20px, 펼침 제목·바닥글 링크는 누르는 영역을 넓힘 */
+input[type="checkbox"], input[type="radio"] { width: 1.25rem; height: 1.25rem; flex-shrink: 0; accent-color: #1d4ed8; }
+label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { min-height: 2.25rem; }
+summary { padding-block: 0.375rem; }
+footer nav a { display: inline-block; padding-block: 0.5rem; }

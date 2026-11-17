@@ -63,7 +63,7 @@ export function FeeCurve({ points, highlightHours, lang = "ko" }: { points: Curv
         })}
         {/* 선택적 직접 라벨: 마지막 값, 그리고 일 최대요금이 처음 적용되는 지점 */}
         <text x={PAD.l + slot * (last.hours - 0.5)} y={Math.max(11, y(last.fee) - 5)} textAnchor="end" fontSize={11} fontWeight={600} style={{ fill: "var(--chart-ink)" }}>{won(last.fee)}</text>
-        {firstCap != null && firstCap !== last.hours && (
+        {firstCap != null && last.hours - firstCap >= 4 && ( /* 마지막 값 라벨과 겹치지 않을 만큼 떨어져 있을 때만 */
           <text x={PAD.l + slot * (firstCap - 0.5)} y={Math.max(11, y(points[firstCap - 1].fee ?? 0) - 5)} textAnchor="middle" fontSize={10} style={{ fill: "var(--chart-muted)" }}>{t.dailyMax}</text>
         )}
       </svg>
