@@ -8,6 +8,8 @@ import { NON_PRODUCTION_SOURCES, mockEnabled } from "./mock";
 export interface ResolvedPlace { lat: number; lng: number; label: string; region: string; matches: number; otherRegions: string[] }
 export const PLACE_MIN_LEN = 2;
 const esc = (s: string) => s.replace(/[\\%_]/g, (c) => "\\" + c);
+/** 행정구역 끝 글자(동·읍·면·리·가)를 뗀 말. 두 글자 이상 남을 때만 */
+export const stripUnit = (t: string) => { const m = /^(.{2,}?)(\d+)?(동|읍|면|리|가)$/.exec(t); return m ? m[1] : t; };
 const median = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
 
 export async function resolveDestination(db: Db, text: string): Promise<ResolvedPlace | null> {
@@ -20,7 +22,11 @@ export async function resolveDestination(db: Db, text: string): Promise<Resolved
     `SELECT latitude, longitude, road_address, address FROM parking_lots
      WHERE data_status NOT LIKE 'EXCLUDED%' AND latitude IS NOT NULL AND longitude IS NOT NULL AND ${cond}
      ${excluded.length ? `AND source_name NOT IN (${excluded.map(() => "?").join(",")})` : ""} LIMIT 2000`, [...args, ...excluded]);
-  if (rows.length === 0) return null;
+  if (rows.length === 0) {
+    // 원천 주소가 도로명 위주라 '역삼동'처럼 동·읍·면 이름으로는 안 잡히는 경우가 많음 → 끝 글자를 떼고 한 번 더(역삼동 → 역삼)
+    const loose = tokens.map(stripUnit);
+    return loose.some((t, i) => t !== tokens[i]) ? (async () => { const r = await resolveDestination(db, loose.join(" ")); return r ? { ...r, label: text.trim().replace(/\s+/g, " ") } : null; })() : null;
+  }
   const groups = new Map<string, typeof rows>();
   for (const r of rows) {
     const g = regionOf(r.road_address) ?? regionOf(r.address);

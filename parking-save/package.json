@@ -21,6 +21,7 @@
     "duplicates": "tsx scripts/duplicates.ts",
     "a11y": "node scripts/a11y.mjs",
     "demo:build": "tsx scripts/demo/build.ts",
+    "demo:admin": "tsx scripts/demo/admin-build.ts",
     "reports": "tsx scripts/reports.ts",
     "e2e": "playwright test"
   },

@@ -64,3 +64,15 @@ describe("기기 저장 타이머 손상", () => {
     delete (globalThis as { window?: unknown }).window;
   });
 });
+
+import { stripUnit } from "@/server/place";
+describe("목적지: 동 이름 보정", () => {
+  it("끝의 동·읍·면·리·가를 뗌(두 글자 이상 남을 때만)", () => {
+    expect(stripUnit("역삼동")).toBe("역삼");
+    expect(stripUnit("역삼1동")).toBe("역삼");
+    expect(stripUnit("종로3가")).toBe("종로");
+    expect(stripUnit("조치원읍")).toBe("조치원");
+    expect(stripUnit("이동")).toBe("이동");
+    expect(stripUnit("세종대로")).toBe("세종대로");
+  });
+});

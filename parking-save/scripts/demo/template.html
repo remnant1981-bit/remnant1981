@@ -161,6 +161,47 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (max-width: 420px) { .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .fee .amt { font-size: 20px; } }
 @media (prefers-reduced-motion: no-preference) { .card { transition: border-color .15s; } .card:hover { border-color: var(--accent); } }
+
+/* ── 모바일 최적화: 터치 영역 44px, 입력 글자 16px(아이폰 자동 확대 방지), 최소 글자 12px ── */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: contain; }
+input, select { font-size: 16px; min-height: 48px; }
+button, summary, .links a { touch-action: manipulation; }
+.chip { min-height: 44px; padding: 8px 14px; font-size: 14px; }
+.chips { gap: 8px; }
+#presets { flex-wrap: nowrap; overflow-x: auto; scroll-snap-type: x proximity; margin-inline: -16px; padding-inline: 16px; padding-bottom: 4px; scrollbar-width: none; }
+#presets::-webkit-scrollbar { display: none; }
+#presets .chip { flex: 0 0 auto; scroll-snap-align: start; white-space: nowrap; }
+.row { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); }
+.checks { gap: 4px 16px; }
+.checks label { min-height: 44px; font-size: 15px; gap: 10px; }
+.checks input, input[type="checkbox"] { width: 22px; height: 22px; min-height: 0; padding: 0; flex: 0 0 auto; accent-color: var(--accent); }
+.go { min-height: 52px; font-size: 17px; }
+details.more > summary, details > summary { min-height: 44px; display: flex; align-items: center; font-size: 14px; }
+details.more > summary::after { content: "▾"; margin-left: 6px; }
+details.more[open] > summary::after { content: "▴"; }
+.fav, .cmpbtn { min-height: 40px; padding: 6px 12px; font-size: 13px; border-radius: 8px; }
+.viewtabs button { min-height: 44px; padding: 8px 16px; font-size: 14px; border-radius: 8px; }
+.linkbtn { min-height: 40px; padding: 8px 4px; font-size: 13px; }
+.links { gap: 8px; }
+.links a { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 600; background: var(--surface); }
+.detail button, .timer button { min-height: 44px; padding: 8px 14px; font-size: 14px; border-radius: 8px; }
+.suggest button { min-height: 48px; padding: 10px; font-size: 15px; }
+.facts dt { font-size: 12px; }
+.curve text, .mapview text { font-size: 12px; }
+.card { padding: 16px; }
+.card h3 { font-size: 17px; }
+.fee .amt { font-size: 24px; }
+.wrap { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
+.totop { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 20; min-height: 48px; padding: 10px 16px; border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 14px; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+@media (max-width: 380px) { h1 { font-size: 24px; } .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .panel { padding: 14px; } }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+@media (max-width: 480px) { .row.when { grid-template-columns: 1fr; } }
+.card-top { flex-wrap: wrap; row-gap: 8px; }
+.card-top h3 { flex: 1 1 100%; }
+.dist { flex: 1 1 100%; white-space: normal; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 14px; }
+.dist small, .picks small { font-size: 12px; color: var(--muted); }
+.dist .fav { margin-left: auto; }
 </style>
 
 <div class="wrap">
@@ -187,7 +228,7 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
       <div class="chips" id="presets" role="group" aria-label="주요 장소"></div>
       <div class="place">
         <label for="q">목적지(동·도로명) 또는 주차장 이름으로 찾기</label>
-        <input id="q" type="search" autocomplete="off" placeholder="예: 세종대로, 해운대, 중앙시장" aria-controls="suggest">
+        <input id="q" type="search" autocomplete="off" enterkeyhint="search" autocapitalize="off" spellcheck="false" placeholder="예: 세종대로, 해운대, 중앙시장" aria-controls="suggest">
         <ul class="suggest" id="suggest" hidden></ul>
       </div>
       <p class="center" id="centerLabel" aria-live="polite"></p>
@@ -195,7 +236,7 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
 
     <fieldset>
       <legend>언제 주차하나요? (한국 시간)</legend>
-      <div class="row">
+      <div class="row when">
         <div><label for="start">시작 일시</label><input id="start" type="datetime-local" required></div>
         <div><label for="end">종료 일시</label><input id="end" type="datetime-local" required></div>
       </div>
@@ -240,6 +281,7 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
       <li>실시간 잔여면수는 데모에 포함되지 않아 모든 시설이 ‘실시간 확인 불가’로 표시됩니다.</li>
       <li>주요 장소 버튼의 좌표는 대략값이며, 거리는 직선거리입니다. 요금은 원천 데이터 기준 예상 금액이므로 현장 요금과 다를 수 있습니다.</li>
     </ul>
+    <p class="links"><a href="admin.html">관리자 화면 보기 →</a></p>
   </footer>
 </div>
 
@@ -312,7 +354,13 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
       const g = PS.regionOf(LOTS[i].addr), k = g ? (g.sido === g.sigungu ? g.sido : `${g.sido} ${g.sigungu}`) : "";
       (groups.get(k) ?? groups.set(k, []).get(k)).push(LOTS[i]);
     }
-    if (!groups.size) return null;
+    if (!groups.size) {
+      // 도로명 주소 위주라 '역삼동' 같은 동 이름이 안 잡히면 끝 글자를 떼고 한 번 더(앱과 같은 방식)
+      const strip = (t) => { const m = /^(.{2,}?)(\d+)?(동|읍|면|리|가)$/.exec(t); return m ? m[1] : t; };
+      const raw = text.trim().split(/\s+/).filter(Boolean).slice(0, 4), loose = raw.map(strip);
+      if (!loose.some((t, i) => t !== raw[i])) return null;
+      const r = resolveArea(loose.join(" ")); return r ? { ...r, label: text.trim() } : null;
+    }
     const ranked = [...groups].sort((a, b) => Number(b[0] !== "") - Number(a[0] !== "") || b[1].length - a[1].length || a[0].localeCompare(b[0], "ko"));
     const [region, list] = ranked[0];
     const mLat = median(list.map((l) => l.lat)), mLng = median(list.map((l) => l.lng));
@@ -543,7 +591,7 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
     const links = PS.buildNaverLinks({ lot: { lat: l.lat, lng: l.lng, name: l.name }, destination: dest, appname: "https://claude.ai" });
     const sim = it.similar.length ? `<p class="similar">같은 시설일 가능성이 있는 다른 기록 ${it.similar.length}건: ${it.similar.map((s) => `${esc(s.it.lot.name)} (${dist(s.it.distanceMeters)}, ${s.status === "MERGED" ? "동일 시설로 승인됨" : "미확정"})`).join(", ")}</p>` : "";
     return `<li class="card">
-      <div class="card-top"><h3>${esc(l.name)}</h3><span class="dist">${dist(it.distanceMeters)} <span class="sr">직선거리</span> <small style="color:var(--muted)">도보 약 ${PS.walkMinutesEstimate(it.distanceMeters)}분 추정</small> <button type="button" class="fav" data-fav="${l.i}" aria-pressed="${isFav(l.i)}">${isFav(l.i) ? "★ 즐겨찾기됨" : "☆ 즐겨찾기"}</button> <button type="button" class="cmpbtn" data-cmp="${l.i}" aria-pressed="${cmp.includes(l.i)}">비교</button></span></div>
+      <div class="card-top"><h3>${esc(l.name)}</h3><span class="dist">${dist(it.distanceMeters)} <span class="sr">직선거리</span> <small>도보 약 ${PS.walkMinutesEstimate(it.distanceMeters)}분 추정</small> <button type="button" class="fav" data-fav="${l.i}" aria-pressed="${isFav(l.i)}">${isFav(l.i) ? "★ 즐겨찾기됨" : "☆ 즐겨찾기"}</button> <button type="button" class="cmpbtn" data-cmp="${l.i}" aria-pressed="${cmp.includes(l.i)}">비교</button></span></div>
       <p class="addr">${esc(l.addr ?? "주소 정보 없음")} · ${TYPE[l.type]} · ${l.pub ? "공영" : "공영 여부 미확인"}</p>
       ${feeHtml(it.fee)}
       <dl class="facts">
@@ -668,7 +716,15 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
     const q = $("q").value.trim();
     if (q && q !== center.label) { const a = resolveArea(q); if (a) setCenter({ lat: a.lat, lng: a.lng, label: a.label }, -1); else { const er = $("formError"); er.textContent = `‘${q}’이(가) 들어간 주차장 이름·주소가 없습니다. 동·도로명으로 다시 찾아보세요.`; er.hidden = false; return; } }
     run();
+    $("summary").scrollIntoView({ block: "start" }); // 모바일: 긴 입력 영역 아래의 결과로 바로 이동
   });
+  // 결과를 보는 동안 검색 조건으로 바로 돌아가는 버튼(입력 영역이 화면 밖일 때만)
+  const toTop = document.createElement("button");
+  toTop.type = "button"; toTop.className = "totop"; toTop.hidden = true; toTop.textContent = "↑ 검색 조건";
+  toTop.addEventListener("click", () => { $("form").scrollIntoView({ block: "start" }); });
+  document.body.appendChild(toTop);
+  const syncTop = () => { toTop.hidden = $("form").getBoundingClientRect().bottom > 0; };
+  addEventListener("scroll", syncTop, { passive: true }); syncTop();
   ["radius", "type", "sort", "freeOnly", "operatingOnly"].forEach((id) => $(id).addEventListener("change", run));
   // 위치 보기: 외부 지도 없이 검색 중심 기준 상대 위치를 그림(데모 전용 — 실서비스는 지도 타일 사용)
   let view = "list", lastRun = null;
