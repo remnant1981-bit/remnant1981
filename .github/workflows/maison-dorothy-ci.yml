@@ -1,0 +1,26 @@
+name: 메종도로시 CI
+
+on:
+  pull_request:
+    paths: ['maison-dorothy/**', 'tests/maison-dorothy/**', '.github/workflows/maison-dorothy-ci.yml']
+  push:
+    branches: [main]
+    paths: ['maison-dorothy/**', 'tests/maison-dorothy/**']
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # 페이지 로직 + 구글 Apps Script(공개·관리자) 서버 코드를 가짜 시트 위에서 시험
+      - run: node --test "tests/maison-dorothy/*.test.js"
+      - name: 스크립트 문법 확인
+        run: |
+          for f in maison-dorothy/*.js; do node --check "$f"; done
+          for f in maison-dorothy/order-apps-script.gs maison-dorothy/admin/Code.gs; do cp "$f" /tmp/check.js && node --check /tmp/check.js; done
