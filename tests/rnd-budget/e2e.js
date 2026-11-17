@@ -30,7 +30,7 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   p.on('dialog', (d) => d.accept(d.type() === 'prompt' ? '1안' : undefined));
   // ① 기본 설정(1단계 공개 범위): 꺼진 기능은 숨김
   await p.goto(base);
-  check('기본: 과제 구성·안 저장·단계 메뉴 숨김, Q&A 표시', (await p.locator('#s0').isHidden()) && (await p.locator('#saveScenario').isHidden()) && (await p.locator('.faq').isVisible()) && (await p.locator('.steps').isHidden()));
+  check('기본: 과제 구성 표시(2026-11-17 공개)·안 저장·단계 메뉴 숨김, Q&A 표시', (await p.locator('#s0').isVisible()) && (await p.locator('#saveScenario').isHidden()) && (await p.locator('.faq').isVisible()) && (await p.locator('.steps').isHidden()));
   check('Q&A 27개', (await p.locator('#faq details').count()) === 27);
   await p.fill('#faqSearch', '현물');
   const shownQ = await p.locator('#faq details:not([hidden])').count();
@@ -46,7 +46,7 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   check('기본: 공고문 가져오기 표시(베타)', (await p.locator('#noticeDrop').isVisible()) && (await p.textContent('#noticeDrop')).includes('베타'));
   check('기본: 예시·엑셀·점검 표시', (await p.locator('.demo-bar').isVisible()) && (await p.locator('#xlsx').isVisible()) && (await p.locator('#s4').isVisible()));
   await p.click('[data-example="ok"]'); await p.waitForLoadState();
-  check('기본: 예시는 첫 기관·1차년도만', (await p.locator('#summary').isHidden()) && (await p.inputValue('#gov')) === '300,000' && (await p.locator('#checks .error').count()) === 0);
+  check('기본: 예시는 2기관·2개 연차·총괄표 표시', (await p.locator('#summary').isVisible()) && (await p.locator('#instTabs .chip').count()) === 2 && (await p.locator('#yearTabs .chip').count()) === 2 && (await p.inputValue('#gov')) === '300,000' && (await p.locator('#checks .error').count()) === 0);
   check('우측 요약: 총사업비·점검 통과', (await p.textContent('#live')).includes('423,900') && (await p.textContent('#live')).includes('통과'));
   await p.evaluate(() => localStorage.clear());
 
@@ -443,6 +443,28 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   check('[검토] 모바일: 하단 요약 막대(총사업비·오류)·가로 넘침 없음', (await m.locator('#mBar').isVisible()) && (await m.textContent('#mBar')).includes('오류') && (await m.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)));
   check('[검토] 모바일: 입력 글자 16px(확대 방지)', (await m.evaluate(() => getComputedStyle(document.getElementById('gov')).fontSize)) === '16px');
   await mc.close();
+
+  // ⑨ 연차·공동기관 공개(운영 설정 그대로)
+  const jc = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const j = await jc.newPage(); j.on('pageerror', (e) => errors.push('j:' + e.message));
+  await j.goto(base);
+  check('[공개] 운영 설정: 과제 구성 표시, 단독 과제는 편집 탭 숨김', (await j.locator('#s0').isVisible()) && (await j.locator('#editBar').isHidden()));
+  await j.fill('#gov', '300000'); await j.getByLabel('연구재료비 현금(천원)').fill('400000');
+  await j.selectOption('#years', '2');
+  check('[공개] 빈 연차 안내(통과로 표시하지 않음)', (await j.textContent('#projChecks')).includes('편성하지 않은 칸이 1곳') && (await j.textContent('#dlStatus')).includes('미편성 1곳'));
+  await j.click('#yearTabs .chip >> nth=1'); await j.click('#copyPrev');
+  check('[공개] 이전 연차 복사 → 빈 칸 해소·전체 통과', (await j.textContent('#projChecks')).includes('모든 기관·연차') && (await j.textContent('#dlStatus')).includes('점검 통과'));
+  await j.click('#addInst'); await j.locator('#insts tbody tr').nth(1).locator('select').nth(1).selectOption('nonprofit');
+  await j.fill('#gov', '100000'); await j.getByLabel('연구재료비 현금(천원)').fill('85471');
+  check('[공개] 공동기관(비영리) 반올림 1천원 차이는 오류 아님', (await j.locator('#checks .error').count()) === 0 && (await j.locator('#summary tbody tr').count()) === 2);
+  await j.click('#helperOpen'); await j.fill('#hdGov', '200000'); await j.click('#hdMake'); await j.click('#hdApply');
+  await j.click('#instTabs .chip >> nth=0');
+  check('[공개] 도우미는 편집 중인 기관·연차만 바꿈', (await j.inputValue('#gov')) === '300,000');
+  check('[공개] 시트 목록에 기관별 시트', (await j.locator('#dlSheets li').count()) === 6);
+  await jc.close();
+  const jm = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage(); jm.on('pageerror', (e) => errors.push('jm:' + e.message));
+  await jm.goto(base); await jm.click('[data-example="ok"]'); await jm.waitForTimeout(200);
+  check('[공개] 모바일: 2기관·2연차 예시 가로 넘침 없음·편집 탭 표시', (await jm.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)) && (await jm.locator('#editBar').isVisible()) && (await jm.evaluate(() => document.getElementById('editBar').offsetHeight)) < 120);
 
   check('콘솔·스크립트 오류 없음', errors.length === 0, errors.join(' | '));
   await browser.close(); server.close();

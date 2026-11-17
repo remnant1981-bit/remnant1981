@@ -223,7 +223,9 @@
     // 비영리기관: 정부출연금을 넘는 편성은 기관 자체 부담
     if (!rules.profit && !rules.custom && total.total > gov) {
       const over = total.total - gov, rate = rules.indirectPct;
-      add('warn', `총사업비가 정부출연금보다 ${fmt(over)}천원 많습니다. 기관부담 의무는 없으므로 초과분은 기관이 자체 부담(현금 ${fmt(Math.max(0, total.cash - gov))}·현물 ${fmt(total.inkind)})하게 됩니다. 출연금에 맞추려면 직접비(현금)를 ${fmt(Math.floor((gov * 100) / (100 + rate)))}천원 이하로 편성하세요(간접비 ${rate}% 포함 기준).`, rules.basis.gov, 'np-over');
+const fit = Math.ceil((gov * 100) / (100 + rate));
+      if (over <= 1) add('info', `간접비 반올림으로 총사업비가 정부출연금보다 ${fmt(over)}천원 많습니다. 계획서 시스템 금액에 맞춰 1천원 단위로 조정하세요.`, '', 'np-round');
+      else add('warn', `총사업비가 정부출연금보다 ${fmt(over)}천원 많습니다. 기관부담 의무는 없으므로 초과분은 기관이 자체 부담(현금 ${fmt(Math.max(0, total.cash - gov))}·현물 ${fmt(total.inkind)})하게 됩니다. 출연금에 맞추려면 직접비(현금)를 ${fmt(fit)}천원으로 편성하세요(간접비 ${rate}% 포함 기준, 반올림으로 1천원 차이는 날 수 있음).`, rules.basis.gov, 'np-over');
     }
     for (const p of people) {
       const name = p.name || '이름 없음';
@@ -304,13 +306,16 @@
     });
     const yearTotals = Array.from({ length: p.years }, (_, y) => sumT(insts.map((it) => it.years[y].sum)));
     const total = sumT(yearTotals);
+    const empty = [];
+    insts.forEach((it) => it.years.forEach((r, y) => { if (!r.funding.gov && !r.total.total) empty.push(`${it.name} ${y + 1}차년도`); }));
     const checks = [];
     const leads = p.insts.filter((x) => x.role === 'lead').length;
     if (leads !== 1) checks.push({ level: 'warn', msg: `주관연구개발기관은 1곳이어야 합니다(현재 ${leads}곳).` });
     const errs = insts.reduce((a, it) => a + it.years.reduce((b, r) => b + r.errors, 0), 0);
     if (errs) checks.push({ level: 'error', msg: `기관·연차별 편성에 오류 ${errs}건이 있습니다. 총괄표에서 ✖ 표시된 칸을 눌러 확인하세요.` });
-    else if (total.gov) checks.push({ level: 'ok', msg: '모든 기관·연차 편성이 점검을 통과했습니다.' });
-    return { project: p, insts, yearTotals, total, checks };
+    else if (total.gov && !empty.length) checks.push({ level: 'ok', msg: '모든 기관·연차 편성이 점검을 통과했습니다.' });
+    if (total.gov && empty.length) checks.push({ level: 'warn', code: 'empty', msg: `아직 편성하지 않은 칸이 ${empty.length}곳 있습니다(${empty.slice(0, 4).join(', ')}${empty.length > 4 ? ' 등' : ''}). 편성이 없는 연차라면 연구개발기간을 줄이세요.` });
+    return { project: p, insts, yearTotals, total, checks, empty };
   }
 
   /** 계획서용 비목 배분: 현금을 정부지원·기관부담 현금으로 비례 배분(나머지는 가장 큰 비목) */
