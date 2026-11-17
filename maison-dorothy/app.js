@@ -354,7 +354,7 @@ window.DorothyApp = function (opt) {
     const el = $(id); el.hidden = false; el.style.zIndex = 50 + layers.length;
     document.body.style.overflow = 'hidden';
     const url = opt.url || (location.hash.startsWith('#p-') ? baseUrl : location.href);
-    if (opt.replace) history.replaceState({ layer: id }, '', url); else history.pushState({ layer: id }, '', url);
+    try { if (opt.replace) history.replaceState({ layer: id }, '', url); else history.pushState({ layer: id }, '', url); } catch (e) { /* 기록을 못 쓰는 환경(끼워 넣은 화면 등) */ }
     const f = el.querySelector('.x, .sv-x'); if (f) f.focus({ preventScroll: true });
   }
   function closeEl(id) {
@@ -365,8 +365,10 @@ window.DorothyApp = function (opt) {
     if (!layers.length) { document.body.style.overflow = ''; if (lastFocus && lastFocus.isConnected) lastFocus.focus({ preventScroll: true }); }
   }
   function hide(id) {
-    if (history.state && history.state.layer === id && layers[layers.length - 1] === id) history.back();   // popstate 에서 닫음
-    else closeEl(id);
+    // 화면을 먼저 닫고, 뒤로가기 기록은 뒤따라 맞춤 → 뒤로가기 신호가 오지 않는 환경에서도 X·바깥 누르기로 반드시 닫힘
+    const top = layers[layers.length - 1] === id, mine = history.state && history.state.layer === id;
+    closeEl(id);
+    if (top && mine) { try { history.back(); } catch (e) { /* 무시 */ } }
   }
   function swap(from, to, url) { closeEl(from); show(to, { replace: true, url }); }
   addEventListener('popstate', e => {
