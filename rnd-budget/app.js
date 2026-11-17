@@ -749,24 +749,56 @@
     $('s1').scrollIntoView({ behavior: 'smooth' }); $('h-fund').focus({ preventScroll: true });
   });
 
-  // ---------- 자주 묻는 질문: 검색·분류 ----------
+  // ---------- 자주 묻는 질문: 분류 묶음·검색·모두 펼치기 ----------
+  const FAQ_CATS = ['기본', '인건비', '현금·현물', '비목', '집행', '도구'];
+  const faqAll = [...document.querySelectorAll('#faq details')];
+  const faqItems = FAQ_CATS.flatMap((cat) => faqAll.filter((d) => d.dataset.cat === cat)); // 화면에 보이는 순서(분류 순)
+  const faqBody = $('faqBody');
+  // 분류별 묶음(PC는 2단). 질문은 HTML에 적힌 순서를 분류 안에서 유지
+  const faqCols = [el('div', { class: 'faq-col' }), el('div', { class: 'faq-col' })];
+  const faqGroups = FAQ_CATS.map((cat, k) => {
+    const items = faqItems.filter((d) => d.dataset.cat === cat);
+    const g = el('section', { class: 'faq-group', 'data-group': cat, style: `order:${k}` }, el('h3', {}, cat, el('span', { class: 'n', text: `${items.length}` })), ...items);
+    faqCols[k % 2].append(g);
+    return g;
+  });
+  faqBody.append(...faqCols);
+  faqItems.forEach((d) => d.querySelector('summary').prepend(el('span', { class: 'qcat', text: d.dataset.cat })));
+  document.querySelectorAll('#faqCats [data-qcat]').forEach((b) => b.append(el('span', { class: 'n', text: `${b.dataset.qcat ? faqItems.filter((d) => d.dataset.cat === b.dataset.qcat).length : faqItems.length}` })));
   let faqCat = '';
+  function syncFaqToggle() {
+    const vis = faqItems.filter((d) => !d.hidden), allOpen = vis.length > 0 && vis.every((d) => d.open);
+    $('faqToggle').textContent = allOpen ? '모두 접기' : '모두 펼치기';
+    $('faqToggle').setAttribute('aria-expanded', String(allOpen));
+  }
   function filterFaq() {
     const q = $('faqSearch').value.trim().toLowerCase();
     let shown = 0;
-    document.querySelectorAll('#faq details').forEach((d) => {
+    faqItems.forEach((d) => {
       const ok = (!faqCat || d.dataset.cat === faqCat) && (!q || (d.textContent + ' ' + (d.dataset.kw || '')).toLowerCase().includes(q));
       d.hidden = !ok; if (ok) shown++;
-      if (q && ok) d.open = true;
+      if (q) d.open = ok && shown <= 3; // 검색 시 위 3건만 펼쳐 한눈에
     });
+    faqGroups.forEach((g) => { g.hidden = !g.querySelector('details:not([hidden])'); });
+    faqBody.classList.toggle('flat', !!q || !!faqCat); // 검색·분류 선택 시 한 단으로
     $('faqEmpty').hidden = shown > 0;
+    $('faqCount').textContent = q ? `‘${$('faqSearch').value.trim()}’ 검색 결과 ${shown}건` : faqCat ? `${faqCat} ${shown}건` : `전체 ${shown}건`;
+    syncFaqToggle();
   }
   $('faqSearch').addEventListener('input', filterFaq);
   document.querySelectorAll('#faqCats [data-qcat]').forEach((b) => b.addEventListener('click', () => {
     faqCat = b.dataset.qcat;
-    document.querySelectorAll('#faqCats [data-qcat]').forEach((x) => x.classList.toggle('on', x === b));
+    document.querySelectorAll('#faqCats [data-qcat]').forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
     filterFaq();
   }));
+  $('faqToggle').addEventListener('click', () => {
+    const vis = faqItems.filter((d) => !d.hidden), open = !vis.every((d) => d.open);
+    vis.forEach((d) => { d.open = open; });
+    syncFaqToggle();
+  });
+  faqBody.addEventListener('toggle', syncFaqToggle, true);
+  $('faqReset').addEventListener('click', () => { $('faqSearch').value = ''; document.querySelector('#faqCats [data-qcat=""]').click(); $('faqSearch').focus(); });
+  filterFaq();
 
   // ---------- 광고(설정 시에만) ----------
   const slots = CFG.adsenseSlots || {};
