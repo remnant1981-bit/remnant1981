@@ -6,7 +6,7 @@ window.RB_CONFIG = {
   // 기능 스위치(단계적 공개). false = 화면에서 숨김(코드·데이터는 유지). 켜려면 true 로 바꿔 배포
   features: {
     examples: true,     // 예시로 체험하기
-    project: false,     // 연차별·공동기관별 편성(과제 구성·편집 탭·총괄표) — 2단계 공개 예정
+    project: true,      // 연차별·공동기관별 편성(과제 구성·편집 탭·총괄표) — 2026-11-17 공개
     scenarios: false,   // 여러 안 저장·불러오기
     faq: true,          // 자주 묻는 질문(Q&A, 검색·분류) — 2026-11-14 공개
     steps: false,       // 상단 단계 메뉴

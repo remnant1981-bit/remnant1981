@@ -397,7 +397,7 @@
     const multi = P.project.years > 1;
     const head = el('tr', {}, el('th', { text: '기관' }), ...Array.from({ length: P.project.years }, (_, y) => el('th', { text: yl(y) })), ...(multi ? [el('th', { text: '합계' })] : []));
     const cell = (s, errs, onclick, label) => el('td', {}, el('button', { type: 'button', class: `sumcell${errs ? ' bad' : ''}`, onclick, 'aria-label': label },
-      el('strong', { text: fmt(s.total) }), el('small', { text: `정부 ${fmt(s.gov)} · 현금 ${fmt(s.orgCash)} · 현물 ${fmt(s.inkind)}` }), errs ? el('span', { class: 'cnt', text: `✖ 오류 ${errs}` }) : ''));
+      el('strong', { text: fmt(s.total) }), el('small', {}, ...[`정부 ${fmt(s.gov)}`, `현금 ${fmt(s.orgCash)}`, `현물 ${fmt(s.inkind)}`].map((t) => el('span', { text: t }))), errs ? el('span', { class: 'cnt', text: `✖ 오류 ${errs}` }) : ''));
     const plain = (s, strong) => el('td', {}, el(strong ? 'strong' : 'span', { text: fmt(s.total) }), el('small', { text: `정부 ${fmt(s.gov)}${s.total ? ` (${((s.gov / s.total) * 100).toFixed(1)}%)` : ''}` }));
     const rows = P.insts.map((it, i) => el('tr', {},
       el('th', { scope: 'row', text: `${it.role === 'lead' ? '주관 · ' : ''}${it.name}` }),
@@ -453,9 +453,10 @@
     const P2 = RB.calcProject(P);
     const errs = P2.insts.reduce((a, it) => a + it.years.reduce((b, y) => b + y.errors, 0), 0);
     const st = $('dlStatus');
-    st.className = 'dl-status ' + (!ready ? 'wait' : errs ? 'warn' : 'ok');
+    st.className = 'dl-status ' + (!ready ? 'wait' : errs || P2.empty.length ? 'warn' : 'ok');
     st.replaceChildren(!hasGov ? '정부출연금을 입력하면 다운로드할 수 있습니다.' : !ready ? '인건비·비목을 편성하면 다운로드할 수 있습니다.'
       : errs ? el('span', {}, `⚠ 점검 오류 ${errs}건 — 다운로드는 되지만 먼저 고치는 것을 권장합니다. `, el('a', { href: '#s4', text: '오류 보기' }))
+        : P2.empty.length ? `⚠ 미편성 ${P2.empty.length}곳(${P2.empty.slice(0, 2).join(', ')}${P2.empty.length > 2 ? ' 등' : ''}) — 다운로드는 되지만 빈 연차가 엑셀에 0으로 들어갑니다.`
         : '✔ 점검 통과 — 합계·비율은 엑셀 수식으로 들어가 계획서에 맞춰 바로 고칠 수 있습니다.');
     $('xlsx').disabled = !ready;
   }

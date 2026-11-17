@@ -342,7 +342,7 @@ test('[사용자 검토] 참여개월 12 초과·참여율 1 미만 주의', () 
 test('[사용자 검토] 비영리: 정부출연금 초과 편성 안내(직접비 상한 제시)', () => {
   const over = RB.calcBudget({ ruleset: 'univ', gov: '105000', people: [], items: { material: { cash: '105000' } } });
   const c = over.checks.find((x) => x.code === 'np-over');
-  assert.ok(c && c.level === 'warn' && c.msg.includes('100,000천원 이하'));
+  assert.ok(c && c.level === 'warn' && c.msg.includes('100,000천원으로 편성'));
   const fit = RB.calcBudget({ ruleset: 'univ', gov: '105000', people: [], items: { material: { cash: '100000' } } });
   assert.equal(fit.total.total, 105000); assert.ok(!fit.checks.some((x) => x.code === 'np-over'));
 });
@@ -366,4 +366,18 @@ test('[사용자 검토] 엑셀: 점검 결과 시트 포함·도우미 학생�
   const d = RB.draftBudget({ ruleset: 'univ', gov: '200000', existing: { count: 2, salary: '60000', rate: 30 }, student: '30000' });
   assert.equal(d.sheet.items.student.cash, '30000');
   assert.ok(d.sheet.people.every((p) => p.kind === 'new'));
+});
+
+test('[연차·공동기관 공개] 빈 연차 안내·비영리 반올림 1천원 차이는 안내로', () => {
+  const p = RB.normalizeProject({ v: 2, years: 3, insts: [{ name: 'A', role: 'lead', ruleset: 'sme', data: [{ gov: '300000', people: [], items: { material: { cash: '400000' } } }] }] });
+  const P = RB.calcProject(p);
+  assert.equal(P.empty.length, 2);
+  assert.ok(P.checks.some((c) => c.code === 'empty' && c.msg.includes('A 2차년도')));
+  assert.ok(!P.checks.some((c) => c.level === 'ok'));
+  assert.equal(RB.calcProject(RB.normalizeProject(RB.EXAMPLES.ok.state)).empty.length, 0);
+  assert.equal(RB.calcProject(RB.normalizeProject({})).checks.length, 0);
+  const r = RB.calcBudget({ ruleset: 'nonprofit', gov: '100000', people: [], items: { material: { cash: '85471' } } }); // 간접비 17%: 85,470 → 99,999 / 85,471 → 100,001 (정확히 맞출 수 없음)
+  assert.equal(r.total.total, 100001);
+  assert.ok(r.checks.some((c) => c.code === 'np-round' && c.level === 'info'));
+  assert.ok(!r.checks.some((c) => c.level === 'error' || c.level === 'warn'));
 });

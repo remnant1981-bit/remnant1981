@@ -265,3 +265,15 @@ label[data-filebtn]:focus-visible{outline:2px solid var(--brand);outline-offset:
   .m-bar .bad{color:var(--err);font-weight:700}.m-bar .good{color:var(--ok);font-weight:700}
   body{padding-bottom:56px}.undo-bar{bottom:66px}
 }
+
+/* 연차·공동기관 공개(2026-11-17): 좁은 칸에서 총괄표·편집 탭 정리 */
+#summary td small{white-space:normal}
+#summary td{min-width:6.2em}
+.col-side #summary th[scope=row]{min-width:4.5em}
+@media (max-width:639px){
+  #summary{min-width:0}
+  .edit-bar .chips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+  .edit-bar .chip{flex:0 0 auto}
+  .eb-label{min-width:0}.eb-label:empty{display:none}
+}
+#summary .sumcell small span{display:inline-block;white-space:nowrap;margin-left:6px}
