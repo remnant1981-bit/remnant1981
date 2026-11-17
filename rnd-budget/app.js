@@ -261,7 +261,8 @@
   }
   function syncRuleInputs() {
     if (!sel.options.length) sel.replaceChildren(...rulesetOptions(I().ruleset)); // 다시 만들면 펼친 목록이 닫히므로 한 번만
-    sel.value = I().ruleset;
+    const minOn = ministryActive(I());
+    sel.value = minOn ? I().lastLegal : I().ruleset;
     const rs = RB.RULESETS[I().ruleset];
     const eff = RB.effectiveRules(I());
     const custom = !!rs.custom;
@@ -280,7 +281,7 @@
       : `적용 기준: 기관부담 의무 없음 · 간접비 ${eff.indirectPct}%`;
     syncMinistry();
     if (custom) $('ruleBox').open = true;
-    $('ruleMode').textContent = custom ? '공고문 기준 직접 입력' : '법령 기준 고정';
+    $('ruleMode').textContent = minOn ? `${RB.MINISTRIES[I().ministry].label} 기준` : custom ? '공고문 기준 직접 입력' : '법령 기준 고정';
     $('ruleMode').classList.toggle('warn', custom);
     $('allowanceBasis').textContent = custom ? '공고문 기준 입력값(법령: 수정인건비의 20% 이내, 사용 기준 제26조①)' : '사용 기준 제26조①: 수정인건비의 20% 이내';
     $('outsourceBasis').textContent = custom ? '공고문 기준 입력값(법령: (직접비 − 위탁)의 40% 이하, 사용 기준 제27조①)' : '사용 기준 제27조①: (직접비 − 위탁)의 40% 이하';
@@ -290,7 +291,15 @@
         ? `🔒 표시 값은 법령 기준으로 고정됩니다. 간접비율은 기관 간접비 고시비율 범위(최대 ${rs.indirectMax}%) 안에서 낮출 수 있습니다.${FEAT.project ? ' 기관 유형은 모든 연차에 같이 적용됩니다.' : ''}`
         : '🔒 비영리기관은 기관부담 의무가 없습니다. 간접비율은 기관 고시비율이 있으면 그 값으로 바꾸세요.';
   }
-  sel.addEventListener('change', () => { delete I().ministry; setRuleset(C.i, sel.value); });
+  // 부처 기준으로 비율이 바뀐 상태인지(기관 유형 칸에는 원래 유형을 계속 보여 줌)
+  const ministryActive = (inst) => !!(inst.ministry && RB.RULESETS[inst.ruleset].custom && RB.MINISTRIES[inst.ministry] && inst.noticeSource === RB.MINISTRIES[inst.ministry].label && RB.ministryRates(inst.ministry, inst.lastLegal));
+  sel.addEventListener('change', () => {
+    const inst = I(), mk = inst.ministry, v = sel.value;
+    if (mk && !RB.RULESETS[v].custom) { // 부처 기준은 유지하고 기관 유형만 바꿈
+      inst.ruleset = v; inst.indirectPct = ''; inst.noticeSource = '';
+      applyMinistry(mk);
+    } else { delete inst.ministry; setRuleset(C.i, v); }
+  });
   // 소관 부처·사업 유형(features.ministry): 원문으로 확인된 비율 차이만 적용, 나머지는 안내
   const minSel = $('ministry');
   minSel.replaceChildren(...Object.entries(RB.MINISTRIES).map(([k, m]) => el('option', { value: k, text: m.label })));
@@ -300,10 +309,9 @@
     $('ministryNote').hidden = !m.notes.length;
     $('ministryNote').replaceChildren(...m.notes.map((n) => el('li', { text: n })), ...(m.src ? [el('li', { class: 'cite', text: `근거: ${m.src} · 사업 공고가 우선합니다.` })] : []));
   }
-  minSel.addEventListener('change', () => {
-    const inst = I(), key = minSel.value, legal = RB.RULESETS[inst.ruleset].custom ? inst.lastLegal || 'sme' : inst.ruleset;
+  function applyMinistry(key) {
+    const inst = I(), legal = RB.RULESETS[inst.ruleset].custom ? inst.lastLegal || 'sme' : inst.ruleset;
     const rates = RB.ministryRates(key, legal);
-    mark();
     if (key === 'common') delete inst.ministry; else inst.ministry = key;
     if (rates) { // 법령 기준에서 출발해 부처 기준 비율만 바꿈
       const base = RB.effectiveRules({ ruleset: legal });
@@ -311,8 +319,9 @@
     } else if (RB.RULESETS[inst.ruleset].custom && Object.values(RB.MINISTRIES).some((x) => x.label === inst.noticeSource)) { // 부처 프리셋으로 바꿨던 비율은 법령 기준으로 되돌림
       inst.ruleset = legal; inst.indirectPct = ''; inst.noticeSource = '';
     }
-    renderAll(); offerUndo(`적용 기준: ${RB.MINISTRIES[key].label}`); track('rb_ministry', { ministry: key });
-  });
+    renderAll();
+  }
+  minSel.addEventListener('change', () => { mark(); applyMinistry(minSel.value); offerUndo(`적용 기준: ${RB.MINISTRIES[minSel.value].label}`); track('rb_ministry', { ministry: minSel.value }); });
   for (const id of RULE_INPUTS) {
     $(id).addEventListener('input', (e) => { if (!e.target.readOnly) { I()[id] = e.target.value; syncRuleInputs(); update(); } });
     $(id).addEventListener('blur', syncRuleInputs); // 범위를 벗어난 입력은 실제 적용값으로 표시

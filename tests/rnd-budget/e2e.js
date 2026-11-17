@@ -489,7 +489,7 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   await d.fill('#gov', '300000'); await d.getByLabel('연구재료비 현금(천원)').fill('400000');
   check('[참여기관] 역할을 공동기관으로 → 이름 자동 변경·주관기관 경고 없음·점검 통과', (await d.locator('#insts tbody tr input').first().inputValue()) === '공동기관 1' && (await d.textContent('#projSum')).includes('공동') && !(await d.textContent('#projChecks')).includes('주관연구개발기관') && (await d.locator('#checks .error').count()) === 0 && !(await d.isDisabled('#xlsx')));
   await d.click('#reset');
-  check('[세부] 운영 설정(꺼짐)에서는 세부 버튼 숨김', (await d.locator('.subbtn').count()) === 0);
+  check('[세부] 운영 설정: 세부 버튼 3개 표시(2026-11-17 공개)', (await d.locator('.subbtn').count()) === 3);
   check('[정리] 처음 화면: 과제 구성 한 줄 접힘·작성 순서 안내·0 숫자 숨김', !(await d.evaluate(() => document.getElementById('projBox').open)) && (await d.textContent('#projSum')).includes('1년') && (await d.locator('#liveStart').isVisible()) && (await d.locator('#funding').isHidden()) && (await d.locator('#live').isHidden())
     && (await d.evaluate(() => document.getElementById('gov').getBoundingClientRect().top)) < 520);
   await d.click('#liveHelper');
@@ -561,7 +561,7 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   const ac = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
   const a = await ac.newPage(); a.on('pageerror', (e) => errors.push('a:' + e.message));
   await a.goto(base);
-  check('[부처] 운영 설정(꺼짐)에서는 부처 선택 숨김', await a.locator('#ministry').isHidden());
+  check('[부처] 운영 설정: 부처 선택 표시(2026-11-17 공개)·안 저장은 숨김', (await a.locator('#ministry').isVisible()) && (await a.locator('#saveScenario').isHidden()));
   await a.goto(base + 'admin.html');
   check('[관리자] 비밀번호 미설정 시 바로 열림·점검표 표시', (await a.locator('#panel').isVisible()) && (await a.locator('#gate').isHidden()) && (await a.textContent('#autoChecks')).includes('관리자 비밀번호: 미설정') && (await a.locator('#autoChecks .error').count()) === 0 && (await a.locator('meta[name="robots"]').getAttribute('content')).includes('noindex'));
   await a.fill('#pw1', 'short'); await a.fill('#pw2', 'short'); await a.click('#mkHash');
@@ -571,20 +571,27 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   await a.fill('#cGa', 'bad'); await a.click('#dlConfig');
   check('[관리자] 잘못된 통계 ID 거부', (await a.textContent('#cfgOk')).includes('G-'));
   await a.fill('#cGa', 'G-TEST123456'); await a.fill('#cContact', '문의처 예시');
-  await a.check('[data-pub="details"]'); await a.check('[data-pv="ministry"]');
+  await a.uncheck('[data-pub="steps"]'); await a.check('[data-pub="legalHeader"]'); await a.check('[data-pv="scenarios"]');
   const [cf] = await Promise.all([a.waitForEvent('download'), a.click('#dlConfig')]);
   const cfg = require('fs').readFileSync(await cf.path(), 'utf8');
   const parsed = new Function('window', cfg + '; return window.RB_CONFIG;')({});
-  check('[관리자] 설정 파일 생성(통계 ID·기능 스위치·암호화 값 포함, 비밀번호 원문 없음)', cf.suggestedFilename() === 'config.js' && parsed.analytics.ga4 === 'G-TEST123456' && parsed.features.details === true && parsed.features.ministry === false && parsed.features.project === true && /^pbkdf2-sha256\$\d+\$/.test(parsed.admin.hash) && !cfg.includes(PW) && parsed.contact === '문의처 예시');
+  check('[관리자] 설정 파일 생성(통계 ID·기능 스위치·암호화 값 포함, 비밀번호 원문 없음)', cf.suggestedFilename() === 'config.js' && parsed.analytics.ga4 === 'G-TEST123456' && parsed.features.details === true && parsed.features.legalHeader === true && parsed.features.scenarios === false && parsed.features.project === true && /^pbkdf2-sha256\$\d+\$/.test(parsed.admin.hash) && !cfg.includes(PW) && parsed.contact === '문의처 예시');
   await a.goto(base);
-  check('[관리자] 미리보기: 이 브라우저에서만 부처 선택 표시·안내 막대', (await a.locator('#ministry').isVisible()) && (await a.locator('#previewBar').isVisible()));
+  check('[관리자] 미리보기: 이 브라우저에서만 꺼진 기능(안 저장) 표시·안내 막대', (await a.locator('#saveScenario').isVisible()) && (await a.locator('#previewBar').isVisible()));
   await a.fill('#gov', '300000');
   await a.selectOption('#ministry', 'motie2');
   check('[부처] 산업부 혁신제품형: 중소 67%·최소 총사업비 447,762', (await a.inputValue('#govMaxPct')) === '67' && (await a.textContent('#funding')).includes('447,762') && (await a.textContent('#ministryNote')).includes('제24조') && (await a.textContent('#ruleHint')).includes('산업부'));
+  check('[부처] 기관 유형 칸은 원래 유형(중소기업) 유지·기준 표시', (await a.inputValue('#ruleset')) === 'sme' && (await a.textContent('#ruleMode')).includes('산업부'));
+  await a.selectOption('#ruleset', 'large');
+  check('[부처] 기관 유형만 바꿔도 부처 기준 유지(대기업 33%)', (await a.inputValue('#govMaxPct')) === '33' && (await a.inputValue('#cashMinPct')) === '15' && (await a.inputValue('#ministry')) === 'motie2' && (await a.inputValue('#ruleset')) === 'large');
+  await a.selectOption('#ruleset', 'univ');
+  check('[부처] 비영리로 바꾸면 법령 기준(부담 의무 없음)·부처 안내 유지', (await a.inputValue('#ruleset')) === 'univ' && (await a.inputValue('#ministry')) === 'motie2' && (await a.textContent('#ruleSummary')).includes('의무 없음'));
+  await a.selectOption('#ruleset', 'sme');
+  check('[부처] 다시 중소기업 → 67% 재적용', (await a.inputValue('#govMaxPct')) === '67');
   await a.selectOption('#ministry', 'mss');
   check('[부처] 중기부: 법령 기준으로 복귀(75%)·안내 표시', (await a.inputValue('#ruleset')) === 'sme' && (await a.inputValue('#govMaxPct')) === '75' && (await a.textContent('#ministryNote')).includes('공고'));
   await a.click('#previewOff'); await a.waitForLoadState();
-  check('[관리자] 미리보기 끄기 → 운영 설정으로', (await a.locator('#ministry').isHidden()) && (await a.locator('#previewBar').isHidden()));
+  check('[관리자] 미리보기 끄기 → 운영 설정으로', (await a.locator('#saveScenario').isHidden()) && (await a.locator('#previewBar').isHidden()));
   // 비밀번호가 배포된 뒤: 로그인 필요
   await a.route('**/config.js', async (rt) => { const res = await rt.fetch(); rt.fulfill({ response: res, body: (await res.text()).replace("admin: { hash: '' }", `admin: { hash: '${parsed.admin.hash}' }`) }); });
   await a.goto(base + 'admin.html');
