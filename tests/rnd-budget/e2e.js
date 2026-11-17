@@ -31,7 +31,7 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   // ① 기본 설정(1단계 공개 범위): 꺼진 기능은 숨김
   await p.goto(base);
   check('기본: 과제 구성 표시(2026-11-17 공개)·안 저장·단계 메뉴 숨김, Q&A 표시', (await p.locator('#s0').isVisible()) && (await p.locator('#saveScenario').isHidden()) && (await p.locator('.faq').isVisible()) && (await p.locator('.steps').isHidden()));
-  check('Q&A 28개', (await p.locator('#faq details').count()) === 28);
+  check('Q&A 29개', (await p.locator('#faq details').count()) === 29);
   await p.fill('#faqSearch', '현물');
   const shownQ = await p.locator('#faq details:not([hidden])').count();
   check('Q&A 검색(현물)', shownQ >= 3 && shownQ < 23 && (await p.locator('#faq .faq-group[data-group="기본"] details:not([hidden])').first().getAttribute('open')) !== null, String(shownQ));
@@ -41,15 +41,15 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   await p.click('#faqCats [data-qcat="비목"]');
   check('Q&A 분류(비목 5개)', (await p.locator('#faq details:not([hidden])').count()) === 5);
   await p.click('#faqCats [data-qcat=""]');
-  check('Q&A 화면: 분류 묶음 6개·건수 표시', (await p.locator('#faq .faq-group:not([hidden])').count()) === 6 && (await p.textContent('#faqCount')) === '전체 28건' && (await p.textContent('#faqCats [data-qcat="비목"]')).includes('5'));
+  check('Q&A 화면: 분류 묶음 6개·건수 표시', (await p.locator('#faq .faq-group:not([hidden])').count()) === 6 && (await p.textContent('#faqCount')) === '전체 29건' && (await p.textContent('#faqCats [data-qcat="비목"]')).includes('5'));
   await p.click('#faqToggle');
-  check('Q&A 모두 펼치기 → 모두 접기', (await p.locator('#faq details[open]').count()) === 28 && (await p.textContent('#faqToggle')) === '모두 접기');
+  check('Q&A 모두 펼치기 → 모두 접기', (await p.locator('#faq details[open]').count()) === 29 && (await p.textContent('#faqToggle')) === '모두 접기');
   await p.click('#faqToggle');
   check('Q&A 모두 접기', (await p.locator('#faq details[open]').count()) === 0 && (await p.textContent('#faqToggle')) === '모두 펼치기');
   await p.fill('#faqSearch', '현물');
   check('Q&A 검색: 한 단 목록·분류 표시·결과 건수·위 3건 펼침', (await p.evaluate(() => document.getElementById('faqBody').classList.contains('flat'))) && (await p.locator('#faq details:not([hidden]) .qcat').first().isVisible()) && /검색 결과 \d+건/.test(await p.textContent('#faqCount')) && (await p.locator('#faq details[open]').count()) === 3);
   await p.fill('#faqSearch', 'zzzz'); await p.click('#faqReset');
-  check('Q&A 결과 없음 → 전체 보기', (await p.inputValue('#faqSearch')) === '' && (await p.locator('#faq details:not([hidden])').count()) === 28 && (await p.locator('#faqEmpty').isHidden()));
+  check('Q&A 결과 없음 → 전체 보기', (await p.inputValue('#faqSearch')) === '' && (await p.locator('#faq details:not([hidden])').count()) === 29 && (await p.locator('#faqEmpty').isHidden()));
   check('기본: 집행 전환 표시(공개)', await p.locator('#modeBar').isVisible());
   check('기본: 편성 도우미 버튼 표시(공개)', await p.locator('#helperOpen').isVisible());
   check('기본: 공고문 가져오기 표시(베타)', (await p.locator('#noticeDrop').isVisible()) && (await p.textContent('#noticeDrop')).includes('베타'));
@@ -522,6 +522,12 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   check('[세부] 시트 목록에 세부 내역', (await d.textContent('#dlSheets')).includes('세부 내역'));
   const [dx] = await Promise.all([d.waitForEvent('download'), d.click('#xlsx')]);
   check('[세부] 엑셀 다운로드', (await dx.failure()) === null);
+  const dxPath = await dx.path();
+  await d.click('#reset');
+  check('[엑셀 불러오기] 새로 작성 후 비어 있음', (await d.inputValue('#gov')) === '');
+  await d.setInputFiles('#backupLoad2', { name: '사업비편성표.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: require('fs').readFileSync(dxPath) });
+  await d.waitForTimeout(400);
+  check('[엑셀 불러오기] 내려받은 엑셀을 올리면 편성 내용 복원(세부 내역 포함)', (await d.inputValue('#gov')) === '300,000' && (await d.getByLabel('연구활동비 세목 2 현물(천원)').inputValue()) === '5,000' && (await d.textContent('[data-cell="equipment.cash"]')) === '35,000' && (await d.locator('#undoBar').isVisible()));
   await d.reload();
   check('[세부] 새로고침 후 세부 내역 유지', (await d.getByLabel('연구활동비 세목 2 현물(천원)').inputValue()) === '5,000' && (await d.textContent('[data-cell="equipment.cash"]')) === '35,000');
   await d.getByLabel('연구활동비 세목 1 삭제').click();

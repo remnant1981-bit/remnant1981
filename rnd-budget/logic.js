@@ -458,6 +458,43 @@ const fit = Math.ceil((gov * 100) / (100 + rate));
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${cols}<sheetData>${body}</sheetData></worksheet>`;
   }
 
+  // 엑셀 안에 편성 데이터를 숨김 시트로 함께 저장 → 이 파일을 다시 올리면 이어서 작업(엑셀에서 고친 값은 반영되지 않음)
+  const DATA_SHEET = '_rndbudget', DATA_MAGIC = 'RNDBUDGET1';
+  const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  function b64encode(bytes) {
+    let out = '';
+    for (let i = 0; i < bytes.length; i += 3) {
+      const a = bytes[i], b = bytes[i + 1], c = bytes[i + 2];
+      out += B64[a >> 2] + B64[((a & 3) << 4) | ((b ?? 0) >> 4)] + (b === undefined ? '=' : B64[((b & 15) << 2) | ((c ?? 0) >> 6)]) + (c === undefined ? '=' : B64[c & 63]);
+    }
+    return out;
+  }
+  function b64decode(str) {
+    const t = String(str).replace(/[^A-Za-z0-9+/]/g, ''), out = new Uint8Array(Math.floor((t.length * 3) / 4));
+    let n = 0;
+    for (let i = 0; i < t.length; i += 4) {
+      const v = [0, 1, 2, 3].map((k) => (i + k < t.length ? B64.indexOf(t[i + k]) : -1));
+      out[n++] = (v[0] << 2) | (v[1] >> 4);
+      if (v[2] >= 0) out[n++] = ((v[1] & 15) << 4) | (v[2] >> 2);
+      if (v[3] >= 0) out[n++] = ((v[2] & 3) << 6) | v[3];
+    }
+    return out.subarray(0, n);
+  }
+  function dataSheet(project, savedAt) {
+    const b64 = b64encode(new TextEncoder().encode(JSON.stringify({ app: 'rnd-budget', v: 3, savedAt, project })));
+    const rows = [[DATA_MAGIC], ['이 시트는 편성 도구가 이 파일을 다시 불러올 때 쓰는 데이터입니다. 지우거나 고치지 마세요.']];
+    for (let i = 0; i < b64.length; i += 30000) rows.push([b64.slice(i, i + 30000)]);
+    return { name: DATA_SHEET, rows, hidden: true };
+  }
+  /** 숨김 시트의 A열 문자열 목록(위에서부터) → 백업 객체. 형식이 다르면 null */
+  function parseDataCells(cells) {
+    if (!Array.isArray(cells) || cells[0] !== DATA_MAGIC) return null;
+    try {
+      const obj = JSON.parse(new TextDecoder().decode(b64decode(cells.slice(2).join(''))));
+      return obj && obj.app === 'rnd-budget' && obj.project ? obj : null;
+    } catch { return null; }
+  }
+
   /** 편성표 XLSX(합계는 엑셀 수식) */
   const RB_KIND_LABEL = (p) => PERSON_KINDS[personKind(p)].label;
   const STYLES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="맑은 고딕"/></font><font><b/><sz val="11"/><name val="맑은 고딕"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE8EFFF"/></patternFill></fill></fills><borders count="2"><border/><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/></border></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="6"><xf/><xf numFmtId="3" applyNumberFormat="1"/><xf fontId="1" applyFont="1"/><xf borderId="1" applyBorder="1"/><xf numFmtId="3" borderId="1" applyNumberFormat="1" applyBorder="1"/><xf fontId="1" fillId="2" borderId="1" applyFont="1" applyFill="1" applyBorder="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
@@ -473,7 +510,7 @@ const fit = Math.ceil((gov * 100) / (100 + rate));
   function workbook(sheets) {
     const n = sheets.length;
     const ct = sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('');
-    const wbSheets = sheets.map((s, i) => `<sheet name="${esc(s.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('');
+    const wbSheets = sheets.map((s, i) => `<sheet name="${esc(s.name)}" sheetId="${i + 1}"${s.hidden ? ' state="veryHidden"' : ''} r:id="rId${i + 1}"/>`).join('');
     const rels = sheets.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('');
     return zip([
       { name: '[Content_Types].xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${ct}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>` },
@@ -489,7 +526,7 @@ const fit = Math.ceil((gov * 100) / (100 + rate));
    * 계획서 양식 엑셀: ① 연구개발비 총괄표(연차·기관별 정부지원/기관부담 현금·현물) ② 기관별 비목 사용계획(연차별 + 전체)
    * ③ 참여연구원 인건비 명세 ④ 적용 기준·근거. 합계·소계는 엑셀 수식.
    */
-  function buildXlsx(raw) {
+  function buildXlsx(raw, opts = {}) {
     const P = calcProject(raw);
     const p = P.project;
     const N = 1, B = 2, T = 3, TN = 4, H = 5;
@@ -615,6 +652,7 @@ const fit = Math.ceil((gov * 100) / (100 + rate));
     P.insts.forEach((it) => it.years.forEach((r, y) => r.checks.filter((c) => c.level !== 'info').forEach((c) => { if (c.level === 'error') nErr++; t5.push([txt(it.name), txt(yl(y)), txt(LV[c.level]), txt(c.msg), txt(c.basis || '')]); })));
     t5.splice(2, 0, [nErr ? `⚠ 오류 ${nErr}건이 있는 상태로 내려받았습니다.` : '✔ 오류 없음']);
     sheets.push({ name: sheetName('점검 결과', used), rows: t5, widths: [24, 10, 8, 100, 40] });
+    sheets.push(dataSheet(p, opts.savedAt || ''));
     return workbook(sheets);
   }
 
@@ -880,7 +918,7 @@ const fit = Math.ceil((gov * 100) / (100 + rate));
     return s;
   }
 
-  const RB = { SUBITEMS, MAX_SUB, subType, hasSub, itemAmounts, setItemTotal, UNIT_WARN, shiftMonthly, parseAmount, wonText, ITEM_HELP, DRAFT, minMaterialCash, draftBudget, suggestFixes, applyFix, autoFix, isYmd, ymdAddMonths, blankExec, normalizeExec, execMonths, calcExecution, buildExecXlsx, MAX_YEARS, MAX_INSTS, ROLES, blankYear, newInst, normalizeProject, sheetState, calcProject, splitCash, EXAMPLES, BASIS_DATE, SOURCES, RULESETS, LIMITS, ITEMS, PERSON_KINDS, DEFAULT_RULES, int, pct, effectiveRules, calcFunding, personCost, calcBudget, buildXlsx, crc32 };
+  const RB = { DATA_SHEET, DATA_MAGIC, b64encode, b64decode, parseDataCells, SUBITEMS, MAX_SUB, subType, hasSub, itemAmounts, setItemTotal, UNIT_WARN, shiftMonthly, parseAmount, wonText, ITEM_HELP, DRAFT, minMaterialCash, draftBudget, suggestFixes, applyFix, autoFix, isYmd, ymdAddMonths, blankExec, normalizeExec, execMonths, calcExecution, buildExecXlsx, MAX_YEARS, MAX_INSTS, ROLES, blankYear, newInst, normalizeProject, sheetState, calcProject, splitCash, EXAMPLES, BASIS_DATE, SOURCES, RULESETS, LIMITS, ITEMS, PERSON_KINDS, DEFAULT_RULES, int, pct, effectiveRules, calcFunding, personCost, calcBudget, buildXlsx, crc32 };
   if (typeof module !== 'undefined' && module.exports) module.exports = RB;
   else root.RB = RB;
 })(typeof self !== 'undefined' ? self : this);

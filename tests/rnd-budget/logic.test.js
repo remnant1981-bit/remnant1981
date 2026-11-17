@@ -427,3 +427,20 @@ test('[참여기관만 편성] 주관기관이 없어도 경고 없음, 2곳 이
   const two = JSON.parse(JSON.stringify(RB.EXAMPLES.ok.state)); two.insts[0].role = 'joint';
   assert.ok(!RB.calcProject(two).checks.some((c) => /주관연구개발기관/.test(c.msg)));
 });
+
+test('[엑셀 다시 불러오기] 숨김 시트에 편성 데이터 저장 → 그대로 복원, 다른 엑셀은 null', async () => {
+  const RBN = require('../../rnd-budget/notice.js');
+  const p = RB.normalizeProject(RB.EXAMPLES.ok.state);
+  p.title = '한글·"따옴표"·<태그> & 이모지 없음'; p.insts[0].data[0].items.activity = { sub: [{ t: 'expert', name: '자문', cash: '3000', inkind: '' }] };
+  const bytes = RB.buildXlsx(p, { savedAt: '2026-11-17T00:00:00.000Z' });
+  const files = unzip(bytes);
+  assert.match(files['xl/workbook.xml'], /name="_rndbudget"[^>]*state="veryHidden"/);
+  const obj = RB.parseDataCells(await RBN.readXlsxDataCells(bytes, RB.DATA_SHEET));
+  assert.equal(obj.savedAt, '2026-11-17T00:00:00.000Z');
+  assert.deepEqual(obj.project, p);
+  assert.equal(await RBN.readXlsxDataCells(RB.buildExecXlsx(p, 0, 0, '2026-11-17'), RB.DATA_SHEET), null); // 집행 현황 엑셀에는 없음
+  assert.equal(RB.parseDataCells(['다른 값', '', 'xxxx']), null);
+  assert.equal(RB.parseDataCells([RB.DATA_MAGIC, '', '!!!!깨진값']), null);
+  const big = new Uint8Array(70001).map((_, i) => (i * 31) % 256);
+  assert.deepEqual([...RB.b64decode(RB.b64encode(big))], [...big]);
+});

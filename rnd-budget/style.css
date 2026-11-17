@@ -354,3 +354,4 @@ label[data-filebtn]:focus-visible{outline:2px solid var(--brand);outline-offset:
 .live-start ol{margin:0 0 10px;padding-left:1.2em;font-size:.88rem;line-height:1.7}
 .empty-note{margin:0;padding:16px;text-align:center;border:1px dashed var(--line);border-radius:10px;color:var(--muted);font-size:.9rem}
 @media print{.projbox>summary .proj-edit,.live-start{display:none!important}}
+.ask-body p{white-space:pre-line}

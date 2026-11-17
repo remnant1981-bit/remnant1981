@@ -534,12 +534,12 @@
   }
   $('xlsx').addEventListener('click', () => {
     const name = `${safeName($('xlsxName').value) || defaultName()}.xlsx`;
-    const bytes = RB.buildXlsx(single(S));
+    const bytes = RB.buildXlsx(single(S), { savedAt: new Date().toISOString() });
     const url = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
     const a = el('a', { href: url, download: name });
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
-    toast($('dlToast'), `✔ ‘${name}’ 다운로드됨 — 엑셀에서 열면 합계가 자동 계산됩니다.`);
+    toast($('dlToast'), `✔ ‘${name}’ 다운로드됨 — 엑셀에서 열면 합계가 자동 계산됩니다. 이 파일을 ‘불러오기’에 올리면 이어서 작업할 수 있습니다.`);
   });
   const MAX_SCEN = 20;
   function renderScenarios() {
@@ -699,7 +699,16 @@
     e.target.value = '';
     if (!file) return;
     try {
-      if (/\.xlsx?$/i.test(file.name)) { await notify('엑셀 파일은 불러올 수 없습니다. 엑셀은 계획서 작성용 출력물이고, 이어서 작업하려면 ‘백업 저장’으로 받은 .json 파일을 올려 주세요.'); return; }
+      if (/\.xlsx$/i.test(file.name)) { // 이 도구가 만든 엑셀: 숨김 시트의 편성 데이터로 복원
+        if (file.size > 20 * 1024 * 1024) throw new Error('size');
+        let obj = null;
+        try { obj = RB.parseDataCells(await window.RBN.readXlsxDataCells(new Uint8Array(await file.arrayBuffer()), RB.DATA_SHEET)); } catch { obj = null; }
+        if (!obj) { await notify('이 엑셀에서는 편성 내용을 찾지 못했습니다. 이 도구에서 내려받은 엑셀(2026-11-17 이후 버전)이거나 ‘백업 저장’으로 받은 .json 파일만 불러올 수 있습니다.'); return; }
+        const px = RB.normalizeProject(obj.project);
+        if (!(await ask(`엑셀에 함께 저장된 편성 내용(${String(obj.savedAt || '').slice(0, 10) || '저장 시점'}, ${px.title || '제목 없음'})을 불러올까요? 현재 입력은 바뀝니다.\n※ 엑셀에서 직접 고친 금액은 반영되지 않고, 내려받을 때의 편성 내용이 복원됩니다.`))) return;
+        mark(); replaceProject(px, C.mode); offerUndo('엑셀에서 편성 내용을 불러왔습니다.');
+        return;
+      }
       if (file.size > 5 * 1024 * 1024) throw new Error('size');
       const obj = JSON.parse(await file.text());
       if (!obj || obj.app !== 'rnd-budget' || !obj.project) throw new Error('format');

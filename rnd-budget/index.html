@@ -188,7 +188,7 @@
       <button type="button" class="btn ghost sm" id="print">인쇄·PDF</button>
       <button type="button" class="btn ghost sm" id="saveScenario" data-feature="scenarios">현재 안 저장</button>
       <button type="button" class="btn ghost sm" id="backupSave2">백업 저장</button>
-      <label class="btn ghost sm" tabindex="0" role="button" data-filebtn>백업 불러오기<input type="file" id="backupLoad2" accept=".json,application/json" hidden></label>
+      <label class="btn ghost sm" tabindex="0" role="button" data-filebtn>불러오기(백업·엑셀)<input type="file" id="backupLoad2" accept=".json,.xlsx,application/json" hidden></label>
       <button type="button" class="btn ghost sm" id="reset">새로 작성</button>
     </div>
     <p class="save-status" id="saveStatus" role="status"></p>
@@ -239,7 +239,7 @@
         <div class="actions">
           <button type="button" class="btn" id="xXlsx">집행 현황 엑셀</button>
           <button type="button" class="btn ghost" id="backupSave">백업 저장</button>
-          <label class="btn ghost" id="backupLoadBtn" tabindex="0" role="button" data-filebtn>백업 불러오기<input type="file" id="backupLoad" accept=".json,application/json" hidden></label>
+          <label class="btn ghost" id="backupLoadBtn" tabindex="0" role="button" data-filebtn>불러오기(백업·엑셀)<input type="file" id="backupLoad" accept=".json,.xlsx,application/json" hidden></label>
         </div>
         <p class="dl-toast" id="xToast" role="status" hidden></p>
         <p class="hint">집행 기록은 이 브라우저에만 저장됩니다. 브라우저 정리·PC 교체 전에 <strong>백업 저장</strong>하세요.</p>
@@ -279,6 +279,7 @@
     <details data-cat="집행"><summary>집행 중 비목 금액을 바꿀 수 있나요?</summary><p>가능하지만 비목·금액에 따라 전문기관 사전 승인이 필요합니다(예: 위탁연구개발비 20% 이상 증액, 연구수당 증액, 3천만 원 이상 장비 신규 구입). 사업별 운영요령을 확인하세요. <small class="cite">근거: 사용 기준 제73조</small></p></details>
     <details data-cat="도구"><summary>입력한 내용은 어디에 저장되나요?</summary><p>이 브라우저에만 저장되고 서버로 보내지 않습니다. 브라우저를 정리하거나 PC를 바꾸기 전에는 '백업 저장'으로 파일을 받아 두세요. 다른 PC에서는 '백업 불러오기'로 이어서 작업할 수 있습니다.</p></details>
     <details data-cat="도구"><summary>공고문을 올리면 파일이 외부로 전송되나요?</summary><p>아니요. 파일은 이 PC의 브라우저 안에서만 읽습니다. 찾은 값은 근거 문장과 함께 보여 주고, 확인한 항목만 적용합니다.</p></details>
+    <details data-cat="도구" data-kw="엑셀 불러오기 업로드 이어서 복원 다시 열기"><summary>내려받은 엑셀을 다시 불러와 이어서 작업할 수 있나요?</summary><p>네. 이 도구에서 내려받은 엑셀을 '불러오기(백업·엑셀)'에 올리면 내려받을 때의 편성 내용이 복원됩니다(엑셀 안에 편성 데이터가 숨김 시트로 함께 저장됨). 다만 <strong>엑셀에서 직접 고친 금액은 반영되지 않습니다.</strong> 계속 고칠 내용은 도구에서 수정한 뒤 다시 내려받으세요.</p></details>
     <details data-cat="도구"><summary>내려받은 엑셀을 고쳐도 되나요?</summary><p>네. 합계·비율은 수식으로 들어가 있어 금액을 바꾸면 자동으로 다시 계산됩니다. 정부지원·기관 현금 구분은 비례 배분한 값이니 계획서에 맞춰 조정하세요.</p></details>
     <details data-cat="인건비"><summary>인건비에 4대 보험과 퇴직금도 포함되나요?</summary><p>네. 인건비에는 급여(4대 보험 본인부담금 포함)와 4대 보험 기관부담금, 퇴직급여충당금이 포함됩니다. 연봉 칸에 이를 포함한 금액을 넣으세요. <small class="cite">근거: 사용 기준 제6조</small></p></details>
     <details data-cat="기본"><summary>2027년에 바뀌는 기준이 있나요?</summary><p>연구개발비 사용 기준 개정안이 행정예고되어 있습니다(2026.10.15., 시행 예정 2027.1.1., 확정 전). 예고안 기준으로 장비 구입 완료 시기가 종료 2개월 전에서 6개월 전으로, 연구수당은 개인별 인건비 총액의 100% 이내 조건이 추가됩니다. 정부지원·현금 부담 비율은 변동이 없습니다. 확정되면 이 도구에 반영합니다. <small class="cite">근거: 과기정통부 공고 제2026-1017호(행정예고)</small></p></details>
