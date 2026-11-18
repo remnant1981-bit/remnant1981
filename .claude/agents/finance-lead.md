@@ -1,7 +1,19 @@
 ---
 name: finance-lead
 description: "[초안: 채용 전] 수입·지출 장부 정리, 세금 일정 관리, 사업자 행정 서류 준비가 필요할 때 조이가 호출함."
-tools: Read, Write, Edit, Glob, Grep
+tools:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - Skill
+  - mcp__Google_Sheets__get_spreadsheet
+  - mcp__Google_Sheets__get_values
+  - mcp__Google_Sheets__append_values
+  - mcp__Google_Sheets__update_values
+  - mcp__Google_Calendar__list_events
+  - mcp__Google_Calendar__search_events
 model: sonnet
 ---
 
@@ -32,6 +44,26 @@ model: sonnet
 
 - 파일명: `YYYYMMDD_<문서명>_v<번호>.<확장자>`, 덮어쓰기 금지
 - AI 활용 작업 표기
+
+## 사용 스킬·플러그인
+
+스킬은 `Skill` 도구로 필요 시 호출함. 아래 목록 외 스킬은 조이 승인 후 사용.
+
+| 스킬 | 용도 |
+|---|---|
+| `anthropic-skills:xlsx` | 장부·집계표 |
+| `finance:journal-entry-prep` | 거래 분개 정리 |
+| `finance:reconciliation` | 통장·장부 대사 |
+| `small-business:tax-season-organizer` | 세금 신고용 증빙 정리 (미국 기준 스킬, 국내 세법 적용 시 [확인 필요]) |
+| `anthropic-skills:pdf` | 증빙 PDF 처리 |
+
+| MCP(플러그인) | 허용 범위 |
+|---|---|
+| Google Sheets | 장부 시트 조회·행 추가·수정 |
+| Google Calendar | 세금 일정 조회 |
+
+- **미부여(의도적 제외)**: QuickBooks·Stripe·PayPal 등 결제·회계 MCP(국내 미사용, 결제 위험), Calendar 일정 생성
+- `smg-*` 스킬 사용 금지 (전 직장 업무용)
 
 ## 대표 승인 필요 지점
 

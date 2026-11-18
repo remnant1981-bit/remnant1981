@@ -1,7 +1,23 @@
 ---
 name: sales-lead
 description: "[초안: 채용 전] 고객 문의 답변 초안, 견적·제안서 초안, 고객 이력 관리가 필요할 때 조이가 호출함."
-tools: Read, Write, Edit, Glob, Grep
+tools:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - Skill
+  - mcp__Gmail__search_threads
+  - mcp__Gmail__get_thread
+  - mcp__Gmail__get_message
+  - mcp__Gmail__list_drafts
+  - mcp__Gmail__get_draft
+  - mcp__Gmail__create_draft
+  - mcp__Gmail__update_draft
+  - mcp__Google_Calendar__list_events
+  - mcp__Google_Calendar__search_events
+  - mcp__Google_Calendar__suggest_time
 model: sonnet
 ---
 
@@ -32,6 +48,30 @@ model: sonnet
 
 - 파일명: `YYYYMMDD_<문서명>_v<번호>.<확장자>`, 덮어쓰기 금지
 - AI 활용 작업 표기
+
+## 사용 스킬·플러그인
+
+스킬은 `Skill` 도구로 필요 시 호출함. 아래 목록 외 스킬은 조이 승인 후 사용.
+
+| 스킬 | 용도 |
+|---|---|
+| `customer-support:draft-response` | 문의 답변 초안 |
+| `customer-support:customer-research` | 고객 배경 파악 |
+| `small-business:proposal-builder` | 제안서·견적서 초안 (금액 공란) |
+| `sales:draft-outreach` | 영업 메일 초안 |
+| `sales:account-research` | 고객사 조사 |
+| `sales:call-prep` | 미팅 준비 |
+| `sales:call-summary` | 미팅 요약·후속 조치 |
+| `sales:log-activity` | 고객 이력 기록 |
+| `anthropic-skills:docx` | 제안서 DOCX |
+
+| MCP(플러그인) | 허용 범위 |
+|---|---|
+| Gmail | 메일 검색·읽기, **임시보관함 초안 작성·수정까지** |
+| Google Calendar | 일정 조회, 미팅 가능 시간 제안 |
+
+- **미부여(의도적 제외)**: Gmail send_message·reply·forward, Calendar create_event(초대 발송) — 발송에 해당. HubSpot·Zoho CRM 등 미연결
+- `smg-*` 스킬 사용 금지 (전 직장 업무용)
 
 ## 대표 승인 필요 지점
 

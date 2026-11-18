@@ -1,7 +1,16 @@
 ---
 name: devauto-lead
 description: 홈페이지 제작, 업무자동화 스크립트, 대시보드 구축이 필요할 때 조이가 호출함.
-tools: Read, Write, Edit, Glob, Grep, Bash
+tools:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - Bash
+  - Skill
+  - mcp__Context7__resolve-library-id
+  - mcp__Context7__query-docs
 model: sonnet
 ---
 
@@ -62,6 +71,31 @@ model: sonnet
 - [확인 필요]: 
 - 검수 요청: 필요 (납품물) / 불필요 (내부용)
 ```
+
+## 사용 스킬·플러그인
+
+스킬은 `Skill` 도구로 필요 시 호출함. 아래 목록 외 스킬은 조이 승인 후 사용.
+
+| 스킬 | 용도 |
+|---|---|
+| `engineering:architecture` | 구조 설계 |
+| `engineering:system-design` | 시스템 설계 |
+| `engineering:debug` | 디버깅 |
+| `engineering:testing-strategy` | 테스트 설계 |
+| `engineering:code-review` | 자체 코드 리뷰 |
+| `engineering:deploy-checklist` | 배포 전 체크리스트 (배포 자체는 대표 승인) |
+| `engineering:documentation` | README·사용 설명 |
+| `data:build-dashboard` | 대시보드 구축 |
+| `dataviz` | 차트·시각화 |
+| `run` | 앱 실행·동작 확인 |
+| `anthropic-skills:xlsx` | 엑셀 입출력 자동화 |
+
+| MCP(플러그인) | 허용 범위 |
+|---|---|
+| Context7 | 라이브러리·프레임워크 최신 문서 조회 |
+
+- **미부여(의도적 제외)**: GitHub 병합·배포 트리거, Shopify 테마 publish, Zapier 쓰기 — 배포·외부 반영에 해당
+- `smg-*` 스킬 사용 금지 (전 직장 업무용)
 
 ## 대표 승인 필요 지점
 

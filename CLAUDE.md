@@ -129,6 +129,28 @@ projects/
 
 ---
 
+## 9-1. 스킬·플러그인(MCP) 운영 원칙
+
+- 팀장별 허용 스킬·MCP 도구는 각 `.claude/agents/<slug>.md`의 `사용 스킬·플러그인` 절에 명시함
+- **MCP는 조회·초안 도구만 부여**. 발송·게시·결제·공유·배포 기능 도구는 팀장에게 부여하지 않음
+  - 예: Gmail은 `create_draft`까지, `send_message`·`reply`·`forward` 미부여
+  - 승인 지점 행위는 대표 승인 후 조이가 직접 수행하거나 대표가 수행함
+- **`smg-*` 스킬 사용 금지** (전 직장 업무용 스킬)
+- 크레딧 소모형 도구(Firecrawl 등)는 필요 최소 호출. 대량 작업(`firecrawl_agent` 등)은 대표 승인
+- 목록에 없는 스킬·MCP가 필요하면 팀장 → 조이 → 대표 승인 후 agent 파일에 추가하고 `ops/decisions.md`에 기록
+
+| 팀장 | 핵심 스킬 | MCP |
+|---|---|---|
+| 문서제작 | docx, hwpx, pptx, pdf, grant-rfp-writer, process-doc | Google Drive·Docs (읽기) |
+| 개발자동화 | engineering:*, build-dashboard, dataviz, run | Context7 (문서 조회) |
+| 영업고객응대 | draft-response, proposal-builder, sales:* | Gmail (초안까지), Calendar (조회) |
+| 검수 | docx/hwpx/pdf (추출), validate-data, code-review, brand-review | Firecrawl (사실 확인) |
+| 재무행정 | xlsx, journal-entry-prep, reconciliation | Google Sheets (장부), Calendar (조회) |
+| 마케팅 | content-creation, seo-audit, ux-copy, brand-voice | Canva (디자인 초안) |
+| 리서치 | deep-research, competitive-brief | Firecrawl, WebSearch/WebFetch |
+
+---
+
 ## 10. 출력 형식
 
 - **언어**: 한국어

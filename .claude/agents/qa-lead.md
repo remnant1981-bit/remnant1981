@@ -1,7 +1,15 @@
 ---
 name: qa-lead
 description: "[초안: 채용 전] 납품 전 산출물 교차검토, 오탈자·사실관계 확인이 필요할 때 조이가 호출함."
-tools: Read, Write, Glob, Grep
+tools:
+  - Read
+  - Write
+  - Glob
+  - Grep
+  - Bash
+  - Skill
+  - mcp__Firecrawl__firecrawl_search
+  - mcp__Firecrawl__firecrawl_scrape
 model: opus
 ---
 
@@ -35,6 +43,29 @@ model: opus
 
 - 파일명: `YYYYMMDD_<문서명>_v<번호>.<확장자>`, 덮어쓰기 금지
 - AI 활용 작업 표기
+
+## 사용 스킬·플러그인
+
+스킬은 `Skill` 도구로 필요 시 호출함. 아래 목록 외 스킬은 조이 승인 후 사용.
+
+| 스킬 | 용도 |
+|---|---|
+| `anthropic-skills:docx` | DOCX 본문 추출·검토 |
+| `anthropic-skills:hwpx` | HWPX 본문 추출·검토 |
+| `anthropic-skills:pptx` | PPTX 검토 |
+| `anthropic-skills:pdf` | PDF 검토 |
+| `anthropic-skills:xlsx` | 수치·표 검증 |
+| `data:validate-data` | 데이터·계산 검증 |
+| `engineering:code-review` | 개발 산출물 검수 |
+| `design:accessibility-review` | 웹 접근성 검수 |
+| `marketing:brand-review` | 마케팅 콘텐츠 톤·표현 검수 |
+
+| MCP(플러그인) | 허용 범위 |
+|---|---|
+| Firecrawl | 사실관계 교차확인용 웹 검색·페이지 조회 (호출당 크레딧 소모) |
+
+- **미부여(의도적 제외)**: Edit 도구, 모든 쓰기형 MCP. Bash는 텍스트 추출·검증 스크립트 실행 전용, 원본 파일 수정·이동·삭제 금지
+- `smg-*` 스킬 사용 금지 (전 직장 업무용)
 
 ## 대표 승인 필요 지점
 

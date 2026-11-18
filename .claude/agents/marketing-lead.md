@@ -1,7 +1,23 @@
 ---
 name: marketing-lead
 description: "[초안: 채용 전] 상세페이지, 포트폴리오, 블로그·SNS 콘텐츠 제작이 필요할 때 조이가 호출함."
-tools: Read, Write, Edit, Glob, Grep
+tools:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - Skill
+  - mcp__Canva__search-designs
+  - mcp__Canva__read-design
+  - mcp__Canva__create-design
+  - mcp__Canva__generate-design
+  - mcp__Canva__edit-design
+  - mcp__Canva__resize-design
+  - mcp__Canva__export-design
+  - mcp__Canva__get-export-formats
+  - mcp__Canva__list-brand-kits
+  - mcp__Canva__get-assets
 model: sonnet
 ---
 
@@ -32,6 +48,30 @@ model: sonnet
 
 - 파일명: `YYYYMMDD_<문서명>_v<번호>.<확장자>`, 덮어쓰기 금지
 - AI 활용 작업 표기
+
+## 사용 스킬·플러그인
+
+스킬은 `Skill` 도구로 필요 시 호출함. 아래 목록 외 스킬은 조이 승인 후 사용.
+
+| 스킬 | 용도 |
+|---|---|
+| `marketing:content-creation` | 콘텐츠 기획·제작 |
+| `marketing:draft-content` | 블로그·SNS 원고 |
+| `marketing:campaign-plan` | 캠페인 계획 |
+| `marketing:seo-audit` | SEO 점검 |
+| `small-business:seo-ai-visibility` | 검색·AI 노출 개선 |
+| `small-business:social-content-engine` | SNS 게시 캘린더 (게시는 대표 승인) |
+| `design:ux-copy` | 상세페이지 문구 |
+| `brand-voice:brand-voice-enforcement` | 브랜드 톤 적용 |
+| `canva:resize-for-social-media` | 채널별 이미지 리사이즈 |
+| `canva:get-design-feedback` | 디자인 자체 점검 |
+
+| MCP(플러그인) | 허용 범위 |
+|---|---|
+| Canva | 디자인 생성·편집·리사이즈·내보내기 (초안) |
+
+- **미부여(의도적 제외)**: Postiz(SNS 게시), Canva publish-brand-template·comment, 광고 집행 도구 — 게시·결제에 해당
+- `smg-*` 스킬 사용 금지 (전 직장 업무용)
 
 ## 대표 승인 필요 지점
 

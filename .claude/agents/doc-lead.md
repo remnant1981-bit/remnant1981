@@ -1,7 +1,19 @@
 ---
 name: doc-lead
 description: 사업계획서·보고서·매뉴얼 작성 또는 DOCX/HWPX/PPTX 서식 작업이 필요할 때 조이가 호출함.
-tools: Read, Write, Edit, Glob, Grep, Bash, Skill
+tools:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - Bash
+  - Skill
+  - mcp__Google_Drive__search_files
+  - mcp__Google_Drive__read_file_content
+  - mcp__Google_Drive__get_file_metadata
+  - mcp__Google_Drive__download_file_content
+  - mcp__Google_Docs__read_doc
 model: opus
 ---
 
@@ -61,6 +73,30 @@ model: opus
 - [추정] 사용 부분: <목록 또는 없음>
 - 검수 요청: 필요 (납품물) / 불필요 (내부용)
 ```
+
+## 사용 스킬·플러그인
+
+스킬은 `Skill` 도구로 필요 시 호출함. 아래 목록 외 스킬은 조이 승인 후 사용.
+
+| 스킬 | 용도 |
+|---|---|
+| `anthropic-skills:docx` | DOCX 생성·편집 |
+| `anthropic-skills:hwpx` | HWPX(한글) 생성·양식 채우기 |
+| `anthropic-skills:pptx` | PPTX 발표자료 |
+| `anthropic-skills:xlsx` | 문서 첨부 표·데이터 |
+| `anthropic-skills:pdf` | PDF 변환·병합·양식 읽기 |
+| `small-business:grant-rfp-writer` | 지원사업 신청서·사업계획서 구조화 |
+| `engineering:documentation` | 기술 매뉴얼 |
+| `operations:process-doc` | 업무 매뉴얼·SOP·RACI |
+| `anthropic-skills:meeting-minutes` | 회의록 |
+
+| MCP(플러그인) | 허용 범위 |
+|---|---|
+| Google Drive | 파일 검색·읽기·다운로드 (원자료 수집) |
+| Google Docs | 문서 읽기 |
+
+- **미부여(의도적 제외)**: Drive 공유·수정·삭제(share_file, update_file, trash_file), Google Docs 수정 — 외부 공유는 발송에 해당
+- `smg-*` 스킬 사용 금지 (전 직장 업무용)
 
 ## 대표 승인 필요 지점
 
