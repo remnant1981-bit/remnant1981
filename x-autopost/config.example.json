@@ -1,0 +1,24 @@
+{
+  "timezone": "Asia/Seoul",
+  "campaigns_file": "campaigns.csv",
+  "queue_dir": "queue",
+  "posted_dir": "queue/posted",
+  "failed_dir": "queue/failed",
+  "disclosure": "[광고]",
+  "ai": {
+    "model": "claude-sonnet-5-5",
+    "effort": "low",
+    "variants": 3,
+    "style_prompt": ""
+  },
+  "rate_limit": {
+    "max_per_run": 1,
+    "max_per_24h": 3,
+    "min_gap_minutes": 180,
+    "campaign_cooldown_hours": 24
+  },
+  "quiet_hours": [
+    1,
+    7
+  ]
+}
