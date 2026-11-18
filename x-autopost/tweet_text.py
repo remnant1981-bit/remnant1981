@@ -69,6 +69,8 @@ def check(text: str, url: str = "", disclosure: str = "[광고]") -> list[str]:
         problems.append("링크 2개 이상 (스팸 판정 위험)")
     if len(re.findall(r"#\S+", text)) > 3:
         problems.append("해시태그 3개 초과")
+    if re.search(r"\{[^}]*\}|○○|XXXX", text):
+        problems.append("빈칸 미입력 ({…}/○○/XXXX 남아 있음)")
     for w in BANNED_WORDS:
         if w in text:
             problems.append(f"과장 표현: {w}")

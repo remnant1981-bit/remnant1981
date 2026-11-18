@@ -36,6 +36,7 @@ def test_check_catches_problems():
     probs = tweet_text.check("무조건 받으세요 " + "가" * 140, URL)
     joined = " ".join(probs)
     assert "글자 수" in joined and "광고 표시" in joined and "링크" in joined and "무조건" in joined
+    assert "빈칸" in " ".join(tweet_text.check(tweet_text.compose("{게임명} 사전예약", URL), URL))
 
 
 # ---------- fixtures ----------
