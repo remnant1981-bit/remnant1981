@@ -202,3 +202,26 @@ def test_generate_request_shape(cfg):
     assert out == [{"body": "b", "angle": "a"}]
     assert seen["output_config"]["format"]["type"] == "json_schema"
     assert "혜택" in seen["messages"][0]["content"] and URL not in seen["messages"][0]["content"]
+
+
+def test_intent_mode(cfg, monkeypatch):
+    for k in ("X_API_KEY", "X_API_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_TOKEN_SECRET"):
+        monkeypatch.delenv(k, raising=False)
+    assert isinstance(x_poster.make_client(cfg), x_poster.IntentClient)
+    sent = []
+    put(cfg, "1", body="한글 본문 & 기호 #태그")
+    c = x_poster.IntentClient(sender=lambda t, m, u: sent.append(u) or True)
+    res = x_poster.run(cfg, client=c, now=NOW)
+    assert res["posted"][0][1] == "intent"
+    u = sent[0]
+    assert u.startswith("https://x.com/intent/post?text=") and "%23" in u and "%26" in u and " " not in u
+    it = json.loads((common.path(cfg, "posted_dir") / "1.json").read_text(encoding="utf-8"))
+    assert it["method"] == "intent" and it["intent_url"] == u
+    assert "작성 화면 열기" in x_poster.summary_md(res)
+    # 알림 설정 없으면 중단, 대기열 유지
+    put(cfg, "2", campaign="B")
+    res = x_poster.run(cfg, client=x_poster.IntentClient(sender=lambda *a: False), now=NOW + dt.timedelta(hours=4))
+    assert "알림 설정 없음" in res["error"] and (common.path(cfg, "queue_dir") / "2.json").exists()
+    monkeypatch.setenv("X_API_KEY", "a")
+    cfg["post_method"] = "intent"
+    assert isinstance(x_poster.make_client(cfg), x_poster.IntentClient)

@@ -5,6 +5,7 @@
   "posted_dir": "queue/posted",
   "failed_dir": "queue/failed",
   "disclosure": "[광고]",
+  "post_method": "auto",
   "ai": {
     "model": "claude-sonnet-5-5",
     "effort": "low",

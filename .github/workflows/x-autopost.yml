@@ -4,6 +4,7 @@ name: X 자동 게시 (애드픽)
 #  1) 연결 점검: Actions → 이 워크플로 → Run workflow → mode "연결 점검"
 #  2) 초안 작성: mode "초안 작성" → campaigns.csv 캠페인으로 트윗 초안 → queue/ 에 커밋 (게시 안 함)
 #  3) 게시: 정기 실행(KST 09·12·15·18·21시)이 대기열에서 조건 맞는 글 1건씩 게시
+#     X API 키 없으면 → 휴대폰 알림으로 X 작성 링크 전송 (탭 → X 앱에서 [게시])
 on:
   workflow_dispatch:
     inputs:
@@ -70,10 +71,15 @@ jobs:
         run: |
           has_x=false; [ -n "$X_API_KEY" ] && [ -n "$X_API_SECRET" ] && [ -n "$X_ACCESS_TOKEN" ] && [ -n "$X_ACCESS_TOKEN_SECRET" ] && has_x=true
           has_ai=false; [ -n "$ANTHROPIC_API_KEY" ] && has_ai=true
+          has_notify=false; { [ -n "$NTFY_TOPIC" ] || { [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; }; } && has_notify=true
+          # X API 키가 없으면 무료 '작성 링크 알림' 방식 (알림 설정 필요)
+          can_post=false; { [ "$has_x" = true ] || [ "$has_notify" = true ]; } && can_post=true
           echo "has_x=$has_x" >> "$GITHUB_OUTPUT"
           echo "has_ai=$has_ai" >> "$GITHUB_OUTPUT"
-          if [ "$has_x" != true ] && [ "${{ github.event_name }}" = schedule ]; then
-            echo "X API Secret 미등록 → 정기 실행 건너뜀" >> "$GITHUB_STEP_SUMMARY"
+          echo "has_notify=$has_notify" >> "$GITHUB_OUTPUT"
+          echo "can_post=$can_post" >> "$GITHUB_OUTPUT"
+          if [ "$can_post" != true ] && [ "${{ github.event_name }}" = schedule ]; then
+            echo "X API 키·알림 설정 모두 없음 → 정기 실행 건너뜀" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: 연결 점검
@@ -82,7 +88,9 @@ jobs:
           {
             echo "## 설정 상태"
             echo "| 항목 | 상태 |"; echo "|---|---|"
-            echo "| X API 키 4종 | ${{ steps.cfg.outputs.has_x == 'true' && '✅' || '❌ 미등록' }} |"
+            echo "| 게시 방식 | ${{ steps.cfg.outputs.has_x == 'true' && 'X API 자동 게시' || '작성 링크 알림 (무료, 탭 → 게시)' }} |"
+            echo "| X API 키 4종 | ${{ steps.cfg.outputs.has_x == 'true' && '✅' || '⚪ 미등록 (선택)' }} |"
+            echo "| 휴대폰 알림 (NTFY_TOPIC / TELEGRAM_*) | ${{ steps.cfg.outputs.has_notify == 'true' && '✅' || '❌ 미등록 (API 키 없으면 필수)' }} |"
             echo "| ANTHROPIC_API_KEY | ${{ steps.cfg.outputs.has_ai == 'true' && '✅' || '⚪ 미등록 (초안 작성 시 필요)' }} |"
           } >> "$GITHUB_STEP_SUMMARY"
           python x_poster.py --check | tee -a "$GITHUB_STEP_SUMMARY"
@@ -107,7 +115,7 @@ jobs:
         run: python x_poster.py --list | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: 게시
-        if: (env.MODE == '게시' || env.MODE == '초안 작성+게시') && steps.cfg.outputs.has_x == 'true'
+        if: (env.MODE == '게시' || env.MODE == '초안 작성+게시') && steps.cfg.outputs.can_post == 'true'
         run: python x_poster.py $MANUAL
 
       - name: 결과 커밋

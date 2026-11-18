@@ -15,6 +15,7 @@ DEFAULT_CONFIG = {
     "posted_dir": "queue/posted",
     "failed_dir": "queue/failed",
     "disclosure": "[광고]",
+    "post_method": "auto",       # auto / api / intent (README 참고)
     "ai": {
         "model": "claude-sonnet-5-5",
         "effort": "low",

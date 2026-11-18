@@ -8,7 +8,10 @@ queue/*.json 트윗을 X(x.com)에 게시 (X API v2, OAuth 1.0a 사용자 인증
   python x_poster.py --check       # API 키 확인 (계정 이름 출력)
   python x_poster.py --manual      # 직접 실행: 간격 제한만 완화 (24시간 최대 건수는 그대로)
 
-환경변수: X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET
+게시 방식 (config.json → post_method):
+  auto   : X API 키가 있으면 api, 없으면 intent (기본)
+  api    : X API 로 바로 게시 — 환경변수 X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET (사용량 과금)
+  intent : 무료. 휴대폰 알림(ntfy/텔레그램)으로 X 작성 링크 전송 → 탭하면 본문이 채워진 X 앱 → [게시]
 게시 조건 (config.json → rate_limit / quiet_hours):
   - publish_at 이 지났거나 비어 있음, 캠페인 마감 전
   - 직전 게시 후 min_gap_minutes 경과, 24시간 max_per_24h 미만, 같은 캠페인 cooldown 경과
@@ -23,6 +26,7 @@ import json
 import os
 import shutil
 import sys
+import urllib.parse
 from pathlib import Path
 
 import common
@@ -79,6 +83,41 @@ class XClient:
     def me(self) -> str:
         r = self._wrap(lambda: self.c.get_me(user_auth=True))
         return r.data.username
+
+
+def intent_url(text: str) -> str:
+    """X 작성 화면 링크 — 휴대폰에서 열면 X 앱에 본문이 채워진 채로 열림 (API·비용 불필요)"""
+    return "https://x.com/intent/post?text=" + urllib.parse.quote(text, safe="")
+
+
+class IntentClient:
+    """API 없이: 작성 링크를 휴대폰 알림(ntfy/텔레그램)으로 보냄 → 탭 → [게시] 1번"""
+    method = "intent"
+
+    def __init__(self, sender=None):
+        self.sender = sender or _notify_send
+
+    def post(self, text: str) -> str:
+        url = intent_url(text)
+        if not self.sender("X에 올릴 글 (탭 → 게시)", text, url):
+            raise AuthError("알림 설정 없음 (NTFY_TOPIC 또는 TELEGRAM_BOT_TOKEN+TELEGRAM_CHAT_ID 필요)")
+        return "intent"
+
+    def me(self) -> str:
+        return "(작성 링크 알림 방식)"
+
+
+def has_api_keys() -> bool:
+    return all(os.environ.get(k, "").strip() for k in
+               ("X_API_KEY", "X_API_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_TOKEN_SECRET"))
+
+
+def make_client(cfg: dict):
+    """post_method: api / intent / auto(키 있으면 api, 없으면 intent)"""
+    m = cfg.get("post_method", "auto")
+    if m == "intent" or (m == "auto" and not has_api_keys()):
+        return IntentClient()
+    return XClient()
 
 
 def text_hash(text: str) -> str:
@@ -191,7 +230,7 @@ def run(cfg: dict, client=None, dry_run: bool = False, manual: bool = False, now
             log.append({"time": now.isoformat(), "campaign": it["campaign"], "hash": text_hash(it["text"])})
             continue
         try:
-            client = client or XClient()
+            client = client or make_client(cfg)
             tid = client.post(it["text"])
         except (AuthError, RateLimited) as e:
             res["error"] = f"{type(e).__name__}: {e}"
@@ -216,7 +255,11 @@ def run(cfg: dict, client=None, dry_run: bool = False, manual: bool = False, now
                "campaign": it["campaign"], "hash": text_hash(it["text"])}
         common.append_jsonl(log_path, row)
         log.append(row)
-        it.update(posted_at=row["time"], tweet_id=tid)
+        if tid == "intent":
+            row["method"] = "intent"
+            it.update(sent_at=row["time"], method="intent", intent_url=intent_url(it["text"]))
+        else:
+            it.update(posted_at=row["time"], tweet_id=tid)
         _move(f, common.path(cfg, "posted_dir"), it)
         res["posted"].append((f.name, tid, it["text"]))
     return res
@@ -229,7 +272,8 @@ def summary_md(res: dict) -> str:
     if res["posted"]:
         lines += ["| 파일 | 트윗 | 본문 |", "|---|---|---|"]
         for name, tid, text in res["posted"]:
-            link = f"[보기](https://x.com/i/web/status/{tid})" if tid.isdigit() else tid
+            link = (f"[보기](https://x.com/i/web/status/{tid})" if tid.isdigit()
+                    else f"[작성 화면 열기]({intent_url(text)})" if tid == "intent" else tid)
             lines.append(f"| {name} | {link} | {text.replace(chr(10), ' ').replace('|', '/')[:80]} |")
     else:
         lines.append(f"게시 없음{' — ' + res['blocked'] if res['blocked'] else ''}")
@@ -240,13 +284,18 @@ def summary_md(res: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _notify(title: str, msg: str, priority: str = "default") -> None:
-    sys.path.insert(0, str(common.BASE_DIR.parent / "tistory-autopost"))
+def _notify_send(title: str, msg: str, url: str = "", priority: str = "default") -> bool:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tistory-autopost"))
     try:
         import notify
-        notify.send(title, msg, priority=priority)
-    except Exception:
-        pass
+        return notify.send(title, msg, url=url, priority=priority)
+    except Exception as e:
+        print(f"[알림] 실패: {e}", file=sys.stderr)
+        return False
+
+
+def _notify(title: str, msg: str, priority: str = "default") -> None:
+    _notify_send(title, msg, priority=priority)
 
 
 def main(argv=None) -> int:
@@ -260,7 +309,14 @@ def main(argv=None) -> int:
 
     if a.check:
         try:
-            print(f"✓ 연결됨: @{XClient().me()}")
+            c = make_client(cfg)
+            if isinstance(c, IntentClient):
+                ok = _notify_send("X 자동 게시 연결 점검", "이 알림을 탭하면 X 작성 화면이 열림",
+                                  intent_url("[테스트] 연결 점검 — 게시하지 말고 닫을 것"))
+                print("✓ 작성 링크 알림 방식: 알림 전송됨" if ok else
+                      "✗ X API 키도 알림 설정도 없음 (NTFY_TOPIC 또는 TELEGRAM_* 필요)")
+                return 0 if ok else 2
+            print(f"✓ X API 연결됨: @{c.me()}")
             return 0
         except Exception as e:
             print(f"✗ {e}")
@@ -277,7 +333,7 @@ def main(argv=None) -> int:
     if res["error"]:
         _notify("X 게시 중단", res["error"], "high")
         return 2
-    if res["posted"]:
+    if res["posted"] and not all(t == "intent" for _, t, _ in res["posted"]):
         _notify("X 게시 완료", "\n".join(t for _, _, t in res["posted"])[:500])
     if res["dropped"]:
         _notify("X 게시 제외", "\n".join(f"{n}: {w}" for n, w in res["dropped"])[:500])
