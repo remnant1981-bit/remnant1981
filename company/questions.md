@@ -14,5 +14,5 @@
 | Q8 | 로고·색상·서체 보유 여부? | brand.md | **완료** (나래 시안 3종 → 바름 검수 → A안 잉크 노트 선정, 조이 위임) |
 | Q9 | 대외 연락처·채널은? | contact.md | **완료** (개인 Gmail 사용, 저장소 미기록 — 조이 위임 결정. 홈페이지·블로그 URL은 개설 후 기재) |
 | Q10 | 공개 가능한 기존 실적(Hooninote 명의)이 있는지? | portfolio.md | 잠정 완료 (현재 없음으로 기록, 첫 프로젝트부터 누적 — 조이 위임. 실적 있으면 대표가 알려주면 추가) |
-| Q11 | 사업자 유형(일반/간이)과 개업일은? | profile.md, ops/finance/tax-calendar.md | 대기 |
-| Q12 | 장부용 Google Sheets 지정 | finance-lead | 대기 |
+| Q11 | 사업자 유형(일반/간이)과 개업일은? | profile.md, ops/finance/tax-calendar.md | 진행 중 (미등록 예비창업자 확정 / 등록 시기: 비교안 작성 중 `projects/20261118_사업자등록시점비교/`) |
+| Q12 | 장부용 Google Sheets 지정 | finance-lead | 진행 중 (새 시트 생성 결정 → 한셈 양식 설계 후 조이가 생성, 시트 ID만 기록) |
