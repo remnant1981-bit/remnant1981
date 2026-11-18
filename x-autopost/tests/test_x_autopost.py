@@ -273,5 +273,13 @@ def test_queue_from_templates(cfg):
     assert len(drafts) == 5 and all("<br>" not in d["body"] for d in drafts)
     saved, rejected = fill_campaign.queue_tweets(card, filled)
     assert len(saved) == 5 and not rejected
+    # 재실행(다른 시각) → 중복 등록 안 됨
+    import common as _c
+    orig = _c.now
+    _c.now = lambda c: orig(c) + dt.timedelta(minutes=7)
+    try:
+        assert fill_campaign.queue_tweets(card, filled)[0] == []
+    finally:
+        _c.now = orig
     it = json.loads(saved[0].read_text(encoding="utf-8"))
     assert it["text"].startswith("[광고]") and it["url"] in it["text"] and it["deadline"] == "2099-12-31"

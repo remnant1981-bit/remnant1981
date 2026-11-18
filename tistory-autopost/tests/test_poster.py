@@ -139,3 +139,13 @@ def test_naive_publish_time_is_accepted(env):
 
 def test_feed_title_normalisation():
     assert tp._norm_title("난방비  절약 &amp;mdash; 보일러&middot;단열 ") == "난방비 절약 — 보일러·단열"
+
+
+def test_unfilled_draft_blanks_block_publish(env):
+    p = env["posts_dir"] / "d.md"
+    p.write_text("---\ntitle: t\n---\n\n> 📌 **{게임명}** — {보상 — 상세 그대로}\n👉 [가기]({애드픽 홍보 링크})\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="빈칸"):
+        tp.parse_post(p, env)
+    # 코드 예시의 중괄호(영문·기호)는 막지 않음
+    p.write_text("---\ntitle: t\n---\n\n```python\nd = {'a': 1}\nprint(f\"{d}\")\n```\n", encoding="utf-8")
+    assert tp.parse_post(p, env).title == "t"

@@ -276,7 +276,8 @@ def summary_md(res: dict) -> str:
                     else f"[작성 화면 열기]({intent_url(text)})" if tid == "intent" else tid)
             lines.append(f"| {name} | {link} | {text.replace(chr(10), ' ').replace('|', '/')[:80]} |")
     else:
-        lines.append(f"게시 없음{' — ' + res['blocked'] if res['blocked'] else ''}")
+        why = res["blocked"] or (res["waiting"][0][1] if res["waiting"] else "")
+        lines.append(f"게시 없음{' — ' + why if why else ''}")
     if res["dropped"]:
         lines += ["", "**제외 (queue/failed 로 이동)**", ""] + [f"- {n}: {w}" for n, w in res["dropped"]]
     if res["waiting"]:

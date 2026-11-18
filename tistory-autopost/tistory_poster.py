@@ -140,6 +140,11 @@ def parse_post(path: Path, cfg: dict) -> Post:
                 meta[k.strip().lower()] = v.strip()
         body = m.group(2)
 
+    # 초안 빈칸({게임명}, {애드픽 홍보 링크} 등 한글로 시작하는 중괄호)이 남은 글은 발행하지 않음 → posts/failed
+    blanks = re.findall(r"\{[가-힣][^{}\n]{0,40}\}", meta.get("title", "") + "\n" + body)
+    if blanks:
+        raise ValueError(f"초안 빈칸 미입력: {', '.join(dict.fromkeys(blanks))}")
+
     if path.suffix.lower() == ".md":
         html = markdown.markdown(body, extensions=["extra", "sane_lists", "nl2br"])
     else:

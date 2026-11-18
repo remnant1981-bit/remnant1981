@@ -117,10 +117,14 @@ def save(cfg: dict, items: list[dict]) -> list[Path]:
     qd = common.path(cfg, "queue_dir")
     qd.mkdir(parents=True, exist_ok=True)
     stamp = common.now(cfg).strftime("%Y%m%d_%H%M")
+    # 같은 문구(id)가 대기열·게시 완료·실패 폴더에 이미 있으면 건너뜀 (카드 재실행 시 중복 방지)
+    known = {f.stem.rsplit("_", 1)[-1] for d in (qd, common.path(cfg, "posted_dir"), common.path(cfg, "failed_dir"))
+             if d.exists() for f in d.glob("*.json")}
     out = []
     for it in items:
         p = qd / f"{stamp}_{it['id']}.json"
-        if not p.exists():
+        if it["id"] not in known:
+            known.add(it["id"])
             p.write_text(json.dumps(it, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             out.append(p)
     return out
