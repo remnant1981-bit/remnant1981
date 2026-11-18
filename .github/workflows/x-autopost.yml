@@ -1,0 +1,135 @@
+name: X 자동 게시 (애드픽)
+
+# 휴대폰 사용법
+#  1) 연결 점검: Actions → 이 워크플로 → Run workflow → mode "연결 점검"
+#  2) 초안 작성: mode "초안 작성" → campaigns.csv 캠페인으로 트윗 초안 → queue/ 에 커밋 (게시 안 함)
+#  3) 게시: 정기 실행(KST 09·12·15·18·21시)이 대기열에서 조건 맞는 글 1건씩 게시
+#     X API 키 없으면 → 휴대폰 알림으로 X 작성 링크 전송 (탭 → X 앱에서 [게시])
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "실행 모드"
+        type: choice
+        options: [게시, 초안 작성, 초안 작성+게시, 대기열 확인, 연결 점검]
+        default: 게시
+      campaign:
+        description: "캠페인 이름 일부 (비우면 대기열 적은 순)"
+        required: false
+        default: ""
+      count:
+        description: "초안 작성할 캠페인 수"
+        required: false
+        default: "1"
+      publish_at:
+        description: "예약 시각 (비우면 순서대로 / 2026-11-20 12:00)"
+        required: false
+        default: ""
+  push:
+    branches: [main]
+    paths:
+      - "x-autopost/queue/*.json"
+  schedule:
+    - cron: "13 0,3,6,9,12 * * *"   # KST 09:13 12:13 15:13 18:13 21:13
+
+permissions:
+  contents: write
+
+concurrency:
+  group: x-autopost
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: x-autopost
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      X_API_KEY: ${{ secrets.X_API_KEY }}
+      X_API_SECRET: ${{ secrets.X_API_SECRET }}
+      X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+      X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
+      NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      MODE: ${{ inputs.mode || '게시' }}
+      MANUAL: ${{ github.event_name == 'workflow_dispatch' && '--manual' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: x-autopost/requirements.txt
+      - run: pip install -q -r requirements.txt
+
+      - name: 설정 확인
+        id: cfg
+        run: |
+          has_x=false; [ -n "$X_API_KEY" ] && [ -n "$X_API_SECRET" ] && [ -n "$X_ACCESS_TOKEN" ] && [ -n "$X_ACCESS_TOKEN_SECRET" ] && has_x=true
+          has_ai=false; [ -n "$ANTHROPIC_API_KEY" ] && has_ai=true
+          has_notify=false; { [ -n "$NTFY_TOPIC" ] || { [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; }; } && has_notify=true
+          # X API 키가 없으면 무료 '작성 링크 알림' 방식 (알림 설정 필요)
+          can_post=false; { [ "$has_x" = true ] || [ "$has_notify" = true ]; } && can_post=true
+          echo "has_x=$has_x" >> "$GITHUB_OUTPUT"
+          echo "has_ai=$has_ai" >> "$GITHUB_OUTPUT"
+          echo "has_notify=$has_notify" >> "$GITHUB_OUTPUT"
+          echo "can_post=$can_post" >> "$GITHUB_OUTPUT"
+          if [ "$can_post" != true ] && [ "${{ github.event_name }}" = schedule ]; then
+            echo "X API 키·알림 설정 모두 없음 → 정기 실행 건너뜀" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: 연결 점검
+        if: env.MODE == '연결 점검'
+        run: |
+          {
+            echo "## 설정 상태"
+            echo "| 항목 | 상태 |"; echo "|---|---|"
+            echo "| 게시 방식 | ${{ steps.cfg.outputs.has_x == 'true' && 'X API 자동 게시' || '작성 링크 알림 (무료, 탭 → 게시)' }} |"
+            echo "| X API 키 4종 | ${{ steps.cfg.outputs.has_x == 'true' && '✅' || '⚪ 미등록 (선택)' }} |"
+            echo "| 휴대폰 알림 (NTFY_TOPIC / TELEGRAM_*) | ${{ steps.cfg.outputs.has_notify == 'true' && '✅' || '❌ 미등록 (API 키 없으면 필수)' }} |"
+            echo "| ANTHROPIC_API_KEY | ${{ steps.cfg.outputs.has_ai == 'true' && '✅' || '⚪ 미등록 (초안 작성 시 필요)' }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          python x_poster.py --check | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 초안 작성
+        if: startsWith(env.MODE, '초안 작성')
+        env:
+          CAMPAIGN: ${{ inputs.campaign }}
+          COUNT: ${{ inputs.count }}
+          PUBLISH_AT: ${{ inputs.publish_at }}
+        run: |
+          if [ "${{ steps.cfg.outputs.has_ai }}" != true ]; then
+            echo "❌ ANTHROPIC_API_KEY 미등록" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1
+          fi
+          python ai_tweet.py --campaign "$CAMPAIGN" --count "${COUNT:-1}" --publish-at "$PUBLISH_AT" \
+            | tee draft.txt
+          { echo "## 트윗 초안"; echo '```'; cat draft.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          rm -f draft.txt
+
+      - name: 대기열 확인
+        if: env.MODE == '대기열 확인'
+        run: python x_poster.py --list | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 게시
+        if: (env.MODE == '게시' || env.MODE == '초안 작성+게시') && steps.cfg.outputs.can_post == 'true'
+        run: python x_poster.py $MANUAL
+
+      - name: 결과 커밋
+        if: always() && env.MODE != '연결 점검' && env.MODE != '대기열 확인'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A queue
+          if [ -f post_log.jsonl ]; then git add post_log.jsonl; fi
+          if git diff --cached --quiet; then echo "변경 없음"; exit 0; fi
+          git commit -q -m "x-autopost: ${MODE} 결과 정리"
+          for i in 1 2 3; do
+            if git pull --rebase --autostash -q origin "${GITHUB_REF_NAME}" && git push -q origin "HEAD:${GITHUB_REF_NAME}"; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((i * 5))
+          done
+          exit 1

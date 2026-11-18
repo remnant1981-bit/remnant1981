@@ -1,0 +1,15 @@
+# 쇼핑 첫 구매 캠페인 카드 — 애드픽 캠페인 상세 문구 그대로 입력
+주제: 3
+캠페인명: 
+애드픽 홍보 링크: 
+쇼핑몰: 
+첫구매혜택: 
+최소주문: 
+대상: 
+마감일: 
+행사명: 
+기간: 
+운영자: 
+금지 문구: 
+# 채널: x, threads, instagram, facebook, pinterest, youtube_shorts, tiktok, kakao_openchat, band, tistory, naver   (홍보 허용 매체만 남기기, 비우면 전부)
+채널: 
