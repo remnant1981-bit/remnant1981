@@ -12,7 +12,7 @@
 | Q6 | 고객 대상 AI 활용 표기 문구는? | profile.md, CLAUDE.md | **완료** (채널별 구분) |
 | Q7 | 브랜드 톤 형용사 3개와 문체는? | brand.md | **완료** (C 투명한 기록형 + B 친근한 어휘. 1인칭·이모지 범위는 후속 확인) |
 | Q8 | 로고·색상·서체 보유 여부? | brand.md | **완료** (없음 → 나래 시안 제작, `projects/20261118_브랜드시각자산/`) |
-| Q9 | 대외 연락처·채널은? | contact.md | 대기 |
-| Q10 | 공개 가능한 기존 실적(Hooninote 명의)이 있는지? | portfolio.md | 대기 |
+| Q9 | 대외 연락처·채널은? | contact.md | **완료** (개인 Gmail 사용, 저장소 미기록 — 조이 위임 결정. 홈페이지·블로그 URL은 개설 후 기재) |
+| Q10 | 공개 가능한 기존 실적(Hooninote 명의)이 있는지? | portfolio.md | 잠정 완료 (현재 없음으로 기록, 첫 프로젝트부터 누적 — 조이 위임. 실적 있으면 대표가 알려주면 추가) |
 | Q11 | 사업자 유형(일반/간이)과 개업일은? | profile.md, ops/finance/tax-calendar.md | 대기 |
 | Q12 | 장부용 Google Sheets 지정 | finance-lead | 대기 |

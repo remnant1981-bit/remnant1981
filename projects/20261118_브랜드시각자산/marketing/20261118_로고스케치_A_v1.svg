@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 320" width="800" height="320">
+  <title>Hooninote 로고 스케치 A (잉크 노트) - 구조 참고용, 서체는 환경 대체 서체로 표시될 수 있음</title>
+  <rect width="800" height="320" fill="#F7F4EC"/>
+  <text x="60" y="165" font-family="Inter, Pretendard, Arial, sans-serif" font-size="96" font-weight="600" fill="#1F2A44" textLength="560" lengthAdjust="spacingAndGlyphs">Hooninote</text>
+  <rect x="64" y="190" width="220" height="6" fill="#B45309"/>
+  <text x="62" y="250" font-family="Pretendard, 'Noto Sans KR', sans-serif" font-size="22" fill="#1F2A44">일을 기록하고, 문서로 정리하고, 시스템으로 남깁니다</text>
+</svg>

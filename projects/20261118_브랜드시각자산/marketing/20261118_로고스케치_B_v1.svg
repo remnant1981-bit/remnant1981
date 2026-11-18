@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 320" width="800" height="320">
+  <title>Hooninote 로고 스케치 B (투명 체크) - 구조 참고용, 서체는 환경 대체 서체로 표시될 수 있음</title>
+  <rect width="800" height="320" fill="#FFFFFF"/>
+  <rect x="60" y="100" width="100" height="100" rx="22" fill="none" stroke="#0F5C5C" stroke-width="8"/>
+  <polyline points="85,152 108,175 140,127" fill="none" stroke="#0F5C5C" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="190" y="180" font-family="'IBM Plex Mono', 'Courier New', monospace" font-size="80" font-weight="500" fill="#0F5C5C" textLength="240" lengthAdjust="spacingAndGlyphs">Hooni</text>
+  <rect x="432" y="108" width="196" height="92" fill="#F2B705"/>
+  <text x="436" y="180" font-family="'IBM Plex Mono', 'Courier New', monospace" font-size="80" font-weight="500" fill="#1A1A1A" textLength="188" lengthAdjust="spacingAndGlyphs">note</text>
+</svg>
