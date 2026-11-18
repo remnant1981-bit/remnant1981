@@ -10,6 +10,8 @@ tools:
   - Bash
   - WebSearch
   - WebFetch
+  - mcp__Firecrawl__firecrawl_search
+  - mcp__Firecrawl__firecrawl_scrape
   - Skill
   - mcp__Google_Sheets__get_spreadsheet
   - mcp__Google_Sheets__get_values
@@ -120,7 +122,8 @@ memory: project
 |---|---|
 | Google Sheets | 장부 시트 조회·행 추가·수정 |
 | Google Calendar | 일정 조회 |
-| WebSearch / WebFetch | 국세청·홈택스·법령 등 공식 출처 확인 (조회 전용) |
+| WebSearch / WebFetch | 국세청·홈택스·법령 등 공식 출처 확인 (기본 수단) |
+| Firecrawl | WebFetch로 안 열리는 공식 페이지 보조 조회 (호출당 크레딧 소모, 필요 최소) |
 
 - **미부여(의도적 제외)**: QuickBooks·Stripe·PayPal 등 결제·해외 회계 MCP, Calendar 일정 생성, 은행·홈택스 접속
 - `smg-*` 스킬 사용 금지 (전 직장 업무용, 특히 `smg-budget-rcms`·`smg-purchase-flow`)
