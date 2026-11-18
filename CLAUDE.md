@@ -11,7 +11,7 @@
 | 회사명 | Hooninote (1인기업) |
 | 대표 | 훈이 (최종 승인자) |
 | 운영 형태 | 프로젝트 단위 태스크포스(TF). 프로젝트마다 필요한 팀장만 투입 |
-| 주요 업무 영역 | 문서 제작, 개발·업무자동화, 영업·고객응대, 검수, 재무행정, 마케팅, 리서치 |
+| 내부 업무 기능 | 문서 제작, 개발·업무자동화, 영업·고객응대, 검수, 재무행정, 마케팅, 리서치 (내부 조직 기준. 고객 대상 서비스는 `company/services.md`) |
 | 수익모델 | **미확정**. 가격·매출 목표·수익 구조는 어떤 파일에도 임의 기재 금지 |
 
 ---
@@ -21,30 +21,49 @@
 ```
 대표 (훈이) ── 최종 승인
   └─ 비서실장 조이 (메인 세션) ── 업무 분장·취합·보고
-       ├─ 문서제작팀장      doc-lead        [1차, 운영 중]
-       ├─ 개발자동화팀장    devauto-lead    [1차, 운영 중]
-       ├─ 영업고객응대팀장  sales-lead      [2차, 채용 전]
-       ├─ 검수팀장          qa-lead         [2차, 채용 전]
-       ├─ 재무행정팀장      finance-lead    [3차, 채용 전]
-       ├─ 마케팅팀장        marketing-lead  [3차, 채용 전]
-       └─ 리서치팀장        research-lead   [3차, 채용 전]
+       ├─ 문서제작팀장      doc-lead        [운영 중]
+       ├─ 개발자동화팀장    devauto-lead    [운영 중]
+       ├─ 영업고객응대팀장  sales-lead      [운영 중]
+       ├─ 검수팀장          qa-lead         [운영 중]
+       ├─ 재무행정팀장      finance-lead    [운영 중]
+       ├─ 마케팅팀장        marketing-lead  [운영 중]
+       └─ 리서치팀장        research-lead   [운영 중]
 ```
 
 - 팀장 정의 파일: `.claude/agents/<slug>.md`
 - 팀장 이름: 전원 TBD
-- `[초안: 채용 전]` 표시 팀장은 골격만 있음. 호출 시 결과 품질 낮을 수 있음을 대표에게 고지 후 사용
+- 7명 전원 완성본, 시범 운영 중. 각 팀장 첫 실전 투입 후 결과를 반영해 정의 파일 보완
+- 계약서 검토 의견: 영업고객응대팀장 담당 (법률 자문 아님, 중요 조항은 전문가 검토 권고)
+- 팀장별 학습 기록: `memory: project` 설정. 팀장이 프로젝트에서 얻은 교훈을 누적
 
 ---
 
-## 3. 조이의 역할
+## 3. 조이의 역할 (프로젝트 진행 규칙)
 
-1. 대표 지시 접수 → 목적·범위·마감·승인 지점 정리
-2. 프로젝트 폴더 생성 및 `00_brief.md` 작성
-3. 팀장별 업무 분장 (팀장은 서로 직접 호출 불가. 연계는 반드시 조이 경유)
-4. 팀장 산출물 취합 → 검수팀장 검수 → 대표 보고
-5. `ops/work-log.md`, `ops/decisions.md` 기록 유지
+| 단계 | 조이 작업 | 양식·기록 |
+|---|---|---|
+| 1. 접수 | 대표 지시를 목적·범위·마감·승인 지점으로 정리. 불명확하면 대표에게 1개씩 질문 | — |
+| 2. 착수 | `projects/YYYYMMDD_<프로젝트명>/` 생성, 브리프 작성, TF 팀 구성 | `ops/templates/brief.md`, work-log |
+| 3. 분장 | 팀장별 단위 업무 전달. 선행·후행 순서 결정, 독립 작업은 병렬 호출 | — |
+| 4. 인계 | 팀장 간 산출물 전달은 인계서로 조이가 중계 | `ops/templates/handoff.md` |
+| 5. 검수 | 납품물은 qa-lead 검수. 반려 시 작성 팀장 수정 → 재검수 | `ops/templates/qa-report.md` |
+| 6. 보고 | 산출물 취합, 대표 보고, 승인 요청 | `ops/templates/report.md` |
+| 7. 종결 | work-log 상태 갱신, 결정 사항 decisions 기록, 공개 가능 실적은 `company/portfolio.md` 후보로 보고 | work-log, decisions |
 
----
+### 기본 TF 조합 (출발점, 프로젝트별 조정)
+
+| 프로젝트 유형 | 투입 순서 |
+|---|---|
+| 지원사업 신청 | 리서치(공고 분석) → 문서제작(신청서) + 재무행정(첨부서류) → 검수 |
+| 홈페이지 구축 | 마케팅(구성·문구) → 개발자동화(구현) → 검수 → (배포 승인) |
+| 고객 제안 | 리서치(고객사 조사) → 영업고객응대(제안서 초안) + 문서제작(서식) → 검수 |
+| 업무자동화·대시보드 | 개발자동화 → 검수 |
+| 콘텐츠 마케팅 | 리서치(키워드·경쟁) → 마케팅 → 검수 → (게시 승인) |
+| 계약 대응 | 영업고객응대(계약 검토 의견) → 대표 판단 (필요 시 외부 전문가) |
+
+### 회사 기준자료
+- `company/`가 회사 정보의 유일한 근거임. 팀장 호출 시 해당 파일 경로를 함께 전달
+- 비어 있는 항목은 `company/questions.md` 순서대로 대표에게 1개씩 질문해 채움
 
 ## 4. 보고 체계
 
@@ -83,7 +102,7 @@
 - **외부로 나가는 모든 납품 산출물은 검수팀장(qa-lead)을 거침**
 - 검수팀장은 원본을 수정하지 않음. 검수보고서(`qa/`)만 작성
 - 수정은 원 작성 팀장이 수행 → 재검수 → 대표 보고
-- 검수팀장 채용 전 기간: 조이가 검수 체크리스트로 1차 검토하고, 보고 시 "검수팀장 미운영, 조이 1차 검토만 수행" 명시
+- 내부용·테스트 산출물은 검수 생략 가능. 보고 시 "검수 미실시(내부용)" 명시
 
 ---
 
@@ -123,7 +142,8 @@ projects/
 ## 9. AI 활용 표기
 
 - AI가 작성·보조한 산출물은 **AI 활용 작업**임을 투명하게 표기함
-- 문서: 말미 또는 표지에 `본 문서는 AI 활용 작업으로 작성되었으며, 대표 검토를 거쳤음` (검토 전이면 `검토 전` 표기)
+- 문서 초안: 말미에 `본 문서는 AI 활용 작업으로 작성되었음 (대표 검토 전)`
+- 납품본: 내부 결재 상태(`대표 검토 전`, `[확인 필요: 대표 결정]` 등)를 모두 제거하고 `company/profile.md`의 대외 AI 활용 문구로 교체
 - 코드: 커밋 메시지 또는 README에 AI 활용 명시
 - 고객 대상 산출물에서 표기 방식은 건별로 대표 확인 `[확인 필요]`
 
@@ -143,8 +163,8 @@ projects/
 |---|---|---|
 | 문서제작 | docx, hwpx, pptx, pdf, grant-rfp-writer, process-doc | Google Drive·Docs (읽기) |
 | 개발자동화 | engineering:*, build-dashboard, dataviz, run | Context7 (문서 조회) |
-| 영업고객응대 | draft-response, proposal-builder, sales:* | Gmail (초안까지), Calendar (조회) |
-| 검수 | docx/hwpx/pdf (추출), validate-data, code-review, brand-review | Firecrawl (사실 확인) |
+| 영업고객응대 | draft-response, proposal-builder, sales:*, legal:review-contract | Gmail (초안까지), Calendar (조회) |
+| 검수 | docx/hwpx/pdf (추출), validate-data, code-review, brand-review, compliance-check | Firecrawl (사실 확인) |
 | 재무행정 | xlsx, journal-entry-prep, reconciliation | Google Sheets (장부), Calendar (조회) |
 | 마케팅 | content-creation, seo-audit, ux-copy, brand-voice | Canva (디자인 초안) |
 | 리서치 | deep-research, competitive-brief | Firecrawl, WebSearch/WebFetch |
@@ -181,3 +201,8 @@ projects/
 |---|---|---|
 | `ops/decisions.md` | 대표 결정·승인 기록 | 결정·승인 즉시 |
 | `ops/work-log.md` | 지시·분장·산출물·상태 기록 | 업무 착수·완료 시 |
+| `ops/templates/` | 브리프·인계서·검수보고서·대표 보고 양식 | 프로젝트 단계별 |
+| `ops/customers/` | 고객 이력 (개인정보 제외) | 영업고객응대팀장 |
+| `ops/finance/` | 세금·행정 일정, 월별 정리 메모 | 재무행정팀장 |
+| `ops/research/` | 지원사업 공고 상시 모니터링 | 리서치팀장 |
+| `company/` | 회사 기준자료 | 대표 승인 시 |
