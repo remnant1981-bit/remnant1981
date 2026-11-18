@@ -107,7 +107,24 @@ setx X_API_KEY "..."   (X_API_SECRET / X_ACCESS_TOKEN / X_ACCESS_TOKEN_SECRET �
 - GitHub 정기 실행은 수십 분~몇 시간 늦을 수 있음 → 알림 시각도 그만큼 밀림
 - 주의: 저장소가 공개라 `campaigns.csv`·`queue/` 내용(홍보 링크 포함)은 누구나 볼 수 있음
 
-## 6. 테스트
+## 6. 캠페인 카드 → 전 채널 완성본 (`fill_campaign.py`)
+애드픽 캠페인 1개 정보를 카드에 한 번 적으면, 채널별 초안(`drafts/`, 티스토리·네이버 초안 포함)의 `{ }` 빈칸을 모두 채운 완성본을 만듦.
+
+1. 빈 카드 복사: `cards/template_<주제>.txt` → `cards/내캠페인.txt` (주제 1 게임 / 2 앱테크 / 3 쇼핑 / 4 웹툰·OTT / 5 수험생·알바)
+2. 애드픽 캠페인 상세 문구 그대로 입력. `채널:`에는 캠페인 **홍보 허용 매체만** 남김 (비우면 전부)
+3. 실행
+| 명령 | 동작 |
+|---|---|
+| `python fill_campaign.py cards/내캠페인.txt` | `out/<캠페인명>/` 에 채널별 완성본 (x·tistory·naver·threads·instagram·facebook·pinterest·youtube_shorts·tiktok·kakao_openchat·band) |
+| `… --queue` | + X 트윗 5종을 검사([광고]·글자 수·과장 표현·빈칸) 후 게시 대기열 `queue/`에 등록 |
+| `… --register` | + `campaigns.csv` 등록 (Claude AI 초안 작성용) |
+| `python fill_campaign.py --template 2` | 빈 카드 출력 |
+
+- 빈칸이 남은 채널은 실행 결과에 `△ 빈칸 남음: …`으로 표시
+- 티스토리 완성본(`out/…/tistory.md`)은 확인 후 `tistory-autopost/posts/`로 옮기면 자동 발행
+- `out/`은 git 제외 (캠페인 링크가 공개 저장소에 올라가지 않음). 대기열 `queue/`는 게시를 위해 커밋됨
+
+## 7. 테스트
 ```bat
 pip install pytest
 python -m pytest -q tests

@@ -226,3 +226,52 @@ def test_intent_mode(cfg, monkeypatch):
     monkeypatch.setenv("X_API_KEY", "a")
     cfg["post_method"] = "intent"
     assert isinstance(x_poster.make_client(cfg), x_poster.IntentClient)
+
+
+# ---------- fill_campaign ----------
+import fill_campaign  # noqa: E402
+
+CARD = """# 주석
+주제: 2
+캠페인명: 테스트워크 가입
+애드픽 홍보 링크: https://adpick.co.kr/?ac=t1
+앱이름: 테스트워크
+가입보상: 1,000포인트
+적립방법: 걸음 수
+출금조건: 5,000포인트부터
+대상: 신규 가입자
+마감일: 2099-12-31   # 상세 기준
+운영자: 운영자A
+"""
+
+
+def test_card_parse_and_fill():
+    card = fill_campaign.parse_card(CARD)
+    assert card["마감일"] == "2099-12-31" and card["애드픽 홍보 링크"].endswith("t1")
+    out, miss = fill_campaign.fill("{앱이름} {가입보상 — 상세 그대로} {운영자 닉네임} {마감일 YYYY-MM-DD} {없는키} { }", card)
+    assert out.startswith("테스트워크 1,000포인트 운영자A 2099-12-31") and miss == {"없는키"} and "{ }" in out
+    with pytest.raises(ValueError):
+        fill_campaign.parse_card("주제: 9")
+
+
+def test_build_all_channels_filled():
+    card = fill_campaign.parse_card(CARD)
+    chans = fill_campaign.build(card)
+    assert {"x", "tistory", "naver", "threads", "kakao_openchat", "band"} <= set(chans)
+    assert "## 0." in chans["kakao_openchat"] and "## 1." not in chans["kakao_openchat"]
+    for ch, text in chans.items():
+        _, miss = fill_campaign.fill(text, card)
+        assert not miss, (ch, miss)
+    card["채널"] = "x, tistory"
+    assert set(fill_campaign.build(card)) == {"x", "tistory"}
+
+
+def test_queue_from_templates(cfg):
+    card = fill_campaign.parse_card(CARD)
+    filled, _ = fill_campaign.fill(fill_campaign.build(card)["x"], card)
+    drafts = fill_campaign.tweet_drafts(filled)
+    assert len(drafts) == 5 and all("<br>" not in d["body"] for d in drafts)
+    saved, rejected = fill_campaign.queue_tweets(card, filled)
+    assert len(saved) == 5 and not rejected
+    it = json.loads(saved[0].read_text(encoding="utf-8"))
+    assert it["text"].startswith("[광고]") and it["url"] in it["text"] and it["deadline"] == "2099-12-31"
